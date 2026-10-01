@@ -1,5 +1,5 @@
 // Снимки модели для документа ППУ (promo/img). Запуск после `npm run build`:
-//   node promo/shots.mjs [hero,objects,registry,plan,city,evening,mobile]
+//   node promo/shots.mjs [hero,objects,registry,plan,city,evening,mobile,editor,details]
 // Затем пересоберите PDF: node promo/build-pdf.mjs
 // Нужен Playwright (npm i -D playwright или глобальная установка).
 
@@ -33,15 +33,18 @@ if (!chromium) {
 // без GPU WebGL рисуется программно (SwiftShader) — медленно, но одинаково на любой машине
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'] });
 
-async function open(viewport, { hash = '', mobile = false } = {}) {
+async function open(viewport, { hash = '', mobile = false, storage = {} } = {}) {
   const p = await browser.newPage({ viewport, deviceScaleFactor: mobile ? 2 : 1, hasTouch: mobile, isMobile: mobile });
-  await p.addInitScript(() => {
+  await p.addInitScript((st) => {
     try {
       localStorage.clear();
+      // подсказка по управлению на снимках не нужна
+      localStorage.setItem('admiralty-hint-closed', '1');
+      for (const [k, v] of Object.entries(st)) localStorage.setItem(k, v);
     } catch {
       /* хранилище недоступно */
     }
-  });
+  }, storage);
   await p.goto(url + hash, { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => window.__ready === true, null, { timeout: 240000 });
   return p;
@@ -121,6 +124,29 @@ if (want('mobile')) {
   await shot(p, 'mobile-list.jpg', 3000);
   await p.tap('#objList button.obj >> nth=0');
   await shot(p, 'mobile-card.jpg', 4000);
+  await p.close();
+}
+if (want('editor')) {
+  // редактор: цех лит. ЕЯ (Z32) с открытым разделом «Положение» — сдвиг, поворот, высота, масштаб
+  const p = await open({ width: 1440, height: 900 }, { storage: { 'admiralty-ed-sections': JSON.stringify({ pos: true }) } });
+  await p.evaluate(() => {
+    const v = window.__viewer;
+    v.setPanelCollapsed(true);
+    v.selectById('Z32');
+  });
+  await p.click('#card [data-act="edit"]');
+  await p.evaluate(() => window.__viewer.flyTo([-470, 1235, 40], [-300, 1105, 10], 0));
+  await shot(p, 'editor.jpg');
+  await p.close();
+}
+if (want('details')) {
+  // узнаваемые здания, уточнённые по фото и документам
+  const p = await open({ width: 1200, height: 800 });
+  await hideUi(p);
+  await p.evaluate(() => window.__viewer.flyTo([-75, 70, 3], [-150, 160, 14], 0));
+  await shot(p, 'detail-lotsmanskaya.jpg');
+  await p.evaluate(() => window.__viewer.flyTo([150, 1190, 30], [100, 1310, 16], 0));
+  await shot(p, 'detail-boiler.jpg');
   await p.close();
 }
 await browser.close();
