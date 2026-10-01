@@ -9,6 +9,7 @@ import { createMaterialFactory } from '../model/materials.js';
 import { toLatLon, centroid, area } from '../geo.js';
 import { setupExports } from './exports.js';
 import { setupRegistry } from './registry.js';
+import { setupObjectList } from './objects.js';
 
 /* global __ARTIFACT_BUILD__ */
 // __ARTIFACT_BUILD__ подставляет esbuild: true — сборка для публикации в виде Artifact
@@ -150,6 +151,10 @@ async function main() {
   controls.screenSpacePanning = false;
   controls.zoomToCursor = true;
 
+  let shift = 0; // текущий сдвиг центра проекции, px
+  let shiftTo = 0;
+  const panelShift = () => (!narrow() && !$('panel').classList.contains('collapsed') ? $('panel').getBoundingClientRect().right : 0);
+
   let tween = null;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function flyTo(eye, target, ms = 1100) {
@@ -246,12 +251,45 @@ async function main() {
     sun.castShadow = e.target.checked;
   });
   $('optEvening').addEventListener('change', (e) => setEvening(e.target.checked));
-  $('menuToggle').addEventListener('click', () => {
-    const p = $('panel');
-    const c = p.classList.toggle('collapsed');
+
+  // ---------- левая панель: вкладки и сворачивание ----------
+  const narrow = () => window.matchMedia('(max-width: 760px)').matches;
+  const store = (k, v) => {
+    try {
+      if (v === undefined) return localStorage.getItem(k);
+      localStorage.setItem(k, v);
+    } catch {
+      /* хранилище недоступно */
+    }
+    return null;
+  };
+  function setPanelCollapsed(c) {
+    $('panel').classList.toggle('collapsed', c);
+    document.body.classList.toggle('panel-collapsed', c);
+    const t = c ? 'Развернуть панель' : 'Свернуть панель';
     $('menuToggle').setAttribute('aria-expanded', String(!c));
-  });
-  if (window.matchMedia('(max-width: 760px)').matches) $('panel').classList.add('collapsed');
+    $('menuToggle').setAttribute('aria-label', t);
+    $('menuToggle').title = t;
+    if (!narrow()) store('admiralty-panel-collapsed', c ? '1' : '0');
+    shiftTo = panelShift();
+  }
+  function setTab(id) {
+    const objects = id === 'objects';
+    $('tabControls').setAttribute('aria-selected', String(!objects));
+    $('tabObjects').setAttribute('aria-selected', String(objects));
+    $('paneControls').hidden = objects;
+    $('paneObjects').hidden = !objects;
+    store('admiralty-panel-tab', id);
+  }
+  $('menuToggle').addEventListener('click', () => setPanelCollapsed(!$('panel').classList.contains('collapsed')));
+  for (const [tab, id] of [['tabControls', 'controls'], ['tabObjects', 'objects']]) {
+    $(tab).addEventListener('click', () => {
+      setTab(id);
+      if ($('panel').classList.contains('collapsed')) setPanelCollapsed(false);
+      if (id === 'objects') objectList?.setActive(selected?.id);
+    });
+  }
+  setTab(store('admiralty-panel-tab') === 'objects' ? 'objects' : 'controls');
   $('compass').addEventListener('click', () => {
     const t = controls.target.clone();
     const d = camera.position.distanceTo(t);
@@ -273,9 +311,10 @@ async function main() {
   let selected = null;
   let highlight = null;
   let downAt = null;
+  let lastTap = null;
   canvas.addEventListener('pointerdown', (e) => (downAt = [e.clientX, e.clientY]));
   canvas.addEventListener('pointerup', (e) => {
-    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > (e.pointerType === 'touch' ? 10 : 5)) return;
     setMouse(e);
     raycaster.setFromCamera(mouse, camera);
     const hits = raycaster.intersectObject(pickMesh, false);
@@ -285,7 +324,13 @@ async function main() {
       const ob = objs[fo[h.faceIndex]];
       return !hiddenLayers[ob.layer] && !(yardOnly && ob.scope === 'city');
     });
-    select(hit ? objs[fo[hit.faceIndex]] : null);
+    const o = hit ? objs[fo[hit.faceIndex]] : null;
+    // двойной щелчок (на телефоне — двойное касание) по объекту — подлететь к нему
+    const now = performance.now();
+    const dbl = lastTap && now - lastTap.t < 450 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 16 && o && lastTap.o === o;
+    lastTap = dbl ? null : { t: now, x: e.clientX, y: e.clientY, o };
+    if (o !== selected) select(o);
+    if (dbl) flyToSelected(o);
   });
   function setMouse(e) {
     const r = canvas.getBoundingClientRect();
@@ -305,18 +350,43 @@ async function main() {
   });
 
   let registry = null;
+  let objectList = null;
+  // подлёт к выбранному объекту; на телефоне шторка и карточка сворачиваются, чтобы объект был виден
+  function flyToSelected(o) {
+    if (narrow()) {
+      setPanelCollapsed(true);
+      setCardMin(true);
+    }
+    focusObject(o);
+  }
   function focusObject(o) {
     const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
     const h = o.proxy.z1 ?? o.proxy.h ?? 10;
-    const r = Math.max(60, Math.sqrt(o.proxy.poly ? area(o.proxy.poly) : 400) * 1.6 + h * 1.5);
+    // на узком вертикальном экране отходим дальше, чтобы объект поместился по ширине
+    const narrowness = 1 / Math.min(1, Math.max(0.45, camera.aspect));
+    const r = Math.max(60, Math.sqrt(o.proxy.poly ? area(o.proxy.poly) : 400) * 1.6 + h * 1.5) * narrowness;
     const dir = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0).normalize();
     const eye = [c[0] + dir.x * r, c[1] - dir.z * r, h + r * 0.55];
     flyTo(eye, [c[0], c[1], h * 0.4], 900);
     setActiveView(null);
   }
 
+  let cardMin = false;
+  function setCardMin(on) {
+    cardMin = on;
+    const card = $('card');
+    card.classList.toggle('min', on);
+    const b = card.querySelector('[data-act="min"]');
+    if (b) {
+      const t = on ? 'Развернуть карточку' : 'Свернуть карточку';
+      b.setAttribute('aria-expanded', String(!on));
+      b.setAttribute('aria-label', t);
+      b.title = t;
+    }
+  }
   function select(o) {
     selected = o;
+    objectList?.setActive(o?.id);
     if (highlight) {
       scene.remove(highlight);
       highlight.traverse((c) => c.geometry && c.geometry.dispose());
@@ -341,7 +411,10 @@ async function main() {
     const [lat, lon] = toLatLon(c);
     rows.push(['Координаты', `${lat.toFixed(5)}, ${lon.toFixed(5)}`]);
     card.innerHTML = `
-      <button class="x" type="button" aria-label="Закрыть">×</button>
+      <div class="card-tools">
+        <button class="icon-btn fold" type="button" data-act="min"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+        <button class="icon-btn x" type="button" aria-label="Закрыть" title="Закрыть">×</button>
+      </div>
       <div class="kind">${KIND_LABEL[i.kind] || 'Объект'}</div>
       <h3>${escapeHtml(o.name)}</h3>
       ${i.approx || o.generated ? '<span class="badge">Положение условное</span>' : ''}
@@ -350,6 +423,8 @@ async function main() {
       <div class="row"><button class="btn" type="button" id="cardFly">Приблизить</button></div>`;
     card.hidden = false;
     card.querySelector('.x').addEventListener('click', () => select(null));
+    card.querySelector('[data-act="min"]').addEventListener('click', () => setCardMin(!cardMin));
+    setCardMin(cardMin);
     card.querySelector('#cardFly').addEventListener('click', () => focusObject(o));
     registry?.decorateCard(card, o);
   }
@@ -411,12 +486,26 @@ async function main() {
   // при открытии реестра — ракурс, в котором территория видна над панелью
   const REGISTRY_VIEW = { eye: [1750, 600, 1650], target: [120, 600, 0] };
   registry = setupRegistry({
-    $, THREE, V3, data, model, pickMesh, scene, select, focusObject, artifactBuild: __ARTIFACT_BUILD__,
+    $, THREE, V3, data, model, pickMesh, scene, select, focusObject: flyToSelected, artifactBuild: __ARTIFACT_BUILD__,
     onOpen: () => {
       if (!selected) {
         setActiveView(null);
         flyTo(REGISTRY_VIEW.eye, REGISTRY_VIEW.target);
       }
+    },
+  });
+
+  // ---------- вкладка «Объекты верфи» ----------
+  objectList = setupObjectList({
+    $, data, pickMesh, registryItems: registry.items,
+    onPick: (o) => {
+      if (hiddenLayers[o.layer]) {
+        const cb = $('layer-' + o.layer);
+        cb.checked = true;
+        cb.dispatchEvent(new Event('change'));
+      }
+      select(o);
+      flyToSelected(o);
     },
   });
 
@@ -458,20 +547,26 @@ async function main() {
   setEvening(startEvening);
 
   // ---------- размер и цикл отрисовки ----------
+  // центр проекции смещён вправо на ширину левой панели, чтобы модель не пряталась под ней;
+  // у свёрнутой панели смещения нет
+  function applyView() {
+    const w = canvas.clientWidth || window.innerWidth;
+    const h = canvas.clientHeight || window.innerHeight;
+    camera.aspect = (w + shift) / h;
+    if (shift > 0.5) camera.setViewOffset(w + shift, h, 0, 0, w, h);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  }
   function resize() {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     labelRenderer.setSize(w, h);
-    // смещаем центр проекции вправо, чтобы модель не пряталась под левой панелью
-    const panel = $('panel');
-    const pr = w > 760 && panel ? panel.getBoundingClientRect().right : 0;
-    camera.aspect = (w + pr) / h;
-    if (pr > 0) camera.setViewOffset(w + pr, h, 0, 0, w, h);
-    else camera.clearViewOffset();
-    camera.updateProjectionMatrix();
+    shift = shiftTo = panelShift();
+    applyView();
   }
   window.addEventListener('resize', resize);
+  setPanelCollapsed(narrow() || store('admiralty-panel-collapsed') === '1');
   resize();
 
   const startView = VIEWS.find((v) => '#' + v.id === location.hash) || VIEWS[0];
@@ -480,14 +575,21 @@ async function main() {
 
   const compassSvg = $('compass').querySelector('svg');
   let frame = 0;
+  let prevNow = 0;
   function loop(now) {
     requestAnimationFrame(loop);
+    const dt = prevNow ? Math.min(now - prevNow, 100) : 16;
+    prevNow = now;
     if (tween) {
       const t = Math.min(1, (now - tween.start) / tween.ms);
       const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       camera.position.lerpVectors(tween.e0, tween.e1, k);
       controls.target.lerpVectors(tween.t0, tween.t1, k);
       if (t >= 1) tween = null;
+    }
+    if (shift !== shiftTo) {
+      shift = reduceMotion || Math.abs(shiftTo - shift) < 1 ? shiftTo : shift + (shiftTo - shift) * (1 - Math.exp(-dt / 70));
+      applyView();
     }
     controls.update();
     // компас: азимут камеры
@@ -511,7 +613,7 @@ async function main() {
   });
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, pickMesh, registry, setYardOnly };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, focusObject, pickMesh, registry, objectList, setYardOnly, setPanelCollapsed, setTab };
   window.__ready = true;
 
   // ---------- вспомогательные ----------

@@ -95,7 +95,7 @@ export function registryItems(model, data) {
   return items.sort((a, b) => order[a.cat] - order[b.cat] || a.zone.localeCompare(b.zone, 'ru') || (b.footprint || 0) - (a.footprint || 0));
 }
 
-function zoneByPoint(p, data) {
+export function zoneByPoint(p, data) {
   for (const z of data.zones || []) {
     const r = z.polygon;
     let inside = false;

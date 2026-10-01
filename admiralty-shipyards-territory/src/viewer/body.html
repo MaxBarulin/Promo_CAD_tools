@@ -10,8 +10,16 @@
   </header>
 
   <aside class="panel sheet" id="panel">
-    <button class="menu-toggle" id="menuToggle" type="button" aria-expanded="true">Виды и слои</button>
-    <div class="panel-scroll">
+    <div class="panel-head">
+      <div class="tabs" role="tablist" aria-label="Разделы панели">
+        <button class="tab" type="button" role="tab" id="tabControls" aria-selected="true" aria-controls="paneControls">Виды и слои</button>
+        <button class="tab" type="button" role="tab" id="tabObjects" aria-selected="false" aria-controls="paneObjects">Объекты верфи</button>
+      </div>
+      <button class="icon-btn fold" id="menuToggle" type="button" aria-expanded="true" title="Свернуть панель" aria-label="Свернуть панель">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </button>
+    </div>
+    <div class="panel-scroll" id="paneControls" role="tabpanel" aria-labelledby="tabControls">
       <section class="group">
         <h2>Виды</h2>
         <div class="views" id="views"></div>
@@ -42,6 +50,15 @@
       </section>
       <p class="note" id="note"></p>
     </div>
+    <div class="panel-pane" id="paneObjects" role="tabpanel" aria-labelledby="tabObjects" hidden>
+      <div class="obj-filters">
+        <input class="field" type="search" id="objQ" placeholder="Название или код, например Z129" aria-label="Поиск объекта" />
+        <select class="field" id="objType" aria-label="Тип объекта"></select>
+      </div>
+      <div class="obj-count" id="objCount" aria-live="polite"></div>
+      <div class="obj-list" id="objList"></div>
+      <p class="obj-hint">Щелчок по строке — подлететь к объекту и открыть карточку.</p>
+    </div>
   </aside>
 
   <button class="scope-toggle sheet" type="button" id="scopeBtn" aria-pressed="false" title="Скрыть всё, что за территорией верфи и к ней не относится">
@@ -53,7 +70,7 @@
 
   <section class="registry sheet" id="registry" hidden aria-label="Реестр зданий и сооружений"></section>
 
-  <div class="hint sheet" id="hint">Вращение — левая кнопка, сдвиг — правая, масштаб — колесо. Щелчок по объекту — сведения о нём.</div>
+  <div class="hint sheet" id="hint">Вращение — левая кнопка, сдвиг — правая, масштаб — колесо. Щелчок по объекту — сведения о нём, двойной щелчок — подлететь к нему.</div>
 
   <div class="hud">
     <div class="coords sheet" id="coords"><span>Курсор:</span> —</div>

@@ -30,7 +30,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
   let shared = false;
   let db = null;
   let downloads = null;
-  const st = { q: '', cat: '', zone: '', opo: '', epb: '', years: 2, sort: { key: 'name', dir: 1 }, show: true, open: false };
+  const st = { q: '', cat: '', zone: '', opo: '', epb: '', years: 2, sort: { key: 'name', dir: 1 }, show: true, open: false, min: false };
   const records = () => (demo ? demoRecs : saved);
 
   // ---------- хранилище ----------
@@ -196,7 +196,8 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     <div class="reg-head">
       <h2>Реестр зданий и сооружений</h2>
       <span class="reg-store" id="regStore"></span>
-      <button class="x" type="button" id="regClose" aria-label="Закрыть реестр">×</button>
+      <button class="icon-btn fold" type="button" id="regMin" aria-expanded="true" title="Свернуть реестр" aria-label="Свернуть реестр"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+      <button class="x" type="button" id="regClose" aria-label="Закрыть реестр" title="Закрыть реестр">×</button>
     </div>
     <div class="reg-demo" id="regDemo" hidden>Демо-режим: поля ОПО, ЭПБ и документации заполнены условными значениями для показа возможностей. Это не данные предприятия, они не сохраняются.</div>
     <div class="reg-filters">
@@ -252,6 +253,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
   bind('regYears', 'years', Number);
   bind('regShow', 'show');
   $('regClose').addEventListener('click', () => toggle(false));
+  $('regMin').addEventListener('click', () => setMin(!st.min));
   $('regDemoBtn').addEventListener('click', () => {
     demo = !demo;
     $('regDemoBtn').setAttribute('aria-pressed', String(demo));
@@ -264,7 +266,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     if (!tr) return;
     const o = objById.get(tr.dataset.id);
     if (o) {
-      if (window.matchMedia('(max-width: 760px)').matches) toggle(false); // на телефоне — к карточке объекта
+      if (window.matchMedia('(max-width: 760px)').matches) setMin(true); // на телефоне — к карточке объекта
       select(o);
       focusObject(o);
     }
@@ -378,9 +380,21 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     updateBadge();
   }
 
+  // свёрнутый реестр — одна строка заголовка; отбор и подсветка на модели остаются
+  function setMin(on) {
+    st.min = on;
+    panel.classList.toggle('min', on);
+    document.body.classList.toggle('reg-min', on);
+    const t = on ? 'Развернуть реестр' : 'Свернуть реестр';
+    $('regMin').setAttribute('aria-expanded', String(!on));
+    $('regMin').setAttribute('aria-label', t);
+    $('regMin').title = t;
+  }
+
   function toggle(on) {
     st.open = on ?? !st.open;
     panel.hidden = !st.open;
+    setMin(false);
     if (st.open && onOpen) onOpen();
     document.body.classList.toggle('reg-open', st.open);
     $('regOpen').setAttribute('aria-expanded', String(st.open));
