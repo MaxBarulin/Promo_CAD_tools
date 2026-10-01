@@ -6,8 +6,8 @@ import * as THREE from 'three';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { getTerritory } from '../src/data/index.js';
-import { initModel, buildModel } from '../src/model/index.js';
-import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel } from '../src/model/custom.js';
+import { initModel, buildModel, makeBuildingObject } from '../src/model/index.js';
+import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel, editBuilding } from '../src/model/custom.js';
 import { mergeGlb, placementTRS } from '../src/export/glb-merge.js';
 import { centroid, area } from '../src/geo.js';
 import { readCustomDir } from '../scripts/custom-files.mjs';
@@ -87,6 +87,25 @@ assert.equal(n2.o.info.type, 'utility');
 assert.ok(Math.abs(area(n2.o.proxy.poly) - 72) < 0.5);
 assert.ok(n2.o.sink.triangleCount() > 0, 'у нового здания есть геометрия');
 assert.ok(Math.hypot(centroid(n2.o.proxy.poly)[0] + 450, centroid(n2.o.proxy.poly)[1] - 260) < 0.1);
+
+// форма кровли и источник уточнения: сводчатая над прямоугольником, вальмовая — скатами по сложному контуру
+const src = getTerritory().buildings;
+const bke = makeBuildingObject(editBuilding(src.find((b) => b.id === 'Z136'), { roof: 'barrel', height: 23.5, roofH: 8, src: 'по фото' }));
+assert.equal(bke.info.roof, 'barrel');
+assert.equal(bke.info.height, 31.5, 'высота до верха свода');
+assert.equal(bke.info.refined, 'по фото');
+const bar0 = src.find((b) => b.id === 'Z160');
+assert.ok(bar0.poly.length > 4, 'контур Z160 — не прямоугольник');
+const bar = makeBuildingObject(editBuilding(bar0, { roof: 'hip', roofH: 4 }));
+assert.equal(bar.info.roof, 'hip');
+const roofTris = bar.sink.bufs.get(bar0.roof.color || 'r_gray');
+let roofArea = 0;
+for (let i = 0; i < roofTris.idx.length; i += 3) {
+  const P = [0, 1, 2].map((j) => roofTris.idx[i + j] * 3).map((k) => [roofTris.pos[k], -roofTris.pos[k + 2], roofTris.pos[k + 1]]);
+  roofArea += ((P[1][0] - P[0][0]) * (P[2][1] - P[0][1]) - (P[2][0] - P[0][0]) * (P[1][1] - P[0][1])) / 2;
+  assert.ok(Math.max(...P.map((q) => q[2])) <= bar0.h + 4 + 1e-6, 'скаты не выше конька');
+}
+assert.ok(Math.abs(roofArea - area(bar0.poly)) < 1, 'кровля закрывает весь контур, все скаты смотрят вверх');
 
 // поворот вокруг центра: точка (1, 0) от центра на 90° → (0, 1)
 const t = transformRing([[11, 5]], [10, 5], [2, 3], 90)[0];

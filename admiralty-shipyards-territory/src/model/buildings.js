@@ -2,7 +2,7 @@
 // вальмовая, многопролётная), окна по этажам, двери и ворота, портики, вывески.
 
 import { ensureCCW, ensureCW, sub, add, mul, norm, len, dist, lerp, centroid, area } from '../geo.js';
-import { dedupe, Sink } from './geom.js';
+import { dedupe, Sink, triangulate } from './geom.js';
 
 // Смещение замкнутого контура (CCW) наружу на d (d < 0 — внутрь).
 export function offsetRing(ring, d) {
@@ -194,6 +194,107 @@ function roofShed(sink, q, h, rh, key, wallKey) {
   sink.tri(wallKey, v(q1, h), v(q2, h), v(q2, h + rh));
   sink.tri(wallKey, v(q3, h), v(q0, h), v(q3, h + rh));
   sink.quad(wallKey, v(q2, h), v(q3, h), v(q3, h + rh), v(q2, h + rh));
+}
+
+// Сводчатая кровля: свод вдоль длинной стороны, арочные щипцы в торцах (каменные эллинги).
+function roofBarrel(sink, q, h, rh, key, wallKey) {
+  let [q0, q1, q2, q3] = q;
+  if (dist(q0, q1) < dist(q1, q2)) [q0, q1, q2, q3] = [q1, q2, q3, q0];
+  const N = 10;
+  const v = (p, z) => [p[0], p[1], z];
+  // сечение: от стороны q0q1 к стороне q3q2 по полуэллипсу высотой rh
+  const prof = Array.from({ length: N + 1 }, (_, k) => {
+    const t = (Math.PI * k) / N;
+    return { u: (1 - Math.cos(t)) / 2, z: h + rh * Math.sin(t) };
+  });
+  const at = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+  for (let k = 0; k < N; k++) {
+    const A0 = at(q0, q3, prof[k].u);
+    const B0 = at(q1, q2, prof[k].u);
+    const A1 = at(q0, q3, prof[k + 1].u);
+    const B1 = at(q1, q2, prof[k + 1].u);
+    sink.quad(key, v(A0, prof[k].z), v(B0, prof[k].z), v(B1, prof[k + 1].z), v(A1, prof[k + 1].z));
+  }
+  // торцы — арочные щипцы
+  const end0 = prof.map((p) => v(at(q0, q3, p.u), p.z));
+  const end1 = prof.map((p) => v(at(q1, q2, p.u), p.z)).reverse();
+  sink.face(wallKey, end0);
+  sink.face(wallKey, end1);
+}
+
+// Скатная кровля над контуром любой формы (Г-образные, изломанные корпуса): высота точки —
+// уклон × расстояние до края контура, не выше конька rh. Строится по сетке вдоль длинной оси
+// контура: ячейки отсекаются контуром, вершины поднимаются на высоту ската.
+function roofAny(sink, ring, h, rh, key) {
+  const segs = ring.map((a, i) => [a, ring[(i + 1) % ring.length]]);
+  const dEdge = (p) => {
+    let m = Infinity;
+    for (const [a, b] of segs) {
+      const ab = sub(b, a);
+      const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / (ab[0] ** 2 + ab[1] ** 2 || 1)));
+      m = Math.min(m, Math.hypot(p[0] - a[0] - ab[0] * t, p[1] - a[1] - ab[1] * t));
+    }
+    return m;
+  };
+  // оси сетки — по самому длинному ребру контура
+  let ax = [1, 0];
+  let best = 0;
+  for (const [a, b] of segs) if (dist(a, b) > best) [best, ax] = [dist(a, b), norm(sub(b, a))];
+  const ay = [-ax[1], ax[0]];
+  const toUV = (p) => [p[0] * ax[0] + p[1] * ax[1], p[0] * ay[0] + p[1] * ay[1]];
+  const fromUV = ([u, v]) => [u * ax[0] + v * ay[0], u * ax[1] + v * ay[1]];
+  const uv = ring.map(toUV);
+  const [u0, u1] = [Math.min(...uv.map((p) => p[0])), Math.max(...uv.map((p) => p[0]))];
+  const [v0, v1] = [Math.min(...uv.map((p) => p[1])), Math.max(...uv.map((p) => p[1]))];
+  // «типичная» половина ширины корпуса — на ней скат доходит до конька
+  const perim = segs.reduce((s, [a, b]) => s + dist(a, b), 0);
+  const half = Math.max(1, (1.1 * area(ring)) / perim);
+  const slope = rh / half;
+  let step = Math.max(0.75, Math.min(3, half / 4));
+  while (((u1 - u0) / step) * ((v1 - v0) / step) > 6000) step *= 1.25;
+  // ряд сетки проходит по середине корпуса — там конёк
+  const vMid = (v0 + v1) / 2;
+  const vs = [];
+  for (let v = vMid - Math.ceil((vMid - v0) / step) * step; v < v1 + step; v += step) vs.push(v);
+  const us = [];
+  for (let u = u0; u < u1 + step; u += step) us.push(u);
+  const clip = (poly, k, c, keepGreater) => {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const ina = keepGreater ? a[k] >= c : a[k] <= c;
+      const inb = keepGreater ? b[k] >= c : b[k] <= c;
+      if (ina) out.push(a);
+      if (ina !== inb) {
+        const t = (c - a[k]) / (b[k] - a[k]);
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+    }
+    return out;
+  };
+  const zOf = (p) => h + Math.min(rh, slope * dEdge(p));
+  const up = (p) => [p[0], p[1], zOf(p)];
+  for (let i = 0; i + 1 < us.length; i++) {
+    let col = clip(clip(uv, 0, us[i], true), 0, us[i + 1], false);
+    if (col.length < 3) continue;
+    for (let j = 0; j + 1 < vs.length; j++) {
+      const cell = clip(clip(col, 1, vs[j], true), 1, vs[j + 1], false);
+      if (cell.length < 3) continue;
+      const pts = cell.map(fromUV);
+      if (Math.abs(pts.reduce((s, p, k) => s + p[0] * pts[(k + 1) % pts.length][1] - pts[(k + 1) % pts.length][0] * p[1], 0)) < 1e-4) continue;
+      const P = pts.map(up);
+      const ccw = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]) > 0;
+      if (P.length === 4 && P.every((p, k) => ccw(p, P[(k + 1) % 4], P[(k + 2) % 4]))) {
+        // целая ячейка — по диагонали, лучше передающей конёк
+        const d02 = P[0][2] + P[2][2];
+        const d13 = P[1][2] + P[3][2];
+        const [a, b, c, d] = d02 >= d13 ? [0, 1, 2, 3] : [1, 2, 3, 0];
+        sink.face(key, [P[a], P[b], P[c]]);
+        sink.face(key, [P[a], P[c], P[d]]);
+      } else for (const [a, b, c] of triangulate(pts)) sink.face(key, ccw(P[a], P[b], P[c]) ? [P[a], P[b], P[c]] : [P[a], P[c], P[b]]);
+    }
+  }
 }
 
 // Шатровая (пирамидальная) кровля над любым выпуклым контуром.
@@ -407,6 +508,10 @@ export function buildBuilding(sink, b, extras = {}) {
     roofHip(sink, ring, h, rh, roofKey);
   } else if (roof.type === 'multigable' && isQuad) {
     roofMulti(sink, ring, h, rh, roofKey, wallKey, roof.bays || 3, roof.along !== 'w', roof.lantern);
+  } else if ((roof.type === 'gable' || roof.type === 'hip') && !isQuad && roof.any) {
+    roofAny(sink, ring, h, rh, roofKey);
+  } else if (roof.type === 'barrel' && isQuad) {
+    roofBarrel(sink, ring, h, rh, roofKey, wallKey);
   } else if (roof.type === 'shed' && isQuad) {
     roofShed(sink, ring, h, rh, roofKey, wallKey);
   } else if (roof.type === 'pyramid') {
@@ -494,7 +599,7 @@ export function buildingSummary(b) {
   const roofH = b.roof && b.roof.type !== 'flat' ? (b.roof.h ?? 3) : 0;
   // площадь застройки за вычетом дворов; строительный объём — до средней отметки кровли
   const net = area(ring) - (b.holes || []).reduce((s, h) => s + area(h), 0);
-  const avgRoof = !roofH ? 0 : b.roof.type === 'hip' ? roofH / 3 : roofH / 2;
+  const avgRoof = !roofH ? 0 : b.roof.type === 'hip' || b.roof.type === 'pyramid' ? roofH / 3 : b.roof.type === 'barrel' ? (roofH * Math.PI) / 4 : roofH / 2;
   const floorsEst = b.floors || (SINGLE_STOREY.has(b.type) ? 1 : Math.max(1, Math.round(b.h / 3.4)));
   return {
     id: b.id,
@@ -514,7 +619,9 @@ export function buildingSummary(b) {
     center: c,
     approx: !!b.approx,
     geomSrc: b.geomSrc,
+    roof: b.roof?.type || 'flat',
     units: b.units,
+    refined: b.refined,
   };
 }
 

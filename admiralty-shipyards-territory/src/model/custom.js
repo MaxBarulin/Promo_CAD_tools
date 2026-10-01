@@ -9,11 +9,12 @@
 // для зданий, построенных по данным; move [dx, dy] (м) и rotate (°, против часовой стрелки) —
 // сдвиг и поворот вокруг центра контура; box { x, y, length, width, angle } — новое здание
 // без модели (коробка с кровлей и проёмами по типу); units — подразделения: [{ name, role, person }],
-// role: 'occupant' — размещается в здании, 'owner' — отвечает за здание (здание может пустовать).
+// role: 'occupant' — размещается в здании, 'owner' — отвечает за здание (здание может пустовать);
+// roof — форма кровли (ROOF_TYPES), roofH — её высота (м); src — откуда уточнено (по фото, по документам).
 // Эти же записи создаёт редактор на сайте.
 
 import { pointInRing, centroid, ensureCCW, rect } from '../geo.js';
-import { decorate } from '../data/decorate.js';
+import { decorate, minRect } from '../data/decorate.js';
 
 // Код объекта по имени файла: «Z129.glb», «Z129 Корпусосборочный цех.glb» → Z129
 export const customIdFromFile = (file) => file.replace(/\.glb$/i, '').trim().split(/\s+/)[0];
@@ -140,6 +141,8 @@ export const DEFAULT_FINISH = {
   utility: { wall: 'gray', roof: 'r_bitumen' },
   historic: { wall: 'yellow', roof: 'r_rust' },
 };
+// Формы кровли: двускатная, вальмовая, сводчатая и односкатная — для прямоугольного контура
+export const ROOF_TYPES = { flat: 'Плоская', gable: 'Двускатная', hip: 'Вальмовая', barrel: 'Сводчатая', shed: 'Односкатная', pyramid: 'Шатровая', multigable: 'Многопролётная' };
 // Отделка фасада, доступная в редакторе
 export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco'];
 
@@ -177,6 +180,7 @@ export function editBuilding(orig, e) {
   if (has(e.floors)) b.floors = +e.floors;
   if (has(e.wall)) b.wall = e.wall;
   if (Array.isArray(e.units)) b.units = cleanUnits(e.units);
+  if (has(e.src)) b.refined = e.src;
   const retype = has(e.type) && e.type !== orig.type;
   const reheight = has(e.height) && +e.height !== orig.h;
   if (retype) b.type = e.type;
@@ -191,7 +195,21 @@ export function editBuilding(orig, e) {
   }
   // кровля и проёмы — заново под новый тип и высоту
   if (retype || reheight) b = decorate({ ...b, roof: undefined, doors: undefined, roofColor: orig.roof?.color }, null);
+  applyRoof(b, e);
   b.edited = true;
+  return b;
+}
+
+// Форма и высота кровли из записи (по фото, по документам). Двускатная и вальмовая над
+// непрямоугольным контуром строятся скатами по контуру; сводчатая, односкатная и
+// многопролётная — только над прямоугольным, иначе остаётся плоская.
+function applyRoof(b, e) {
+  if (ROOF_TYPES[e.roof]) {
+    const mr = minRect(b.poly);
+    const span = Math.min(mr.w, mr.d);
+    const rh = has(e.roofH) ? +e.roofH : e.roof === 'flat' ? 0 : e.roof === 'barrel' ? span * 0.35 : e.roof === 'shed' ? Math.min(3, span * 0.15) : Math.max(2, Math.min(10, span * 0.18));
+    b.roof = { ...(b.roof || {}), type: e.roof, h: rh, ...(e.roof === 'multigable' ? { bays: b.roof?.bays || 3 } : {}), ...(e.roof === 'gable' || e.roof === 'hip' ? { any: true } : {}) };
+  } else if (has(e.roofH) && b.roof && b.roof.type !== 'flat') b.roof = { ...b.roof, h: +e.roofH };
   return b;
 }
 
@@ -222,7 +240,8 @@ export function boxBuilding(id, e, { inYard, zoneOf }) {
     },
     null,
   );
-  return { ...b, edited: true };
+  if (has(e.src)) b.refined = e.src;
+  return { ...applyRoof(b, e), edited: true };
 }
 
 // Модель из Blender на месте: контур и отметки после сдвига и поворота из записи e.
@@ -281,6 +300,7 @@ export function prepareCustom(config = {}, files = []) {
   for (const [id, m] of Object.entries(meta)) {
     if (m.type && !BUILDING_TYPES.includes(m.type)) warnings.push(`custom.json, ${id}: неизвестный тип «${m.type}» (допустимы ${BUILDING_TYPES.join(', ')})`);
     if (m.wall && !WALLS.includes(m.wall)) warnings.push(`custom.json, ${id}: неизвестная отделка «${m.wall}» (допустимы ${WALLS.join(', ')})`);
+    if (m.roof && !ROOF_TYPES[m.roof]) warnings.push(`custom.json, ${id}: неизвестная форма кровли «${m.roof}» (допустимы ${Object.keys(ROOF_TYPES).join(', ')})`);
     if (m.units !== undefined && !Array.isArray(m.units)) warnings.push(`custom.json, ${id}: units должен быть списком [{ "name": …, "role": "occupant" | "owner", "person": … }]`);
   }
   return { remove: new Set(config.remove || []), meta, models, warnings };
@@ -336,6 +356,7 @@ export function patchInfo(o, e) {
     if (has(e.info)) i.info = e.info;
     if (has(e.type)) i.type = e.type;
     if (Array.isArray(e.units)) i.units = cleanUnits(e.units);
+    if (has(e.src)) i.refined = e.src;
     if (has(e.floors)) {
       i.floors = +e.floors;
       i.floorsEst = +e.floors;

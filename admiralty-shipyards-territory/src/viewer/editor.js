@@ -9,7 +9,7 @@
 //   • локальный файл — этот браузер (localStorage, модели — IndexedDB).
 // «Скачать изменения» — архив для папки custom/: после сборки правки становятся частью модели.
 
-import { BUILDING_TYPES, WALLS, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb } from '../model/custom.js';
+import { BUILDING_TYPES, WALLS, ROOF_TYPES, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb } from '../model/custom.js';
 import { makeBuildingObject, buildingLayer } from '../model/index.js';
 import { buildingSummary } from '../model/buildings.js';
 import { Sink } from '../model/geom.js';
@@ -401,6 +401,8 @@ export function setupEditor(api) {
     if (session.holder) api.placeHolder(session.holder, st.kind === 'model' ? st.transform : null);
     api.highlightProxy(st.proxy);
     session.state = st;
+    const f = $('edForm');
+    if (f?.elements.roof && st.obj && !session.draft.roof && ROOF_TYPES[st.obj.info.roof]) f.elements.roof.value = st.obj.info.roof;
     return st;
   }
   function endSession(restore = true) {
@@ -499,6 +501,7 @@ export function setupEditor(api) {
     const typeVal = e.type || info.type || (e.box ? 'warehouse' : '');
     const hVal = e.height ?? (procedural ? (orig ? orig.h : 10) : '');
     const wallVal = e.wall || orig?.wall || '';
+    const roofVal = e.roof || st.obj?.info.roof || '';
     const uiOwned = !!(ui.buildings[s.id] || ui.models[s.id] || ui.remove.has(s.id));
     const modelLine = mdl ? `модель из Blender: ${esc(mdl.file)}${s.model ? ' (новая, не сохранена)' : ''}` : e.box && !orig ? 'коробка по размерам' : orig ? 'построено по данным' : 'прежняя';
     card.classList.remove('min');
@@ -517,8 +520,14 @@ export function setupEditor(api) {
         <div class="ed-2">
           <label class="ed-f">Высота, м<input class="field" name="height" type="number" min="2" max="200" step="any" value="${esc(hVal)}"${procedural ? '' : ' disabled title="Высота модели из Blender — по самой модели"'} /></label>
           <label class="ed-f">Фасад<select class="field" name="wall"${procedural ? '' : ' disabled'}>${!wallVal ? '<option value="">—</option>' : ''}${WALLS.map((w) => `<option value="${w}"${w === wallVal ? ' selected' : ''}>${esc(wallName(w))}</option>`).join('')}</select></label>
-        </div>` : ''}
+        </div>
+        ${procedural ? `<div class="ed-2">
+          <label class="ed-f">Кровля<select class="field" name="roof">${!ROOF_TYPES[roofVal] ? `<option value="" selected>${roofVal ? 'прежняя' : '—'}</option>` : ''}${Object.entries(ROOF_TYPES).map(([k, n]) => `<option value="${k}"${k === roofVal ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          <label class="ed-f">Высота кровли, м<input class="field" name="roofH" type="number" min="0" max="60" step="any" placeholder="авто" value="${esc(e.roofH ?? '')}" /></label>
+        </div>
+        <p class="ed-hint" id="edRoofHint"${st.obj?.info.dims ? ' hidden' : ''}>Контур не прямоугольный: двускатная и вальмовая кровли пойдут скатами по контуру, остальные — плоской.</p>` : ''}` : ''}
         <label class="ed-f">Описание<textarea class="field" name="info" rows="3">${esc(e.info ?? info.info ?? '')}</textarea></label>
+        <label class="ed-f">Уточнено по<input class="field" name="src" placeholder="фото, обмер, документ — откуда сведения" value="${esc(e.src ?? info.refined ?? '')}" /></label>
         <fieldset class="ed-units"><legend>Подразделения</legend>
           <div id="edUnits"></div>
           <div class="ed-row"><button type="button" class="btn" data-act="addunit">Добавить подразделение</button></div>
@@ -602,7 +611,11 @@ export function setupEditor(api) {
       if (t.dataset.u) return onUnit(t);
       const k = t.name;
       if (!k) return;
-      if (k === 'name' || k === 'info') setField(k, t.value.trim());
+      if (k === 'name' || k === 'info' || k === 'src') setField(k, t.value.trim());
+      else if (k === 'roofH') {
+        if (t.value === '') delete e.roofH;
+        else if (+t.value >= 0) setField(k, +t.value);
+      }
       else if (k === 'floors') setField(k, t.value ? Math.max(1, Math.round(+t.value)) : '');
       else if (k === 'height') {
         if (+t.value >= 2) setField(k, +t.value);
@@ -625,8 +638,8 @@ export function setupEditor(api) {
       if (t.name === 'type') {
         setField('type', t.value);
         updatePreview();
-      } else if (t.name === 'wall') {
-        setField('wall', t.value);
+      } else if (t.name === 'wall' || t.name === 'roof') {
+        setField(t.name, t.value);
         updatePreview();
       } else if (t.dataset.act === 'glb') loadModelFile(t.files && t.files[0], t);
     });

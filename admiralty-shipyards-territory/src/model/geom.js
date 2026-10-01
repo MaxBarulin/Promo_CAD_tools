@@ -10,6 +10,12 @@ export function setTriangulator(fn) {
   TRI = fn;
 }
 
+// Триангуляция простого многоугольника (без отверстий): тройки индексов вершин.
+export function triangulate(ring) {
+  if (!TRI) throw new Error('triangulator not set');
+  return TRI(ring.map((p) => ({ x: p[0], y: p[1] })), []);
+}
+
 // Удаление повторяющихся соседних вершин и замыкающей точки.
 export function dedupe(ring) {
   const out = [];

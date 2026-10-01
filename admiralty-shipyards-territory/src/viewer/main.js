@@ -7,7 +7,7 @@ import CUSTOM from 'custom:files';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { getTerritory } from '../data/index.js';
 import { initModel, buildModel, toMergedGroups, fillLayerGroup, buildPickMesh } from '../model/index.js';
-import { prepareCustom, DATA_KEYS } from '../model/custom.js';
+import { prepareCustom, DATA_KEYS, ROOF_TYPES } from '../model/custom.js';
 import { createMaterialFactory } from '../model/materials.js';
 import { toLatLon, centroid, area, pointInRing } from '../geo.js';
 import { setupExports } from './exports.js';
@@ -417,6 +417,7 @@ async function main() {
     setActiveView(null);
   }
 
+  const ROOF_NAMES = { ...ROOF_TYPES, dome: 'Купол', onion: 'Луковичная главка' };
   let cardMin = false;
   function setCardMin(on) {
     cardMin = on;
@@ -460,6 +461,8 @@ async function main() {
     if (i.height) rows.push(['Высота', `${i.height} м`]);
     if (i.floors) rows.push(['Этажей', i.floors]);
     if (i.footprint) rows.push(['Площадь застройки', `${i.footprint.toLocaleString('ru-RU')} м²`]);
+    if (i.roof && ROOF_NAMES[i.roof]) rows.push(['Кровля', ROOF_NAMES[i.roof].toLowerCase()]);
+    if (i.refined) rows.push(['Уточнено', i.refined]);
     const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
     const [lat, lon] = toLatLon(c);
     rows.push(['Координаты', `${lat.toFixed(5)}, ${lon.toFixed(5)}`]);
