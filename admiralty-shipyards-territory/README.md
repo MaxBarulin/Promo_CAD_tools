@@ -143,6 +143,8 @@ npm run export         # dist/*.glb, *.dxf, *.geojson
 npm run check          # проверка данных и статистика модели
 npm test               # тест конвейера OSM на синтетических данных + проверка данных
 npm run screenshots    # снимки всех видов в docs/img (нужен Playwright)
+node promo/shots.mjs   # снимки для документа ППУ в promo/img (нужен Playwright)
+node promo/build-pdf.mjs   # PDF «Предложение по улучшению» из promo/ppu.html
 
 python3 tools/overture_fetch.py   # открытые данные Overture Maps → src/data/real-data.js
 python3 tools/register_map.py     # привязка карты предприятия к реальной границе
@@ -170,6 +172,7 @@ data/overture/       кэш выборки Overture Maps (не хранится 
 scripts/              сборка, экспорт, проверка, импорт OSM, снимки экрана
 test/                 синтетический ответ Overpass и тест конвейера
 dist/                 готовые файлы
+promo/                предложение по улучшению (ППУ): PDF, исходник ppu.html, снимки, шрифты
 ```
 
 Модель полностью процедурная: один и тот же код строит сцену в браузере и в Node (для экспорта). Генерация детерминирована, поэтому при каждой сборке получается одна и та же застройка.
