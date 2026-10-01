@@ -24,7 +24,7 @@ const warn = (msg) => {
 };
 
 console.log('Площади:');
-for (const z of data.zones) console.log(`  ${z.name.padEnd(32)} ${(mpArea(P.zones[z.id]) / 1e4).toFixed(1)} га`);
+for (const z of new Map(data.zones.map((zz) => [zz.id, zz])).values()) console.log(`  ${z.name.padEnd(32)} ${(mpArea(P.zones[z.id]) / 1e4).toFixed(1)} га`);
 console.log(`  Территория верфи (итого)          ${(mpArea(P.shipyardMP) / 1e4).toFixed(1)} га`);
 
 console.log('\nПроверка зданий:');

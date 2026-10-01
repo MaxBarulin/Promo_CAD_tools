@@ -53,12 +53,20 @@ const pieceCenters = Y.PIECE_INFO.map((z) => {
   return { ...z, c: centroid(mp.polygon) };
 });
 
-export const YARD_ZONES = REAL.yard.map((poly) => {
+// территория верфи — без участков, которые заводу больше не принадлежат
+const FOREIGN = Y.FOREIGN_AREAS.map((a) => ({ ...a, ring: ensureCCW(a.polygon) }));
+const inForeign = (p) => FOREIGN.find((a) => pointInRing(p, a.ring));
+const close = (r) => [...r, r[0]];
+const YARD = FOREIGN.length
+  ? pc.difference(REAL.yard.map((poly) => poly.map(close)), ...FOREIGN.map((a) => [[close(a.ring)]])).map((poly) => poly.map((r) => r.slice(0, -1)))
+  : REAL.yard;
+
+export const YARD_ZONES = YARD.map((poly) => {
   const c = centroid(poly[0]);
   const z = pieceCenters.slice().sort((a, b) => dist(a.c, c) - dist(b.c, c))[0];
   return { id: z.id, name: z.name, kind: 'shipyard', polygon: poly[0], holes: poly.slice(1), label: c };
 });
-const yardPolys = REAL.yard;
+const yardPolys = YARD;
 const inYard = (p) => yardPolys.some((poly) => inPoly(p, poly));
 const distYard = (p) => (inYard(p) ? 0 : Math.min(...yardPolys.map((poly) => distToRing(p, poly[0]))));
 const zoneOf = (p) => YARD_ZONES.find((z) => pointInRing(p, z.polygon))?.id;
@@ -241,7 +249,17 @@ function yardBuildings() {
       }
     }
   }
-  return out;
+  // застройка участков, которые заводу больше не принадлежат: снесена; оставленные здания —
+  // окружающая застройка
+  return out.filter((b) => {
+    const a = inForeign(centroid(b.poly));
+    if (!a) return true;
+    if (!a.keep?.includes(b.id)) return false;
+    b.kind = 'context';
+    b.zone = undefined;
+    b.info = `${b.info} ${a.name}: территория заводу не принадлежит.`;
+    return true;
+  });
 }
 
 // ---------- окружение ----------
@@ -404,8 +422,45 @@ function streets() {
   }));
 }
 
+// части линии вне участков, которые заводу больше не принадлежат (шаг проверки — step м;
+// остаются вершины линии и точки выхода на границу участка)
+function outsideForeign(line, step = 1) {
+  if (!FOREIGN.length || !line.some((p) => inForeign(p)) && !FOREIGN.some((a) => line.some((p, i) => i && segCrossesRing(line[i - 1], p, a.ring)))) return [line];
+  const runs = [];
+  let cur = null;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i];
+    const b = line[i + 1];
+    const n = Math.max(1, Math.ceil(dist(a, b) / step));
+    for (let k = i ? 1 : 0; k <= n; k++) {
+      const p = [a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n];
+      const vertex = k === 0 || k === n;
+      if (inForeign(p)) {
+        cur = null;
+        continue;
+      }
+      if (!cur) runs.push((cur = { pts: [], last: null }));
+      if (!cur.pts.length || vertex) cur.pts.push(p);
+      cur.last = p;
+      cur.lastVertex = vertex;
+    }
+  }
+  return runs
+    .map((r) => (r.lastVertex ? r.pts : [...r.pts, r.last]))
+    .filter((r) => r.length >= 2 && polylineLength(r) > 3);
+}
+function segCrossesRing(p, q, ring) {
+  const cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  return ring.some((a, i) => {
+    const b = ring[(i + 1) % ring.length];
+    return cr(p, q, a) * cr(p, q, b) < 0 && cr(a, b, p) * cr(a, b, q) < 0;
+  });
+}
+
 function internalRoads() {
-  return REAL.roads.filter((r) => r.yard).map((r, i) => ({ id: `R${i + 1}`, name: r.name || 'Внутризаводской проезд', w: Math.max(5, r.w), line: r.line }));
+  return REAL.roads
+    .filter((r) => r.yard)
+    .flatMap((r, i) => outsideForeign(r.line).map((line, k) => ({ id: k ? `R${i + 1}-${k + 1}` : `R${i + 1}`, name: r.name || 'Внутризаводской проезд', w: Math.max(5, r.w), line })));
 }
 
 function bridges() {
@@ -451,6 +506,8 @@ export function realTerritory() {
   const yb = yardBuildings();
   return {
     zones: YARD_ZONES,
+    // участки, отошедшие от завода: сам участок — в пределах прежней границы верфи
+    foreignAreas: FOREIGN.map(({ ring, ...a }) => ({ ...a, site: pc.intersection(REAL.yard.map((poly) => poly.map(close)), [[close(ring)]]).map((poly) => poly.map((r) => r.slice(0, -1))) })),
     buildings: [...yb, ...contextBuildings()],
     streets: st,
     internalRoads: internalRoads(),

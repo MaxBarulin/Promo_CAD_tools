@@ -115,10 +115,12 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
       sink: s,
       info: {
         name: f.name,
-        info: `${{ concrete: 'Железобетонный забор с колючей проволокой', mesh: 'Сетчатое ограждение по кромке набережной', wall: 'Исторический кирпичный забор с пилястрами' }[f.type]}, высота ${f.h} м, длина ${Math.round(polylineLength(f.line))} м.${(f.gates || []).length ? ' Ворота: ' + f.gates.map((g) => g.name).join(', ') + '.' : ''}`,
+        info: `${{ concrete: 'Железобетонный забор с колючей проволокой', mesh: 'Сетчатое ограждение по кромке набережной', wall: 'Исторический кирпичный забор с пилястрами', sheet: 'Забор из профлиста вокруг участка, который заводу больше не принадлежит' }[f.type]}, высота ${f.h} м, длина ${Math.round(polylineLength(f.line))} м.${(f.gates || []).length ? ' Ворота: ' + f.gates.map((g) => g.name).join(', ') + '.' : ''}`,
         kind: 'fence',
       },
       proxy: { line: f.line, h: (f.h || 2.5) + 0.6 },
+      // забор соседнего участка — не верфь: скрывается вместе с городом
+      ...(f.foreign ? { scope: 'city' } : {}),
     });
   }
 

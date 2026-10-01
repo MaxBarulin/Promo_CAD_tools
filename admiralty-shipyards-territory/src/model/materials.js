@@ -74,6 +74,7 @@ export const PALETTE = {
   fence_concrete: { name: 'Забор_ЖБ', color: '#bdb9b0', roughness: 0.95 },
   fence_post: { name: 'Забор_столбы', color: '#a19c92', roughness: 0.95 },
   fence_mesh: { name: 'Забор_сетка', color: '#55626a', roughness: 0.6, metalness: 0.5, opacity: 0.55 },
+  fence_sheet: { name: 'Забор_профлист', color: '#6d8296', roughness: 0.55, metalness: 0.35 },
   fence_wire: { name: 'Колючая_проволока', color: '#3c3f42', metalness: 0.6 },
   fence_wall: { name: 'Забор_кирпичный', color: '#8f4a37', roughness: 0.9 },
   gate_leaf: { name: 'Ворота_откатные', color: '#3f6a52', metalness: 0.4, roughness: 0.5 },

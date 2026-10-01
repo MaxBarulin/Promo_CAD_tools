@@ -51,6 +51,14 @@ export function buildFence(sink, f) {
         }
         // колючая проволока — три нити
         for (const z of [h + 0.25, h + 0.42, h + 0.58]) sink.beam('fence_wire', [a[0], a[1], z], [b[0], b[1], z], 0.03, 0.03);
+      } else if (f.type === 'sheet') {
+        // забор из профлиста на стойках (ограждение соседнего участка)
+        sink.beam('fence_sheet', [a[0], a[1], h / 2 + 0.05], [b[0], b[1], h / 2 + 0.05], 0.06, h - 0.1);
+        const n = Math.max(1, Math.round(L / 2.5));
+        for (let k = 0; k <= n; k++) {
+          const p = add(a, mul(dir, (L * k) / n));
+          sink.box('steel_dark', [p[0], p[1], h / 2], [0.1, 0.1, h], 0);
+        }
       } else if (f.type === 'mesh') {
         sink.beam('fence_mesh', [a[0], a[1], h / 2 + 0.1], [b[0], b[1], h / 2 + 0.1], 0.02, h - 0.2);
         const n = Math.max(1, Math.round(L / 3));
@@ -235,6 +243,40 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
     }
   }
 
+  // забор участков, которые заводу больше не принадлежат: по их внешнему контуру на суше;
+  // на границе с верфью — её собственная ограда
+  for (const a of data.foreignAreas || []) {
+    let k = 0;
+    for (const poly of a.site || []) {
+      const ring = ensureCCW(poly[0]);
+      const closed = [...ring, ring[0]];
+      const L = polylineLength(closed);
+      const ok = [];
+      for (let s = 0; s < L; s += step) {
+        const { p, dir } = pointAt(closed, s);
+        const n = [dir[1], -dir[0]];
+        const q = add(p, mul(n, 4));
+        const good = !inMP(q, water) && !inMP(q, yard) && !inMP(add(p, mul(n, -4)), yard);
+        ok.push({ p: add(p, mul(n, -0.5)), good });
+      }
+      // непрерывные участки (с переходом через начало контура)
+      let start = ok.findIndex((x, i) => x.good && !ok[(i - 1 + ok.length) % ok.length].good);
+      if (start < 0) start = 0;
+      const seq = [...ok.slice(start), ...ok.slice(0, start)];
+      let run = [];
+      const flush = () => {
+        const line = simplify(run.map((x) => x.p), 0.35);
+        if (run.length * step >= minRun) out.push({ id: `F-${a.id}-${++k}`, zone: null, type: 'sheet', h: 2.4, line, gates: [], foreign: a.name });
+        run = [];
+      };
+      for (const x of seq) {
+        if (x.good) run.push(x);
+        else if (run.length) flush();
+      }
+      if (run.length) flush();
+    }
+  }
+
   // ворота: в ближайший участок ограды
   for (const g of data.gates || []) {
     let best = null;
@@ -254,7 +296,7 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
     ...data.streets.map((s) => ({ line: s.line, name: s.name })),
     ...rivers.map((r) => ({ line: r.line, name: r.name.startsWith('р.') || /канал/.test(r.name) ? r.name : `р. ${r.name}` })),
   ];
-  const kindName = { concrete: 'Ж/б забор', mesh: 'Ограждение по кромке набережной', wall: 'Кирпичная ограда' };
+  const kindName = { concrete: 'Ж/б забор', mesh: 'Ограждение по кромке набережной', wall: 'Кирпичная ограда', sheet: 'Забор соседнего участка' };
   for (const f of out) {
     const mid = pointAt(f.line, polylineLength(f.line) / 2).p;
     let near = null;
@@ -263,7 +305,7 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
       if (pr.d < 90 && (!near || pr.d < near.d)) near = { d: pr.d, name: c.name };
     }
     const zone = data.zones.find((z) => z.id === f.zone);
-    f.name = `${kindName[f.type]}${near ? ` (${near.name})` : ''} — ${zone ? zone.name : ''}`;
+    f.name = `${kindName[f.type]}${near ? ` (${near.name})` : ''} — ${f.foreign || (zone ? zone.name : '')}`;
   }
   return out;
 }

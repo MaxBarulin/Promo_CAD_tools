@@ -94,6 +94,7 @@ function baseTerritory() {
     bridges: R.bridges,
     arches: [],
     containers: Y.CONTAINERS,
+    foreignAreas: R.foreignAreas,
     crossings: R.crossings,
     labels: [...zoneLabels, ...DISTRICTS, ...R.streetLabels],
     frontage: false,
