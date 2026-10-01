@@ -181,7 +181,8 @@ ${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" Co
 const dec = new TextDecoder();
 const unxml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&amp;/g, '&');
 
-async function unzip(bytes, inflateRaw, wanted) {
+// Файлы ZIP-архива как байты: { имя: Uint8Array }. wanted(имя) — какие нужны.
+export async function unzipFiles(bytes, inflateRaw, wanted = () => true) {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let eocd = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
@@ -190,7 +191,7 @@ async function unzip(bytes, inflateRaw, wanted) {
       break;
     }
   }
-  if (eocd < 0) throw new Error('Файл не похож на .xlsx (нет оглавления ZIP)');
+  if (eocd < 0) throw new Error('Файл не похож на архив ZIP (.xlsx, .zip): нет оглавления');
   const n = dv.getUint16(eocd + 10, true);
   let p = dv.getUint32(eocd + 16, true);
   const out = {};
@@ -207,9 +208,14 @@ async function unzip(bytes, inflateRaw, wanted) {
     const lnlen = dv.getUint16(off + 26, true);
     const lxlen = dv.getUint16(off + 28, true);
     const data = bytes.subarray(off + 30 + lnlen + lxlen, off + 30 + lnlen + lxlen + csize);
-    out[name] = dec.decode(method === 0 ? data : await inflateRaw(data));
+    out[name] = method === 0 ? data.slice() : await inflateRaw(data);
   }
   return out;
+}
+
+async function unzip(bytes, inflateRaw, wanted) {
+  const files = await unzipFiles(bytes, inflateRaw, wanted);
+  return Object.fromEntries(Object.entries(files).map(([k, v]) => [k, dec.decode(v)]));
 }
 
 // Первый лист книги → массив строк (массивов значений). inflateRaw(Uint8Array) → Promise<Uint8Array>.

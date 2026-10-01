@@ -6,13 +6,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import CUSTOM from 'custom:files';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { getTerritory } from '../data/index.js';
-import { initModel, buildModel, toMergedGroups, buildPickMesh } from '../model/index.js';
-import { prepareCustom } from '../model/custom.js';
+import { initModel, buildModel, toMergedGroups, fillLayerGroup, buildPickMesh } from '../model/index.js';
+import { prepareCustom, DATA_KEYS } from '../model/custom.js';
 import { createMaterialFactory } from '../model/materials.js';
-import { toLatLon, centroid, area } from '../geo.js';
+import { toLatLon, centroid, area, pointInRing } from '../geo.js';
 import { setupExports } from './exports.js';
 import { setupRegistry } from './registry.js';
 import { setupObjectList } from './objects.js';
+import { setupEditor } from './editor.js';
 
 /* global __ARTIFACT_BUILD__ */
 // __ARTIFACT_BUILD__ подставляет esbuild: true — сборка для публикации в виде Artifact
@@ -132,7 +133,10 @@ async function main() {
   // доработки из папки custom/: модели из Blender, удаления, новые здания
   const customFiles = CUSTOM.files.map((f) => ({ file: f.file, bytes: Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0)) }));
   const custom = prepareCustom(CUSTOM.config, customFiles);
-  const model = buildModel(data, { contextDetail: touch ? 'low' : 'auto', custom });
+  const origBuildings = new Map(data.buildings.map((b) => [b.id, b]));
+  const origData = Object.fromEntries(DATA_KEYS.map((k) => [k, data[k]]));
+  const contextDetail = touch ? 'low' : 'auto';
+  const model = buildModel(data, { contextDetail, custom });
   for (const w of model.custom?.warnings || []) console.warn('custom/: ' + w);
   await step('материалы и освещение');
   const getMaterial = createMaterialFactory(THREE);
@@ -146,7 +150,15 @@ async function main() {
   sun.target.position.copy(center);
 
   // вывеска на главной проходной
-  for (const s of model.signs) addSignText(s);
+  const signMeshes = new Map(); // код здания → [меши]
+  const addSigns = (list) => {
+    for (const s of list) {
+      const m = addSignText(s);
+      if (!signMeshes.has(s.id)) signMeshes.set(s.id, []);
+      signMeshes.get(s.id).push(m);
+    }
+  };
+  addSigns(model.signs);
 
   // ---------- управление камерой ----------
   const controls = new OrbitControls(camera, canvas);
@@ -196,24 +208,39 @@ async function main() {
     else addLabel(l.text, l.at, 14, 'street', 0, 1300, 'city');
   }
   for (const l of data.water.labels) addLabel(l.text, l.at, 1, 'water' + (l.size === 'xl' ? ' xl' : ''), 0, l.size === 'xl' || l.size === 'l' ? 4000 : 1800);
-  for (const o of pickMesh.userData.objects) {
-    const pin = PINS[o.id] || (PIN_NAMES[o.name] ? [o.name.replace(' АО «Адмиралтейские верфи»', ''), PIN_NAMES[o.name]] : null);
-    if (!pin) continue;
-    const p = o.proxy;
-    const c = centroid(p.poly);
-    addLabel(pin[0], c, p.z1 + 4, 'pin', 0, pin[1], o.scope === 'city' ? 'city' : 'yard');
+  let pinLabels = [];
+  function makePins() {
+    for (const l of pinLabels) {
+      scene.remove(l);
+      l.element.remove();
+      labelObjs.splice(labelObjs.indexOf(l), 1);
+    }
+    pinLabels = [];
+    for (const o of pickMesh.userData.objects) {
+      const pin = PINS[o.id] || (PIN_NAMES[o.name] ? [o.name.replace(' АО «Адмиралтейские верфи»', ''), PIN_NAMES[o.name]] : null);
+      if (!pin) continue;
+      const p = o.proxy;
+      const c = centroid(p.poly);
+      pinLabels.push(addLabel(pin[0], c, p.z1 + 4, 'pin', 0, pin[1], o.scope === 'city' ? 'city' : 'yard'));
+    }
   }
+  makePins();
 
   // ---------- интерфейс ----------
   const shipyardArea = (data.zones.filter((z) => z.kind === 'shipyard').reduce((s, z) => s + mpArea(model.planar.zones[z.id]), 0) / 1e4).toFixed(0);
-  const nShip = model.layers.find((l) => l.id === 'shipyard').objects.length;
-  const nCranes = data.cranes.filter((c) => !c.id.startsWith('BC')).length;
   const plural = (n, one, few, many) => {
     const m10 = n % 10;
     const m100 = n % 100;
     return `${n} ${m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many}`;
   };
-  $('facts').innerHTML = [`≈${shipyardArea} га`, plural(nShip, 'здание', 'здания', 'зданий'), plural(data.slipways.length, 'стапель', 'стапеля', 'стапелей'), plural(nCranes, 'кран', 'крана', 'кранов'), `3 острова и площадка`].map((t) => `<span class="fact">${t}</span>`).join('');
+  function updateFacts() {
+    const nShip = model.layers.find((l) => l.id === 'shipyard').objects.length;
+    const prod = model.layers.find((l) => l.id === 'production').objects;
+    const nCranes = prod.filter((o) => o.info?.kind === 'crane' && !o.id.startsWith('BC')).length;
+    const nSlip = prod.filter((o) => o.info?.kind === 'slipway').length;
+    $('facts').innerHTML = [`≈${shipyardArea} га`, plural(nShip, 'здание', 'здания', 'зданий'), plural(nSlip, 'стапель', 'стапеля', 'стапелей'), plural(nCranes, 'кран', 'крана', 'кранов'), `3 острова и площадка`].map((t) => `<span class="fact">${t}</span>`).join('');
+  }
+  updateFacts();
   $('note').innerHTML = data.meta.source === 'osm'
     ? `<b>Источник геометрии.</b> Контуры зданий, вода, улицы и ограждения — OpenStreetMap (© участники OSM, ODbL)${data.meta.osm?.fetched ? ', данные на ' + data.meta.osm.fetched.slice(0, 10) : ''}. Названия и описания объектов верфи — по открытым источникам.` +
       `<br /><span style="font-family:var(--font-data);font-size:11px">${model.stats.buildings} зданий · ${(model.stats.triangles / 1e6).toFixed(2)} млн треугольников</span>`
@@ -309,7 +336,13 @@ async function main() {
     $('exportGroup').innerHTML =
       '<h2>Файлы модели</h2><p class="note" style="border:0;padding:0;margin:0">GLB (3D), DXF (генплан) и GeoJSON лежат в репозитории в папке <code>admiralty-shipyards-territory/dist</code>; там же локальная версия этой страницы с кнопками экспорта.</p>';
   } else {
-    setupExports({ $, data, model });
+    // модели из custom/ и из редактора вклеиваются в GLB вместе с текстурами
+    setupExports({
+      $, data, model,
+      customParts: () => model.layers.flatMap((layer) =>
+        layer.objects.filter((o) => o.custom && editor?.bytesFor(o.id)).map((o) => ({ bytes: editor.bytesFor(o.id), nodeName: `${o.id} ${o.name}`.trim(), parentName: layer.name, transform: o.transform })),
+      ),
+    });
   }
 
   // ---------- выбор объектов ----------
@@ -324,6 +357,11 @@ async function main() {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > (e.pointerType === 'touch' ? 10 : 5)) return;
     setMouse(e);
     raycaster.setFromCamera(mouse, camera);
+    // во время правки щелчок не выбирает объекты, а может указать точку для здания
+    if (editor?.isEditing()) {
+      editor.onCanvasClick(raycaster.ray.intersectPlane(groundPlane, tmp) ? [tmp.x, -tmp.z] : null);
+      return;
+    }
     const hits = raycaster.intersectObject(pickMesh, false);
     const objs = pickMesh.userData.objects;
     const fo = pickMesh.userData.faceObj;
@@ -358,6 +396,7 @@ async function main() {
 
   let registry = null;
   let objectList = null;
+  let editor = null;
   // подлёт к выбранному объекту; на телефоне шторка и карточка сворачиваются, чтобы объект был виден
   function flyToSelected(o) {
     if (narrow()) {
@@ -391,9 +430,15 @@ async function main() {
       b.title = t;
     }
   }
+  let manyHighlight = null;
   function select(o) {
     selected = o;
     objectList?.setActive(o?.id);
+    if (manyHighlight) {
+      scene.remove(manyHighlight);
+      manyHighlight.traverse((c) => c.geometry && c.geometry.dispose());
+      manyHighlight = null;
+    }
     if (highlight) {
       scene.remove(highlight);
       highlight.traverse((c) => c.geometry && c.geometry.dispose());
@@ -429,6 +474,7 @@ async function main() {
       ${i.approx || o.generated ? '<span class="badge">Положение условное</span>' : ''}
       ${i.info ? `<p>${escapeHtml(i.info)}</p>` : ''}
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('')}</dl>
+      ${unitsBlock(i.units)}
       <div class="row"><button class="btn" type="button" id="cardFly">Приблизить</button></div>`;
     card.hidden = false;
     card.querySelector('.x').addEventListener('click', () => select(null));
@@ -436,6 +482,20 @@ async function main() {
     setCardMin(cardMin);
     card.querySelector('#cardFly').addEventListener('click', () => focusObject(o));
     registry?.decorateCard(card, o);
+    editor?.decorateCard(card, o);
+  }
+
+  // подразделения в карточке: кто размещается и кто отвечает за здание
+  function unitsBlock(units) {
+    if (!units || !units.length) return '';
+    const occ = units.filter((u) => u.role !== 'owner');
+    const own = units.filter((u) => u.role === 'owner');
+    const li = (u) => `<li><span class="u-name">${escapeHtml(u.name)}</span>${u.person ? `<span class="u-person">${escapeHtml(u.person)}</span>` : ''}</li>`;
+    return `<div class="units">
+      <h4>Подразделения</h4>
+      ${occ.length ? `<div class="u-role">Размещаются</div><ul>${occ.map(li).join('')}</ul>` : '<div class="u-empty">Здание не занято</div>'}
+      ${own.length ? `<div class="u-role">Отвечает за здание</div><ul>${own.map(li).join('')}</ul>` : ''}
+    </div>`;
   }
 
   function makeHighlight(p) {
@@ -492,39 +552,111 @@ async function main() {
   }
 
   // ---------- модели из custom/ (Blender): на место своего объекта, в свой слой ----------
+  // Держатель модели: поворот и сдвиг на плане вокруг центра контура (как placeModel в model/custom.js).
   const gltfLoader = new GLTFLoader();
+  const customScenes = new Map(); // код → держатель
+  function placeHolder(holder, t) {
+    holder.userData.placement = t;
+    const inner = holder.children[0];
+    if (!t) {
+      holder.position.set(0, 0, 0);
+      holder.rotation.set(0, 0, 0);
+      if (inner) inner.position.set(0, 0, 0);
+      return;
+    }
+    const [cx, cy] = t.pivot;
+    const [dx, dy] = t.move || [0, 0];
+    holder.position.set(cx + dx, 0, -(cy + dy));
+    holder.rotation.set(0, ((t.rotate || 0) * Math.PI) / 180, 0);
+    if (inner) inner.position.set(-cx, 0, cy);
+  }
+  function makeModelHolder(bytes, label = '') {
+    const holder = new THREE.Group();
+    const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    gltfLoader.parse(
+      buf,
+      '',
+      (gltf) => {
+        gltf.scene.traverse((c) => {
+          if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+          }
+        });
+        holder.add(gltf.scene);
+        placeHolder(holder, holder.userData.placement);
+      },
+      (err) => console.warn(`${label || 'модель'}: не удалось загрузить — ${err?.message || err}`),
+    );
+    return holder;
+  }
+  function customGroup(layerId, scope) {
+    const g = groups.find((x) => x.userData.layer === layerId);
+    let sg = g.children.find((x) => x.userData.custom && x.userData.scope === scope);
+    if (!sg) {
+      sg = new THREE.Group();
+      sg.name = `${layerId}:${scope}:custom`;
+      sg.userData = { scope, custom: true };
+      sg.visible = !(yardOnly && scope === 'city');
+      g.add(sg);
+    }
+    return sg;
+  }
+  function attachModel(o, layerId, bytes) {
+    detachModel(o.id);
+    const holder = makeModelHolder(bytes, `custom/${o.custom}`);
+    holder.name = `${o.id} ${o.name}`;
+    placeHolder(holder, o.transform);
+    customScenes.set(o.id, holder);
+    customGroup(layerId, o.scope || 'city').add(holder);
+  }
+  function detachModel(id) {
+    const h = customScenes.get(id);
+    if (!h) return;
+    h.parent?.remove(h);
+    customScenes.delete(id);
+  }
   for (const layer of model.layers) {
     for (const o of layer.objects) {
       if (!o.custom) continue;
-      const f = customFiles.find((x) => x.file === o.custom);
-      const buf = f.bytes.buffer.slice(f.bytes.byteOffset, f.bytes.byteOffset + f.bytes.byteLength);
-      gltfLoader.parse(
-        buf,
-        '',
-        (gltf) => {
-          const obj = gltf.scene;
-          obj.name = `${o.id} ${o.name}`;
-          obj.traverse((c) => {
-            if (c.isMesh) {
-              c.castShadow = true;
-              c.receiveShadow = true;
-            }
-          });
-          const g = groups.find((x) => x.userData.layer === layer.id);
-          const scope = o.scope || 'city';
-          let sg = g.children.find((x) => x.userData.scope === scope);
-          if (!sg) {
-            sg = new THREE.Group();
-            sg.name = `${layer.id}:${scope}`;
-            sg.userData.scope = scope;
-            sg.visible = !(yardOnly && scope === 'city');
-            g.add(sg);
-          }
-          sg.add(obj);
-        },
-        (err) => console.warn(`custom/${o.custom}: не удалось загрузить модель — ${err?.message || err}`),
-      );
+      attachModel(o, layer.id, customFiles.find((x) => x.file === o.custom).bytes);
     }
+  }
+  function rebuildLayers(ids, exclude = null) {
+    for (const id of ids) {
+      const g = groups.find((x) => x.userData.layer === id);
+      const layer = model.layers.find((l) => l.id === id);
+      if (!g || !layer) continue;
+      fillLayerGroup(THREE, g, layer, getMaterial, exclude);
+      for (const sg of g.children) if (sg.userData.scope === 'city') sg.visible = !yardOnly;
+    }
+  }
+  // после правок: выбор мышью, булавки, счётчики, реестр, список объектов
+  function refreshAll(selectId) {
+    const fresh = buildPickMesh(THREE, model);
+    pickMesh.geometry.dispose();
+    pickMesh.geometry = fresh.geometry;
+    pickMesh.userData = fresh.userData;
+    makePins();
+    updateFacts();
+    registry?.refresh();
+    objectList?.refresh(registry.items);
+    selectById(selectId);
+  }
+  function selectById(id) {
+    select(id ? pickMesh.userData.objects.find((o) => o.id === id) || null : null);
+  }
+  let editHighlight = null;
+  function highlightProxy(p) {
+    if (editHighlight) {
+      scene.remove(editHighlight);
+      editHighlight.traverse((c) => c.geometry && c.geometry.dispose());
+      editHighlight = null;
+    }
+    if (highlight) highlight.visible = !p;
+    if (!p) return;
+    editHighlight = makeHighlight(p);
+    scene.add(editHighlight);
   }
 
   // ---------- реестр зданий и сооружений ----------
@@ -552,6 +684,51 @@ async function main() {
       select(o);
       flyToSelected(o);
     },
+    onShowMany: showMany,
+  });
+
+  // все здания подразделения: подсветка и вид, в котором они видны разом
+  function showMany(objs) {
+    select(null);
+    const polys = objs.filter((o) => o.proxy?.poly);
+    if (!polys.length) return;
+    manyHighlight = new THREE.Group();
+    for (const o of polys) manyHighlight.add(makeHighlight(o.proxy));
+    scene.add(manyHighlight);
+    const pts = polys.flatMap((o) => o.proxy.poly);
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const c = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+    const r = Math.max(60, Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2);
+    const dir = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0).normalize();
+    const k = 1.9 / Math.min(1, Math.max(0.45, camera.aspect));
+    flyTo([c[0] + dir.x * r * k, c[1] - dir.z * r * k, r * k * 0.75 + 40], [c[0], c[1], 0], 1000);
+    setActiveView(null);
+    if (narrow()) setPanelCollapsed(true);
+  }
+
+  // ---------- редактор зданий ----------
+  editor = setupEditor({
+    $, THREE, V3, scene, camera, controls, model, data, getMaterial, origBuildings, origData, contextDetail,
+    buildTime: { config: CUSTOM.config, files: customFiles, custom },
+    artifactBuild: __ARTIFACT_BUILD__,
+    inYard: (p) => model.planar.shipyardMP.some((poly) => pointInRing(p, poly[0]) && !poly.slice(1).some((h) => pointInRing(p, h))),
+    zoneOf: (p) => data.zones.find((z) => pointInRing(p, z.polygon))?.id,
+    attachModel, detachModel, makeModelHolder, placeHolder,
+    setModelVisible: (id, v) => {
+      const h = customScenes.get(id);
+      if (h) h.visible = v;
+    },
+    addSigns,
+    removeSigns: (id) => {
+      for (const m of signMeshes.get(id) || []) m.parent?.remove(m);
+      signMeshes.delete(id);
+    },
+    setSignsVisible: (id, v) => {
+      for (const m of signMeshes.get(id) || []) m.visible = v;
+    },
+    rebuildLayers, refreshAll, highlightProxy, select, selectById,
+    selectedId: () => selected?.id || null,
   });
 
   // ---------- освещение: день / вечер ----------
@@ -658,7 +835,7 @@ async function main() {
   });
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, focusObject, pickMesh, registry, objectList, setYardOnly, setPanelCollapsed, setTab };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
   window.__ready = true;
 
   // ---------- вспомогательные ----------
@@ -680,6 +857,7 @@ async function main() {
     m.position.copy(V3(s.center[0], s.center[1], s.center[2]));
     m.lookAt(V3(s.center[0] + s.normal[0], s.center[1] + s.normal[1], s.center[2]));
     root.add(m);
+    return m;
   }
 
 

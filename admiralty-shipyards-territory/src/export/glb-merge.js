@@ -18,7 +18,21 @@ function shiftTextures(obj, off) {
   return obj;
 }
 
-// target — GLB выгрузки; parts — [{ bytes, nodeName, parentName, extras }]
+// Узел glTF для сдвига и поворота модели на плане (см. placeModel в model/custom.js):
+// p' = R·(p − pivot) + pivot + move; в glTF (Y вверх, север = −Z) — поворот вокруг Y.
+export function placementTRS(t) {
+  if (!t) return {};
+  const a = ((t.rotate || 0) * Math.PI) / 180;
+  const [cx, cy] = t.pivot;
+  const [dx, dy] = t.move || [0, 0];
+  const P = [cx, 0, -cy];
+  const RP = [P[0] * Math.cos(a) + P[2] * Math.sin(a), 0, -P[0] * Math.sin(a) + P[2] * Math.cos(a)];
+  const out = { translation: [cx + dx - RP[0], 0, -(cy + dy) - RP[2]] };
+  if (a) out.rotation = [0, Math.sin(a / 2), 0, Math.cos(a / 2)];
+  return out;
+}
+
+// target — GLB выгрузки; parts — [{ bytes, nodeName, parentName, extras, transform }]
 export function mergeGlb(target, parts) {
   const { json: J, bin: tbin } = parseGlb(target);
   const pieces = [{ at: 0, data: tbin || new Uint8Array(0) }];
@@ -109,7 +123,7 @@ export function mergeGlb(target, parts) {
 
     // узел-обёртка «код название» внутри узла слоя
     const roots = (S.scenes?.[S.scene ?? 0]?.nodes || []).map((i) => i + off.nodes);
-    J.nodes.push({ name: part.nodeName, children: roots, ...(part.extras ? { extras: part.extras } : {}) });
+    J.nodes.push({ name: part.nodeName, children: roots, ...placementTRS(part.transform), ...(part.extras ? { extras: part.extras } : {}) });
     const wrapper = J.nodes.length - 1;
     const parent = J.nodes.findIndex((n) => n.name === part.parentName);
     if (parent >= 0) (J.nodes[parent].children ||= []).push(wrapper);

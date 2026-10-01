@@ -1,15 +1,17 @@
 // Проверка доработок из папки custom/ на моделях, выгруженных из Blender 4.5:
 //   Z129.glb — корпус из выгрузки модели с UV-развёрткой и текстурой на кровле (замена);
-//   N1.glb   — новое здание; custom.json — удаление двух построек и крана, новое описание Z161.
+//   N1.glb   — новое здание; custom.json — удаление двух построек и крана, новое описание Z161,
+//   правка Z182 (высота, отделка, сдвиг, поворот) и новое здание N2 по размерам (box).
 import * as THREE from 'three';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { getTerritory } from '../src/data/index.js';
 import { initModel, buildModel } from '../src/model/index.js';
-import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile } from '../src/model/custom.js';
-import { mergeGlb } from '../src/export/glb-merge.js';
+import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel } from '../src/model/custom.js';
+import { mergeGlb, placementTRS } from '../src/export/glb-merge.js';
 import { centroid, area } from '../src/geo.js';
 import { readCustomDir } from '../scripts/custom-files.mjs';
+import { registryItems } from '../src/registry/core.js';
 
 assert.equal(customIdFromFile('Z129 Корпусосборочный цех (предстап.glb'), 'Z129');
 assert.equal(customIdFromFile('F-galerny-1.GLB'), 'F-galerny-1');
@@ -27,9 +29,9 @@ const find = (m, id) => m.layers.flatMap((l) => l.objects.map((o) => ({ o, layer
 
 const r = model.custom;
 assert.deepEqual(r.replaced, ['Z129']);
-assert.deepEqual(r.added, ['N1']);
+assert.deepEqual([...r.added].sort(), ['N1', 'N2']);
 assert.deepEqual([...r.removed].sort(), ['C2', 'Y34cacb', 'Y707ec3']);
-assert.deepEqual(r.renamed, ['Z161']);
+assert.deepEqual([...r.edited].sort(), ['Z161', 'Z182']);
 assert.deepEqual(r.warnings, []);
 
 // удалённые — ни в модели, ни в данных (по ним строятся DXF и GeoJSON)
@@ -57,6 +59,57 @@ assert.ok(Math.abs(area(n.o.proxy.poly) - 540) < 5);
 assert.ok(Math.abs(n.o.proxy.z1 - 12) < 0.01);
 
 assert.equal(find(model, 'Z161').o.info.info, 'Описание изменено через custom.json.');
+
+// правка здания из данных: высота, отделка, сдвиг на (10, −5) м и поворот на 15°
+const e0 = find(base, 'Z182').o;
+const e1 = find(model, 'Z182').o;
+assert.equal(e1.name, 'Заводоуправление (тест)');
+assert.equal(e1.info.height, 30);
+assert.equal(e1.info.approx, false);
+const [ax, ay] = centroid(e0.proxy.poly);
+const [bx2, by2] = centroid(e1.proxy.poly);
+assert.ok(Math.hypot(bx2 - ax - 10, by2 - ay + 5) < 0.5, 'здание сдвинуто на (10, −5) м');
+assert.ok(Math.abs(area(e1.proxy.poly) - area(e0.proxy.poly)) < 1, 'при повороте площадь не меняется');
+assert.equal(data.buildings.find((b) => b.id === 'Z182').wall, 'brick');
+// подразделения: пустые строки отброшены, роли и ответственные — в карточке и в реестре
+assert.deepEqual(e1.info.units, [
+  { name: 'Отдел главного механика', role: 'occupant', person: 'Иванов И. И.' },
+  { name: 'Административно-хозяйственная служба', role: 'owner' },
+]);
+const reg = registryItems(model, data).find((i) => i.id === 'Z182');
+assert.equal(reg.occupants, 'Отдел главного механика (Иванов И. И.)');
+assert.equal(reg.owners, 'Административно-хозяйственная служба');
+
+// новое здание по размерам: 12 × 6 м, тип и высота из записи
+const n2 = find(model, 'N2');
+assert.equal(n2.layer, 'shipyard');
+assert.equal(n2.o.info.type, 'utility');
+assert.ok(Math.abs(area(n2.o.proxy.poly) - 72) < 0.5);
+assert.ok(n2.o.sink.triangleCount() > 0, 'у нового здания есть геометрия');
+assert.ok(Math.hypot(centroid(n2.o.proxy.poly)[0] + 450, centroid(n2.o.proxy.poly)[1] - 260) < 0.1);
+
+// поворот вокруг центра: точка (1, 0) от центра на 90° → (0, 1)
+const t = transformRing([[11, 5]], [10, 5], [2, 3], 90)[0];
+assert.ok(Math.hypot(t[0] - 12, t[1] - 9) < 1e-9);
+// сдвиг и поворот модели из Blender: узел glTF даёт ту же точку, что и контур на плане
+const pm = placeModel({ hull: [[0, 0], [10, 0], [10, 4], [0, 4]], z0: 0, z1: 5 }, { move: [100, -50], rotate: 30 });
+const trs = placementTRS(pm.transform);
+const q = trs.rotation;
+const rot = (v) => {
+  // поворот вектора кватернионом (вокруг Y)
+  const [x, y, z] = v;
+  const [qx, qy, qz, qw] = q;
+  const ix = qw * x + qy * z - qz * y;
+  const iy = qw * y + qz * x - qx * z;
+  const iz = qw * z + qx * y - qy * x;
+  const iw = -qx * x - qy * y - qz * z;
+  return [ix * qw + iw * -qx + iy * -qz - iz * -qy, iy * qw + iw * -qy + iz * -qx - ix * -qz, iz * qw + iw * -qz + ix * -qy - iy * -qx];
+};
+const g = rot([10, 0, -4]);
+const gx = g[0] + trs.translation[0];
+const gz = g[2] + trs.translation[2];
+const expect = transformRing([[10, 4]], pm.transform.pivot, [100, -50], 30)[0];
+assert.ok(Math.hypot(gx - expect[0], -gz - expect[1]) < 1e-6, 'узел glTF и контур на плане совпадают');
 
 // анализ GLB: текстура в файле, сдвиг и поворот узла учтены
 const a = analyzeGlb(files.find((f) => f.file === 'N1.glb').bytes);

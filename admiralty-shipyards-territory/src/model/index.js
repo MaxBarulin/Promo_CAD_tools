@@ -12,7 +12,7 @@ import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buil
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, DEG } from '../geo.js';
 import { PALETTE } from './materials.js';
-import { removeFromData, applyCustom } from './custom.js';
+import { removeFromData, applyCustom, editBuildingsData } from './custom.js';
 
 export const LAYERS = [
   { id: 'terrain', name: 'Рельеф, вода, набережные' },
@@ -50,6 +50,10 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   const t0 = Date.now();
   const removedFromData = custom ? removeFromData(data, custom.remove) : new Set();
   const P = buildPlanar(data);
+  const inYardMP = (p) => P.shipyardMP.some((poly) => pointInRing(p, poly[0]) && !poly.slice(1).some((h) => pointInRing(p, h)));
+  const zoneOf = (p) => (data.zones || []).find((z) => pointInRing(p, z.polygon))?.id;
+  // правки зданий и новые здания из custom.json / редактора — до сборки зданий
+  const pre = custom ? editBuildingsData(data, custom, { inYard: inYardMP, zoneOf }) : null;
   const layers = Object.fromEntries(LAYERS.map((l) => [l.id, { ...l, objects: [] }]));
   // scope: 'yard' — относится к верфи, 'city' — окружение (скрывается кнопкой «Только верфь»),
   // 'base' — земля и вода (видны всегда)
@@ -59,7 +63,6 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     layers[layer].objects.push(obj);
     return obj;
   };
-  const inYardMP = (p) => P.shipyardMP.some((poly) => pointInRing(p, poly[0]) && !poly.slice(1).some((h) => pointInRing(p, h)));
   const signs = [];
 
   // ---------- рельеф ----------
@@ -123,20 +126,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   // contextDetail: 'low' — окружение без окон (для лёгкого экспорта)
   const explicit = contextDetail === 'low' ? data.buildings.map((b) => (b.kind === 'context' ? { ...b, detail: 'low' } : b)) : data.buildings;
   const generated = frontage && data.frontage !== false ? generateFrontage(data, P, explicit, { contextDetail }) : [];
-  for (const b of [...explicit, ...generated]) {
-    const s = new Sink();
-    buildBuilding(s, b, { signs });
-    const sum = buildingSummary(b);
-    const roofH = b.roof && b.roof.type !== 'flat' ? (b.roof.h ?? 3) : 0;
-    add_(b.kind === 'shipyard' ? 'shipyard' : 'context', {
-      id: b.id,
-      name: b.name,
-      sink: s,
-      info: { ...sum, kind: b.kind === 'shipyard' ? 'building' : 'context' },
-      proxy: prismProxy(b.poly, 0, b.h + roofH),
-      generated: !!b.generated,
-    });
-  }
+  for (const b of [...explicit, ...generated]) add_(buildingLayer(b), makeBuildingObject(b, signs));
 
   // ---------- стапели, суда на стапелях ----------
   const slipById = {};
@@ -328,7 +318,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
 
   // ---------- доработки вручную: замена моделью из Blender, новые здания ----------
   const customReport = custom
-    ? applyCustom(custom, { layers, signs, data, removedFromData, inYard: inYardMP, summary: buildingSummary, Sink })
+    ? applyCustom(custom, { layers, signs, data, removedFromData, pre, inYard: inYardMP, zoneOf, summary: buildingSummary, Sink })
     : null;
 
   // статистика
@@ -344,39 +334,68 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   };
 }
 
+// Объект слоя для здания: геометрия, сведения для карточки и реестра, прокси для выбора.
+// Используется при сборке и редактором на сайте (перестройка одного здания).
+export const buildingLayer = (b) => (b.kind === 'shipyard' ? 'shipyard' : 'context');
+export function makeBuildingObject(b, signs = []) {
+  const s = new Sink();
+  buildBuilding(s, b, { signs });
+  const roofH = b.roof && b.roof.type !== 'flat' ? (b.roof.h ?? 3) : 0;
+  return {
+    id: b.id,
+    name: b.name,
+    sink: s,
+    info: { ...buildingSummary(b), kind: b.kind === 'shipyard' ? 'building' : 'context' },
+    proxy: prismProxy(b.poly, 0, b.h + roofH),
+    generated: !!b.generated,
+    edited: !!b.edited,
+    scope: b.kind === 'shipyard' ? 'yard' : 'city',
+  };
+}
+
 // ---------- преобразование в объекты three.js ----------
 
 // Для просмотра: по каждому слою объединить геометрию по материалам (мало вызовов отрисовки).
 export function toMergedGroups(THREE, model, getMaterial) {
-  const groups = [];
-  for (const layer of model.layers) {
+  return model.layers.map((layer) => {
     const g = new THREE.Group();
     g.name = layer.name;
     g.userData.layer = layer.id;
-    // внутри слоя — подгруппы по принадлежности (верфь / город / основа), чтобы город
-    // можно было скрыть одним переключателем
-    for (const scope of ['base', 'yard', 'city']) {
-      const objs = layer.objects.filter((o) => (o.scope || 'city') === scope);
-      if (!objs.length) continue;
-      const merged = new Sink();
-      for (const o of objs) merged.merge(o.sink);
-      const sg = new THREE.Group();
-      sg.name = `${layer.id}:${scope}`;
-      sg.userData.scope = scope;
-      for (const { key, geometry } of merged.toGeometries(THREE)) {
-        const mesh = new THREE.Mesh(geometry, getMaterial(key));
-        mesh.name = `${layer.id}:${scope}:${key}`;
-        const tr = PALETTE[key]?.opacity != null;
-        mesh.castShadow = !tr && layer.id !== 'terrain' && layer.id !== 'roads';
-        mesh.receiveShadow = true;
-        if (key === 'water') mesh.userData.water = true;
-        sg.add(mesh);
-      }
-      g.add(sg);
-    }
-    groups.push(g);
+    fillLayerGroup(THREE, g, layer, getMaterial);
+    return g;
+  });
+}
+
+// (Пере)заполнить группу слоя; exclude — коды объектов, которые не рисовать (их правят в редакторе).
+// Подгруппы с моделями из custom/ (userData.custom) не трогаются.
+export function fillLayerGroup(THREE, g, layer, getMaterial, exclude = null) {
+  for (const c of [...g.children]) {
+    if (c.userData.custom) continue;
+    g.remove(c);
+    c.traverse((m) => m.geometry && m.geometry.dispose());
   }
-  return groups;
+  // внутри слоя — подгруппы по принадлежности (верфь / город / основа), чтобы город
+  // можно было скрыть одним переключателем
+  for (const scope of ['base', 'yard', 'city']) {
+    const objs = layer.objects.filter((o) => (o.scope || 'city') === scope && !(exclude && exclude.has(o.id)));
+    if (!objs.length) continue;
+    const merged = new Sink();
+    for (const o of objs) merged.merge(o.sink);
+    const sg = new THREE.Group();
+    sg.name = `${layer.id}:${scope}`;
+    sg.userData.scope = scope;
+    for (const { key, geometry } of merged.toGeometries(THREE)) {
+      const mesh = new THREE.Mesh(geometry, getMaterial(key));
+      mesh.name = `${layer.id}:${scope}:${key}`;
+      const tr = PALETTE[key]?.opacity != null;
+      mesh.castShadow = !tr && layer.id !== 'terrain' && layer.id !== 'roads';
+      mesh.receiveShadow = true;
+      if (key === 'water') mesh.userData.water = true;
+      sg.add(mesh);
+    }
+    g.add(sg);
+  }
+  return g;
 }
 
 // Для экспорта: иерархия Слой → Объект (один Mesh с группами материалов).

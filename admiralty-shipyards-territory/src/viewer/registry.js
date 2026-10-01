@@ -19,10 +19,10 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const num = (v) => (v === null || v === undefined || v === '' ? '—' : Number(v).toLocaleString('ru-RU'));
 
 export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, select, focusObject, artifactBuild, onOpen }) {
-  const items = registryItems(model, data);
-  const byId = new Map(items.map((i) => [i.id, i]));
-  const objById = new Map(pickMesh.userData.objects.map((o) => [o.id, o]));
-  const demoRecs = demoRecords(items);
+  let items = registryItems(model, data);
+  let byId = new Map(items.map((i) => [i.id, i]));
+  let objById = new Map(pickMesh.userData.objects.map((o) => [o.id, o]));
+  let demoRecs = demoRecords(items);
 
   let saved = {}; // id → поля учёта (из хранилища)
   let demo = false;
@@ -483,8 +483,24 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     });
   }
 
+  // после правок модели в редакторе: состав и расчётные показатели — заново
+  function refresh() {
+    items = registryItems(model, data);
+    byId = new Map(items.map((i) => [i.id, i]));
+    objById = new Map(pickMesh.userData.objects.map((o) => [o.id, o]));
+    demoRecs = demoRecords(items);
+    renderAll();
+  }
+
   renderAll();
-  return { decorateCard, toggle, items };
+  return {
+    decorateCard,
+    toggle,
+    refresh,
+    get items() {
+      return items;
+    },
+  };
 }
 
 export { ZONE_NAMES, COLUMNS };

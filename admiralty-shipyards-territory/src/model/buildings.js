@@ -466,6 +466,7 @@ export function buildingSummary(b) {
     center: c,
     approx: !!b.approx,
     geomSrc: b.geomSrc,
+    units: b.units,
   };
 }
 

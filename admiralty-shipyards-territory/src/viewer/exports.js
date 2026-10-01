@@ -6,8 +6,9 @@ import { toObjectHierarchy } from '../model/index.js';
 import { createMaterialFactory } from '../model/materials.js';
 import { buildDXF } from '../export/dxf.js';
 import { buildGeoJSON } from '../export/geojson.js';
+import { mergeGlb } from '../export/glb-merge.js';
 
-export function setupExports({ $, data, model }) {
+export function setupExports({ $, data, model, customParts = () => [] }) {
   $('expGLB').addEventListener('click', async () => {
     const btn = $('expGLB');
     btn.textContent = '…';
@@ -16,7 +17,9 @@ export function setupExports({ $, data, model }) {
     new GLTFExporter().parse(
       hier,
       (buf) => {
-        download(new Blob([buf], { type: 'model/gltf-binary' }), 'admiralty-shipyards.glb');
+        const parts = customParts();
+        const out = parts.length ? mergeGlb(new Uint8Array(buf), parts).bytes : buf;
+        download(new Blob([out], { type: 'model/gltf-binary' }), 'admiralty-shipyards.glb');
         btn.textContent = 'GLB';
       },
       (err) => {

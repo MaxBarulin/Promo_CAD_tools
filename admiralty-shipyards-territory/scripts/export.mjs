@@ -75,7 +75,7 @@ for (const layer of model.layers) {
   for (const o of layer.objects) {
     if (!o.custom) continue;
     const f = customDir.files.find((x) => x.file === o.custom);
-    parts.push({ bytes: f.bytes, nodeName: `${o.id} ${o.name}`.trim(), parentName: layer.name, extras: o.info ? cleanUserData(o.info) : undefined });
+    parts.push({ bytes: f.bytes, nodeName: `${o.id} ${o.name}`.trim(), parentName: layer.name, extras: o.info ? cleanUserData(o.info) : undefined, transform: o.transform });
   }
 }
 if (parts.length) {
@@ -102,7 +102,7 @@ if (!noContext && !full) {
 
 function reportCustom(r) {
   if (!r) return;
-  const n = r.replaced.length + r.added.length + r.removed.length + r.renamed.length;
-  if (n) console.log(`Доработки custom/: заменено ${r.replaced.length}, добавлено ${r.added.length}, удалено ${r.removed.length}, переименовано ${r.renamed.length}`);
+  const n = r.replaced.length + r.added.length + r.removed.length + r.edited.length;
+  if (n) console.log(`Доработки custom/: заменено ${r.replaced.length}, добавлено ${r.added.length}, удалено ${r.removed.length}, изменено ${r.edited.length}`);
   for (const w of r.warnings) console.log('  ⚠ ' + w);
 }

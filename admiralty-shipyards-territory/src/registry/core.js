@@ -84,6 +84,8 @@ export function registryItems(model, data) {
         totalArea: cat === 'building' ? i.totalArea : null,
         volume: cat === 'building' ? i.volume : null,
         estimated: !!i.approx,
+        occupants: unitList(i.units, 'occupant'),
+        owners: unitList(i.units, 'owner'),
         source: i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'карта предприятия' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
         lat: +lat.toFixed(6),
         lon: +lon.toFixed(6),
@@ -93,6 +95,14 @@ export function registryItems(model, data) {
   }
   const order = { building: 0, structure: 1, device: 2 };
   return items.sort((a, b) => order[a.cat] - order[b.cat] || a.zone.localeCompare(b.zone, 'ru') || (b.footprint || 0) - (a.footprint || 0));
+}
+
+// Подразделения строкой: «Отдел главного механика (Иванов И. И.); Бюро …»
+function unitList(units, role) {
+  return (units || [])
+    .filter((u) => (u.role === 'owner' ? 'owner' : 'occupant') === role)
+    .map((u) => (u.person ? `${u.name} (${u.person})` : u.name))
+    .join('; ');
 }
 
 export function zoneByPoint(p, data) {
@@ -149,6 +159,8 @@ export const COLUMNS = [
   { key: 'footprint', label: 'Площадь застройки, м²', w: 14, num: true },
   { key: 'totalArea', label: 'Общая площадь (оценка), м²', w: 16, num: true },
   { key: 'volume', label: 'Строительный объём (оценка), м³', w: 18, num: true },
+  { key: 'occupants', label: 'Подразделения в здании', w: 36 },
+  { key: 'owners', label: 'Отвечает за здание', w: 30 },
   ...FIELDS.map((f) => ({ key: f.key, label: f.label, w: f.type === 'date' ? 14 : f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true })),
   { key: 'epbStatus', label: 'Статус ЭПБ', w: 14 },
   { key: 'estimated', label: 'Высота/объём — оценка', w: 12 },

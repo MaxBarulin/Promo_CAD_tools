@@ -3,9 +3,17 @@
 //
 //   custom/<код>.glb   — модель одного объекта; если код есть в модели — замена,
 //                        если нет — новое здание
-//   custom/custom.json — { "remove": [коды], "buildings": { код: { name, type, info, floors, layer } } }
+//   custom/custom.json — { "remove": [коды], "buildings": { код: запись } }
+//
+// Запись здания: name, type, info, floors — сведения; height (м) и wall (отделка фасада) —
+// для зданий, построенных по данным; move [dx, dy] (м) и rotate (°, против часовой стрелки) —
+// сдвиг и поворот вокруг центра контура; box { x, y, length, width, angle } — новое здание
+// без модели (коробка с кровлей и проёмами по типу); units — подразделения: [{ name, role, person }],
+// role: 'occupant' — размещается в здании, 'owner' — отвечает за здание (здание может пустовать).
+// Эти же записи создаёт редактор на сайте.
 
-import { pointInRing, centroid, ensureCCW } from '../geo.js';
+import { pointInRing, centroid, ensureCCW, rect } from '../geo.js';
+import { decorate } from '../data/decorate.js';
 
 // Код объекта по имени файла: «Z129.glb», «Z129 Корпусосборочный цех.glb» → Z129
 export const customIdFromFile = (file) => file.replace(/\.glb$/i, '').trim().split(/\s+/)[0];
@@ -119,13 +127,144 @@ export function analyzeGlb(bytes) {
   return { hull, z0, z1, warnings, images: (glb.json.images || []).length };
 }
 
+// ---------- правка зданий ----------
+
+// Отделка новых зданий по типу (ключи палитры materials.js)
+export const DEFAULT_FINISH = {
+  hall: { wall: 'blue_gray', roof: 'r_light' },
+  elling: { wall: 'blue', roof: 'r_gray' },
+  elling_historic: { wall: 'brick', roof: 'r_rust' },
+  warehouse: { wall: 'light', roof: 'r_light' },
+  office: { wall: 'white', roof: 'r_dark' },
+  checkpoint: { wall: 'white', roof: 'r_dark' },
+  utility: { wall: 'gray', roof: 'r_bitumen' },
+  historic: { wall: 'yellow', roof: 'r_rust' },
+};
+// Отделка фасада, доступная в редакторе
+export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco'];
+
+const has = (v) => v !== undefined && v !== null && v !== '';
+const DEG = Math.PI / 180;
+
+// Подразделения: только строки с названием; роль — размещается (по умолчанию) или отвечает за здание.
+export const UNIT_ROLES = { occupant: 'Размещается', owner: 'Отвечает за здание' };
+export function cleanUnits(list) {
+  if (!Array.isArray(list)) return undefined;
+  return list
+    .filter((u) => u && typeof u.name === 'string' && u.name.trim())
+    .map((u) => ({ name: u.name.trim(), role: u.role === 'owner' ? 'owner' : 'occupant', ...(has(u.person) ? { person: String(u.person).trim() } : {}) }));
+}
+
+// Поворот вокруг pivot на rotate° против часовой стрелки, затем сдвиг на move.
+export function transformRing(ring, pivot, move, rotate) {
+  const a = (rotate || 0) * DEG;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const [dx, dy] = move || [0, 0];
+  return ring.map(([x, y]) => {
+    const u = x - pivot[0];
+    const v = y - pivot[1];
+    return [pivot[0] + u * c - v * s + dx, pivot[1] + u * s + v * c + dy];
+  });
+}
+
+// Здание из данных с правками записи e. Исходные данные не меняются.
+export function editBuilding(orig, e) {
+  if (!e) return orig;
+  let b = { ...orig };
+  if (has(e.name)) b.name = e.name;
+  if (has(e.info)) b.info = e.info;
+  if (has(e.floors)) b.floors = +e.floors;
+  if (has(e.wall)) b.wall = e.wall;
+  if (Array.isArray(e.units)) b.units = cleanUnits(e.units);
+  const retype = has(e.type) && e.type !== orig.type;
+  const reheight = has(e.height) && +e.height !== orig.h;
+  if (retype) b.type = e.type;
+  if (reheight) {
+    b.h = +e.height;
+    b.approx = false;
+  }
+  if (e.move || e.rotate) {
+    const pivot = centroid(orig.poly);
+    b.poly = transformRing(orig.poly, pivot, e.move, e.rotate);
+    if (orig.holes) b.holes = orig.holes.map((h) => transformRing(h, pivot, e.move, e.rotate));
+  }
+  // кровля и проёмы — заново под новый тип и высоту
+  if (retype || reheight) b = decorate({ ...b, roof: undefined, doors: undefined, roofColor: orig.roof?.color }, null);
+  b.edited = true;
+  return b;
+}
+
+// Новое здание по записи с box: коробка нужного размера, кровля и проёмы по типу.
+export function boxBuilding(id, e, { inYard, zoneOf }) {
+  const bx = e.box || {};
+  const x = +bx.x || 0;
+  const y = +bx.y || 0;
+  const type = BUILDING_TYPES.includes(e.type) ? e.type : 'warehouse';
+  const fin = DEFAULT_FINISH[type];
+  const yard = inYard([x, y]);
+  const b = decorate(
+    {
+      kind: yard ? 'shipyard' : 'context',
+      id,
+      zone: zoneOf([x, y]),
+      name: has(e.name) ? e.name : `Новое здание ${id}`,
+      info: e.info || '',
+      type,
+      floors: has(e.floors) ? +e.floors : undefined,
+      h: has(e.height) ? +e.height : 10,
+      wall: e.wall || fin.wall,
+      roofColor: fin.roof,
+      units: cleanUnits(e.units),
+      poly: ensureCCW(rect(x, y, Math.max(2, +bx.length || 30), Math.max(2, +bx.width || 18), +bx.angle || 0)),
+      geomSrc: 'editor',
+      approx: false,
+    },
+    null,
+  );
+  return { ...b, edited: true };
+}
+
+// Модель из Blender на месте: контур и отметки после сдвига и поворота из записи e.
+export function placeModel(a, e) {
+  const out = { hull: a.hull, z0: a.z0, z1: a.z1, transform: null };
+  if (e && (e.move || e.rotate)) {
+    const pivot = centroid(a.hull);
+    out.transform = { pivot, move: e.move || [0, 0], rotate: e.rotate || 0 };
+    out.hull = ensureCCW(transformRing(a.hull, pivot, e.move, e.rotate));
+  }
+  return out;
+}
+
+// Сведения о новом здании-модели (без своих данных) — для карточки и реестра.
+export function modelBuilding(id, m, e, { inYard, zoneOf }) {
+  const c = centroid(m.hull);
+  const yard = inYard(c);
+  return {
+    id,
+    name: has(e?.name) ? e.name : `Новое здание ${id}`,
+    info: e?.info || '',
+    kind: yard ? 'shipyard' : 'context',
+    type: BUILDING_TYPES.includes(e?.type) ? e.type : 'utility',
+    floors: has(e?.floors) ? +e.floors : undefined,
+    zone: zoneOf(c),
+    poly: m.hull,
+    h: Math.max(1, m.z1 - Math.max(0, m.z0)),
+    geomSrc: 'custom',
+    units: cleanUnits(e?.units),
+  };
+}
+
 // ---------- подготовка набора доработок ----------
 
 // config — содержимое custom.json; files — [{ file, bytes }]. Возвращает набор для buildModel.
 export function prepareCustom(config = {}, files = []) {
   const warnings = [];
   const models = {};
-  for (const f of files) {
+  const meta = config.buildings || {};
+  // точное имя «код.glb» важнее файла с названием
+  const sorted = [...files].sort((a, b) => (a.file === `${customIdFromFile(a.file)}.glb` ? 0 : 1) - (b.file === `${customIdFromFile(b.file)}.glb` ? 0 : 1));
+  for (const f of sorted) {
     const id = customIdFromFile(f.file);
     if (models[id]) {
       warnings.push(`${f.file}: для кода ${id} уже есть файл ${models[id].file} — этот пропущен`);
@@ -133,19 +272,22 @@ export function prepareCustom(config = {}, files = []) {
     }
     try {
       const a = analyzeGlb(f.bytes);
-      models[id] = { file: f.file, hull: a.hull, z0: a.z0, z1: a.z1, images: a.images };
+      models[id] = { file: f.file, images: a.images, ...placeModel(a, meta[id]) };
       for (const w of a.warnings) warnings.push(`${f.file}: ${w}`);
     } catch (e) {
       warnings.push(`${f.file}: ${e.message} — файл пропущен`);
     }
   }
-  const meta = config.buildings || {};
-  for (const [id, m] of Object.entries(meta)) if (m.type && !BUILDING_TYPES.includes(m.type)) warnings.push(`custom.json, ${id}: неизвестный тип «${m.type}» (допустимы ${BUILDING_TYPES.join(', ')})`);
+  for (const [id, m] of Object.entries(meta)) {
+    if (m.type && !BUILDING_TYPES.includes(m.type)) warnings.push(`custom.json, ${id}: неизвестный тип «${m.type}» (допустимы ${BUILDING_TYPES.join(', ')})`);
+    if (m.wall && !WALLS.includes(m.wall)) warnings.push(`custom.json, ${id}: неизвестная отделка «${m.wall}» (допустимы ${WALLS.join(', ')})`);
+    if (m.units !== undefined && !Array.isArray(m.units)) warnings.push(`custom.json, ${id}: units должен быть списком [{ "name": …, "role": "occupant" | "owner", "person": … }]`);
+  }
   return { remove: new Set(config.remove || []), meta, models, warnings };
 }
 
 // Удаление из исходных данных (до сборки): так удалённое пропадает и из DXF/GeoJSON.
-const DATA_KEYS = ['buildings', 'cranes', 'ships', 'docks', 'slipways', 'bridges', 'chimneys', 'arches', 'fences'];
+export const DATA_KEYS = ['buildings', 'cranes', 'ships', 'docks', 'slipways', 'bridges', 'chimneys', 'arches', 'fences'];
 // Возвращает коды, которые нашлись в данных.
 export function removeFromData(data, remove) {
   const found = new Set();
@@ -163,11 +305,53 @@ export function removeFromData(data, remove) {
   return found;
 }
 
-// После сборки: замена, новые здания, переименование, отчёт.
-// ctx: { layers, signs, data, removedFromData, inYard(p), summary(b), Sink }
+// До сборки зданий: правки зданий из данных и новые здания-коробки.
+// ctx: { inYard(p), zoneOf(p) }. Возвращает { edited, added }.
+export function editBuildingsData(data, custom, ctx) {
+  const ids = new Set(data.buildings.map((b) => b.id));
+  const edited = [];
+  data.buildings = data.buildings.map((b) => {
+    const e = custom.meta[b.id];
+    if (!e || custom.models[b.id]) return b;
+    edited.push(b.id);
+    return editBuilding(b, e);
+  });
+  const added = [];
+  for (const [id, e] of Object.entries(custom.meta)) {
+    if (!e.box || ids.has(id) || custom.models[id] || custom.remove.has(id)) continue;
+    data.buildings.push(boxBuilding(id, e, ctx));
+    added.push(id);
+  }
+  return { edited, added };
+}
+
+// Сведения объекта из записи (для заменённых моделью и прочих объектов: краны, суда…).
+export function patchInfo(o, e) {
+  if (!e) return o;
+  const out = { ...o };
+  if (has(e.name)) out.name = e.name;
+  if (out.info) {
+    const i = { ...out.info };
+    if (has(e.name)) i.name = e.name;
+    if (has(e.info)) i.info = e.info;
+    if (has(e.type)) i.type = e.type;
+    if (Array.isArray(e.units)) i.units = cleanUnits(e.units);
+    if (has(e.floors)) {
+      i.floors = +e.floors;
+      i.floorsEst = +e.floors;
+      i.floorsKnown = true;
+      if (i.footprint) i.totalArea = i.footprint * +e.floors;
+    }
+    out.info = i;
+  }
+  return out;
+}
+
+// После сборки: замена моделями, новые здания-модели, сведения прочих объектов, отчёт.
+// ctx: { layers, signs, data, removedFromData, pre: {edited, added}, inYard(p), zoneOf(p), summary(b), Sink }
 export function applyCustom(custom, ctx) {
-  const { layers, data, inYard, summary, Sink } = ctx;
-  const report = { replaced: [], added: [], removed: [], renamed: [], warnings: [...custom.warnings] };
+  const { layers, summary, Sink } = ctx;
+  const report = { replaced: [], added: [...ctx.pre.added], removed: [], edited: [...ctx.pre.edited], warnings: [...custom.warnings] };
   const all = new Map();
   for (const l of Object.values(layers)) for (const o of l.objects) all.set(o.id, { o, layer: l });
 
@@ -182,73 +366,55 @@ export function applyCustom(custom, ctx) {
     else report.warnings.push(`custom.json, remove: объекта с кодом ${id} нет в модели`);
   }
 
-  const zoneOf = (p) => (data.zones || []).find((z) => pointInRing(p, z.polygon))?.id;
-  const proxyOf = (m) => ({ poly: m.hull, z0: m.z0, z1: m.z1 });
-
   for (const [id, m] of Object.entries(custom.models)) {
-    const meta = custom.meta[id] || {};
-    const hit = all.get(id);
+    const e = custom.meta[id];
     if (custom.remove.has(id)) {
       report.warnings.push(`${m.file}: код ${id} одновременно в списке удаления — модель не подставлена`);
       continue;
     }
+    const hit = all.get(id);
     if (hit) {
       // замена: своя геометрия из GLB, сведения об объекте сохраняются
-      const o = hit.o;
-      o.sink = new Sink();
-      o.custom = m.file;
-      o.proxy = proxyOf(m);
-      if (o.info) {
-        const h = +(m.z1 - Math.max(0, m.z0)).toFixed(1);
-        o.info = { ...o.info, height: h, geomSrc: 'custom' };
-        if (o.info.footprint) o.info.volume = Math.round(o.info.footprint * h);
-      }
+      const o = modelObject(hit.o, m, Sink);
+      Object.assign(hit.o, patchInfo(o, e));
       report.replaced.push(id);
+      if (e) report.edited.push(id);
     } else {
-      // новое здание
-      const c = centroid(m.hull);
-      const yard = inYard(c);
-      const b = {
-        id,
-        name: meta.name || `Новое здание ${id}`,
-        info: meta.info || '',
-        kind: yard ? 'shipyard' : 'context',
-        type: meta.type || 'utility',
-        floors: meta.floors,
-        zone: zoneOf(c),
-        poly: m.hull,
-        h: Math.max(1, m.z1 - Math.max(0, m.z0)),
-        geomSrc: 'custom',
-      };
-      const layerId = meta.layer && layers[meta.layer] ? meta.layer : yard ? 'shipyard' : 'context';
-      const obj = { id, name: b.name, sink: new Sink(), custom: m.file, info: { ...summary(b), kind: layerId === 'shipyard' ? 'building' : 'context' }, proxy: proxyOf(m) };
-      obj.scope = layerId === 'shipyard' || yard ? 'yard' : 'city';
+      const b = modelBuilding(id, m, e, ctx);
+      const layerId = e?.layer && layers[e.layer] ? e.layer : b.kind === 'shipyard' ? 'shipyard' : 'context';
+      const obj = { id, name: b.name, sink: new Sink(), custom: m.file, transform: m.transform, info: { ...summary(b), kind: layerId === 'shipyard' ? 'building' : 'context' }, proxy: { poly: m.hull, z0: m.z0, z1: m.z1 } };
+      obj.scope = b.kind === 'shipyard' ? 'yard' : 'city';
       layers[layerId].objects.push(obj);
       all.set(id, { o: obj, layer: layers[layerId] });
       report.added.push(id);
     }
   }
 
-  // переименование и описание без замены геометрии
-  for (const [id, meta] of Object.entries(custom.meta)) {
+  // сведения прочих объектов (здания из данных уже поправлены до сборки)
+  const done = new Set([...ctx.pre.edited, ...report.added, ...report.replaced]);
+  for (const [id, e] of Object.entries(custom.meta)) {
+    if (done.has(id)) continue;
     const hit = all.get(id);
     if (!hit) {
-      if (!custom.models[id] && !custom.remove.has(id)) report.warnings.push(`custom.json: объекта с кодом ${id} нет в модели и нет файла ${id}.glb`);
+      if (!custom.remove.has(id)) report.warnings.push(`custom.json: объекта с кодом ${id} нет в модели, нет файла ${id}.glb и нет размеров box для нового здания`);
       continue;
     }
-    if (report.added.includes(id)) continue;
-    const o = hit.o;
-    if (meta.name) o.name = meta.name;
-    if (o.info) {
-      if (meta.name) o.info = { ...o.info, name: meta.name };
-      if (meta.info) o.info = { ...o.info, info: meta.info };
-      if (meta.type) o.info = { ...o.info, type: meta.type };
-      if (meta.floors) o.info = { ...o.info, floors: meta.floors, floorsEst: meta.floors, floorsKnown: true, totalArea: o.info.footprint ? o.info.footprint * meta.floors : o.info.totalArea };
-    }
-    if (meta.name || meta.info || meta.type || meta.floors) report.renamed.push(id);
+    Object.assign(hit.o, patchInfo(hit.o, e));
+    report.edited.push(id);
   }
 
   // вывески заменённых зданий (их рисует сама модель из Blender)
   ctx.signs.splice(0, ctx.signs.length, ...ctx.signs.filter((s) => !custom.models[s.id]));
   return report;
+}
+
+// Объект модели, у которого геометрия — модель из Blender (сведения прежние, высота — по модели).
+export function modelObject(o, m, Sink) {
+  const out = { ...o, sink: new Sink(), custom: m.file, transform: m.transform, proxy: { poly: m.hull, z0: m.z0, z1: m.z1 } };
+  if (o.info) {
+    const h = +(m.z1 - Math.max(0, m.z0)).toFixed(1);
+    out.info = { ...o.info, height: h, geomSrc: 'custom' };
+    if (out.info.footprint) out.info.volume = Math.round(out.info.footprint * h);
+  }
+  return out;
 }

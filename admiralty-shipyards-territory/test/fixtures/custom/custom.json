@@ -1,7 +1,53 @@
 {
-  "remove": ["Y707ec3", "Y34cacb", "C2"],
+  "remove": [
+    "Y707ec3",
+    "Y34cacb",
+    "C2"
+  ],
   "buildings": {
-    "N1": { "name": "Новый склад (пример)", "type": "warehouse", "info": "Пример нового здания из Blender." },
-    "Z161": { "info": "Описание изменено через custom.json." }
+    "N1": {
+      "name": "Новый склад (пример)",
+      "type": "warehouse",
+      "info": "Пример нового здания из Blender."
+    },
+    "Z161": {
+      "info": "Описание изменено через custom.json."
+    },
+    "Z182": {
+      "name": "Заводоуправление (тест)",
+      "height": 30,
+      "move": [
+        10,
+        -5
+      ],
+      "rotate": 15,
+      "wall": "brick",
+      "units": [
+        {
+          "name": "Отдел главного механика",
+          "role": "occupant",
+          "person": "Иванов И. И."
+        },
+        {
+          "name": "Административно-хозяйственная служба",
+          "role": "owner"
+        },
+        {
+          "name": "  "
+        }
+      ]
+    },
+    "N2": {
+      "name": "Бытовка (тест)",
+      "type": "utility",
+      "height": 4,
+      "box": {
+        "x": -450,
+        "y": 260,
+        "length": 12,
+        "width": 6,
+        "angle": 30
+      }
+    }
   }
 }

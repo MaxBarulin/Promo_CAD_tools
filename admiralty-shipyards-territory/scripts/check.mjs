@@ -65,13 +65,13 @@ for (let i = 0; i < polys.length; i++) {
 if (!problems) console.log('  ✓ замечаний нет');
 
 const cr = model.custom;
-if (cr && (cr.replaced.length || cr.added.length || cr.removed.length || cr.renamed.length || cr.warnings.length)) {
+if (cr && (cr.replaced.length || cr.added.length || cr.removed.length || cr.edited.length || cr.warnings.length)) {
   console.log('\nДоработки (папка custom/):');
   const list = (title, ids) => ids.length && console.log(`  ${title.padEnd(16)} ${ids.join(', ')}`);
   list('заменены:', cr.replaced);
   list('добавлены:', cr.added);
   list('удалены:', cr.removed);
-  list('переименованы:', cr.renamed);
+  list('изменены:', cr.edited);
   for (const w of cr.warnings) warn(w);
   for (const n of notes) console.log('  · ' + n);
 }
