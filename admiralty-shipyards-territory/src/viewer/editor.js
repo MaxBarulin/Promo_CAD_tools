@@ -122,7 +122,7 @@ export function setupEditor(api) {
     }
     return null;
   }
-  const lowDetail = (b) => (contextDetail === 'low' && b.kind === 'context' ? { ...b, detail: 'low' } : b);
+  const lowDetail = (b) => (contextDetail === 'low' && b.kind === 'context' && !b.foreign ? { ...b, detail: 'low' } : b);
 
   // ---------- перестройка одного объекта по правкам ----------
   function apply(id) {

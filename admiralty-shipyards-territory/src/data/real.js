@@ -257,6 +257,8 @@ function yardBuildings() {
     if (!a.keep?.includes(b.id)) return false;
     b.kind = 'context';
     b.zone = undefined;
+    b.foreign = a.id;
+    b.detail = 'full';
     b.info = `${b.info} ${a.name}: территория заводу не принадлежит.`;
     return true;
   });

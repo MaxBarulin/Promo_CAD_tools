@@ -13,6 +13,7 @@ export const PALETTE = {
   green: { name: 'Стена_штукатурка_зелёная', color: '#94b39f' },
   blue_stucco: { name: 'Стена_штукатурка_голубая', color: '#9fb7c9' },
   mint: { name: 'Стена_панели_мятные', color: '#b7d6c3' },
+  red: { name: 'Стена_панели_красные', color: '#a8343a' },
   green_dark: { name: 'Стена_панели_тёмно-зелёные', color: '#4f6a5d' },
   sand: { name: 'Стена_песочная', color: '#cdb68f' },
   light: { name: 'Стена_светлая', color: '#dedbd2' },

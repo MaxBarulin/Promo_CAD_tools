@@ -146,9 +146,9 @@ export const ROOF_TYPES = { flat: 'Плоская', gable: 'Двускатная
 // Покрытие кровли
 export const ROOF_COLORS = ['r_gray', 'r_light', 'r_dark', 'r_bitumen', 'r_blue', 'r_green', 'r_rust', 'r_copper'];
 // Отделка фасада, доступная в редакторе
-export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco', 'mint', 'green_dark'];
+export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco', 'mint', 'green_dark', 'red'];
 // остекление фасада: сплошное в сетку (цеха 1960-х) или ленточные окна по этажам
-export const GLAZING = { grid: 'сплошное в сетку', ribbon: 'ленточные окна' };
+export const GLAZING = { grid: 'сплошное в сетку', ribbon: 'ленточные окна', floors: 'окна по этажам' };
 
 const has = (v) => v !== undefined && v !== null && v !== '';
 const DEG = Math.PI / 180;
@@ -264,6 +264,9 @@ export function editBuilding(orig, e) {
   const pivot = centroid(baseRing);
   const tf = (ring) => (e.move || e.rotate || sc !== 1 ? transformRing(ring, pivot, e.move, e.rotate, sc) : ring);
   b.poly = tf(baseRing);
+  // колоннада: точка near (у какой стены) — в исходном положении здания
+  const colonnadeOf = (c) => (c && typeof c === 'object' ? { ...c, ...(Array.isArray(c.near) ? { near: tf([c.near.map(Number)])[0] } : {}) } : undefined);
+  if (e.colonnade) b.colonnade = colonnadeOf(e.colonnade);
   if (reshape) delete b.holes;
   else if (orig.holes) b.holes = orig.holes.map(tf);
   // стены двора с аркой — тоже в исходном положении здания
@@ -293,6 +296,7 @@ export function editBuilding(orig, e) {
       if (ROOF_COLORS.includes(p.roofColor)) part.roof.color = p.roofColor;
       if (has(p.wall)) part.wall = p.wall;
       if (GLAZING[p.glazing]) part.glazing = p.glazing;
+      part.colonnade = p.colonnade ? colonnadeOf(p.colonnade) : undefined;
       part.minH = 0;
       parts.push(part);
     }

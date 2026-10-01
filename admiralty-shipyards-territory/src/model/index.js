@@ -126,7 +126,8 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
 
   // ---------- здания ----------
   // contextDetail: 'low' — окружение без окон (для лёгкого экспорта)
-  const explicit = contextDetail === 'low' ? data.buildings.map((b) => (b.kind === 'context' ? { ...b, detail: 'low' } : b)) : data.buildings;
+  // оставленные здания соседних участков (СПбГМТУ, башня Берда) — с окнами и всегда подробно
+  const explicit = contextDetail === 'low' ? data.buildings.map((b) => (b.kind === 'context' && !b.foreign ? { ...b, detail: 'low' } : b)) : data.buildings;
   const generated = frontage && data.frontage !== false ? generateFrontage(data, P, explicit, { contextDetail }) : [];
   for (const b of [...explicit, ...generated]) add_(buildingLayer(b), makeBuildingObject(b, signs));
 

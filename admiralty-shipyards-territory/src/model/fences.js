@@ -177,7 +177,8 @@ function simplify(pts, tol) {
 export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
   const yard = P.shipyardMP;
   const water = P.water;
-  const yardBuildings = data.buildings.filter((b) => b.kind === 'shipyard').map((b) => ensureCCW(b.poly));
+  // стены зданий верфи (и оставленных зданий соседних участков) сами служат оградой
+  const yardBuildings = data.buildings.filter((b) => b.kind === 'shipyard' || b.foreign).map((b) => ensureCCW(b.poly));
   const nearBuilding = (p) => yardBuildings.some((r) => pointInRing(p, r) || distToRing(p, r) < 1.6);
   const rivers = data.water.rivers || [];
   const out = [];
@@ -246,6 +247,7 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
   // забор участков, которые заводу больше не принадлежат: по их внешнему контуру на суше;
   // на границе с верфью — её собственная ограда
   for (const a of data.foreignAreas || []) {
+    if (a.fence === false) continue;
     let k = 0;
     for (const poly of a.site || []) {
       const ring = ensureCCW(poly[0]);

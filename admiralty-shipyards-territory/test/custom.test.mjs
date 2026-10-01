@@ -1,7 +1,7 @@
 // Проверка доработок из папки custom/ на моделях, выгруженных из Blender 4.5:
 //   Z129.glb — корпус из выгрузки модели с UV-развёрткой и текстурой на кровле (замена);
 //   N1.glb   — новое здание; custom.json — удаление двух построек и крана, новое описание Z161,
-//   правка Z182 (высота, отделка, сдвиг, поворот) и новое здание N2 по размерам (box).
+//   правка Z141 (высота, отделка, сдвиг, поворот) и новое здание N2 по размерам (box).
 import * as THREE from 'three';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +32,7 @@ const r = model.custom;
 assert.deepEqual(r.replaced, ['Z129']);
 assert.deepEqual([...r.added].sort(), ['N1', 'N2']);
 assert.deepEqual([...r.removed].sort(), ['C2', 'Y34cacb', 'Y707ec3']);
-assert.deepEqual([...r.edited].sort(), ['Z161', 'Z182']);
+assert.deepEqual([...r.edited].sort(), ['Z141', 'Z161']);
 assert.deepEqual(r.warnings, []);
 
 // удалённые — ни в модели, ни в данных (по ним строятся DXF и GeoJSON)
@@ -62,8 +62,8 @@ assert.ok(Math.abs(n.o.proxy.z1 - 12) < 0.01);
 assert.equal(find(model, 'Z161').o.info.info, 'Описание изменено через custom.json.');
 
 // правка здания из данных: высота, отделка, сдвиг на (10, −5) м и поворот на 15°
-const e0 = find(base, 'Z182').o;
-const e1 = find(model, 'Z182').o;
+const e0 = find(base, 'Z141').o;
+const e1 = find(model, 'Z141').o;
 assert.equal(e1.name, 'Заводоуправление (тест)');
 assert.equal(e1.info.height, 30);
 assert.equal(e1.info.approx, false);
@@ -71,13 +71,13 @@ const [ax, ay] = centroid(e0.proxy.poly);
 const [bx2, by2] = centroid(e1.proxy.poly);
 assert.ok(Math.hypot(bx2 - ax - 10, by2 - ay + 5) < 0.5, 'здание сдвинуто на (10, −5) м');
 assert.ok(Math.abs(area(e1.proxy.poly) - area(e0.proxy.poly)) < 1, 'при повороте площадь не меняется');
-assert.equal(data.buildings.find((b) => b.id === 'Z182').wall, 'brick');
+assert.equal(data.buildings.find((b) => b.id === 'Z141').wall, 'brick');
 // подразделения: пустые строки отброшены, роли и ответственные — в карточке и в реестре
 assert.deepEqual(e1.info.units, [
   { name: 'Отдел главного механика', role: 'occupant', person: 'Иванов И. И.' },
   { name: 'Административно-хозяйственная служба', role: 'owner' },
 ]);
-const reg = registryItems(model, data).find((i) => i.id === 'Z182');
+const reg = registryItems(model, data).find((i) => i.id === 'Z141');
 assert.equal(reg.occupants, 'Отдел главного механика (Иванов И. И.)');
 assert.equal(reg.owners, 'Административно-хозяйственная служба');
 

@@ -44,6 +44,8 @@ function windowSpec(b) {
   const floors = b.floors || Math.max(1, Math.round(b.h / 3.6));
   // сплошное остекление в сетку: от цоколя почти до верха, над ним — глухой пояс
   if (b.glazing === 'grid') return { rows: [{ z0: 1.2, h: Math.max(2, b.h * 0.78 - 1.2) }], w: 2.84, step: 3, frame: 'frame_dark', glass: 'glass_green', grid: 1.5 };
+  // обычные окна по этажам (склады и цеха в два-три этажа)
+  if (b.glazing === 'floors') return { rows: Array.from({ length: floors }, (_, i) => ({ z0: (i * b.h) / floors + (b.h / floors) * 0.3, h: (b.h / floors) * 0.48 })), w: 2.1, step: 3.3, frame: 'frame_dark', glass: 'glass' };
   // ленточные окна по этажам
   if (b.glazing === 'ribbon') return { rows: Array.from({ length: floors }, (_, i) => ({ z0: (i * b.h) / floors + (b.h / floors) * 0.32, h: (b.h / floors) * 0.42 })), w: 2.9, step: 3, frame: 'frame_dark', glass: 'glass', minEdge: 3.5 };
   const spec = baseWindowSpec(b);
@@ -510,6 +512,35 @@ function portico(sink, a, b, pspec, h, roofKey, angle) {
   sink.quad(roofKey, v(B0, z0), v(B, z0), v(M, z0 + ph), v(M0, z0 + ph));
 }
 
+// Колоннада большого ордера вдоль фасада: колонны от z0 до z1 с шагом spacing, у стены,
+// над ними — антаблемент. c = { z0, z1, spacing, r, near }.
+function colonnade(sink, a, b, c, h) {
+  const L = dist(a, b);
+  const dir = norm(sub(b, a));
+  const nOut = [dir[1], -dir[0]];
+  const z0 = c.z0 ?? 4.5;
+  const z1 = Math.min(c.z1 ?? h * 0.8, h - 1.2);
+  const step = c.spacing ?? 4.2;
+  const r = c.r ?? 0.5;
+  const off = r + 0.2;
+  const n = Math.max(2, Math.floor((L - 2) / step) + 1);
+  const span = (n - 1) * step;
+  const u0 = (L - span) / 2;
+  const P = (u, o) => [a[0] + dir[0] * u + nOut[0] * o, a[1] + dir[1] * u + nOut[1] * o];
+  const ang = (Math.atan2(dir[1], dir[0]) * 180) / Math.PI;
+  for (let i = 0; i < n; i++) {
+    const p = P(u0 + i * step, off);
+    sink.cylinder('column', p, z0 + 0.5, z1 - 0.6, r, r * 0.88, 12);
+    sink.box('trim', [p[0], p[1], z0 + 0.25], [r * 2.4, r * 2.4, 0.5], ang); // база
+    sink.box('trim', [p[0], p[1], z1 - 0.3], [r * 2.5, r * 2.5, 0.6], ang); // капитель
+  }
+  // антаблемент и карниз над колоннадой, полка под ней
+  const band = (o0, o1, za, zb, key) => sink.prism(key, ensureCCW([P(u0 - r - 0.6, o0), P(u0 + span + r + 0.6, o0), P(u0 + span + r + 0.6, o1), P(u0 - r - 0.6, o1)]), za, zb, { bottom: true });
+  band(0, off + r + 0.25, z1, z1 + 1.1, 'trim');
+  band(0, off + r + 0.5, z1 + 1.1, z1 + 1.35, 'trim');
+  band(0, off + r + 0.35, z0 - 0.15, z0, 'trim');
+}
+
 // ---------- здание целиком ----------
 
 // Стена двора с аркой проезда (принадлежит зданию): w = { line: [[x, y], [x, y]], h, t,
@@ -694,6 +725,18 @@ export function buildBuilding(sink, b, extras = {}) {
   if (b.portico) {
     const i = b.portico.edge;
     portico(sink, ring[i], ring[(i + 1) % ring.length], b.portico, h, roofKey);
+  }
+  // колоннада вдоль фасада (у стены, ближайшей к точке near)
+  if (b.colonnade && !low) {
+    const c = b.colonnade;
+    let best = 0;
+    let bd = Infinity;
+    ring.forEach((p, i) => {
+      const q = ring[(i + 1) % ring.length];
+      const d = c.near ? dist([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], c.near) : -dist(p, q);
+      if (d < bd) [bd, best] = [d, i];
+    });
+    colonnade(sink, ring[best], ring[(best + 1) % ring.length], c, h);
   }
 
   // вывеска на кровле
