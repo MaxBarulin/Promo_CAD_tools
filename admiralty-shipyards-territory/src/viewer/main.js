@@ -122,7 +122,9 @@ async function main() {
   const data = getTerritory();
   initModel(THREE);
   await step('геометрия: острова, здания, краны, суда');
-  const model = buildModel(data);
+  // на телефонах и планшетах окружение строится упрощённо (без окон) — меньше нагрузка на GPU
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  const model = buildModel(data, { contextDetail: touch ? 'low' : 'auto' });
   await step('материалы и освещение');
   const getMaterial = createMaterialFactory(THREE);
   const groups = toMergedGroups(THREE, model, getMaterial);
