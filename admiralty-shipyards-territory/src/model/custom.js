@@ -297,8 +297,9 @@ function applyRoof(b, e) {
   if (ROOF_TYPES[e.roof]) {
     const mr = minRect(b.poly);
     const span = Math.min(mr.w, mr.d);
-    const rh = has(e.roofH) ? +e.roofH : e.roof === 'flat' ? 0 : e.roof === 'barrel' ? span * 0.35 : e.roof === 'shed' ? Math.min(3, span * 0.15) : Math.max(2, Math.min(10, span * 0.18));
-    b.roof = { ...(b.roof || {}), type: e.roof, h: rh, ...(e.roof === 'multigable' ? { bays: b.roof?.bays || 3 } : {}), ...(e.roof === 'gable' || e.roof === 'hip' ? { any: true } : {}) };
+    const bays = e.roof === 'multigable' ? +e.roofBays || b.roof?.bays || 3 : 1;
+    const rh = has(e.roofH) ? +e.roofH : e.roof === 'flat' ? 0 : e.roof === 'barrel' ? span * 0.35 : e.roof === 'shed' ? Math.min(3, span * 0.15) : Math.max(2, Math.min(10, (span / bays) * 0.18));
+    b.roof = { ...(b.roof || {}), type: e.roof, h: rh, ...(e.roof === 'multigable' ? { bays } : {}), ...(e.roof === 'gable' || e.roof === 'hip' ? { any: true } : {}) };
   } else if (has(e.roofH) && b.roof && b.roof.type !== 'flat') b.roof = { ...b.roof, h: +e.roofH };
   return b;
 }
@@ -306,8 +307,9 @@ function applyRoof(b, e) {
 // Новое здание по записи с box: коробка нужного размера, кровля и проёмы по типу.
 export function boxBuilding(id, e, { inYard, zoneOf }) {
   const bx = e.box || {};
-  const x = +bx.x || 0;
-  const y = +bx.y || 0;
+  // контур — по точкам poly (по обмеру, по плану) или прямоугольник box
+  const ring = validRing(e.poly) ? ensureCCW(e.poly.map(([px, py]) => [+px, +py])) : null;
+  const [x, y] = ring ? centroid(ring) : [+bx.x || 0, +bx.y || 0];
   const type = BUILDING_TYPES.includes(e.type) ? e.type : 'warehouse';
   const fin = DEFAULT_FINISH[type];
   const yard = inYard([x, y]);
@@ -324,7 +326,7 @@ export function boxBuilding(id, e, { inYard, zoneOf }) {
       wall: e.wall || fin.wall,
       roofColor: fin.roof,
       units: cleanUnits(e.units),
-      poly: ensureCCW(rect(x, y, Math.max(2, +bx.length || 30), Math.max(2, +bx.width || 18), +bx.angle || 0)),
+      poly: ring || ensureCCW(rect(x, y, Math.max(2, +bx.length || 30), Math.max(2, +bx.width || 18), +bx.angle || 0)),
       geomSrc: 'editor',
       approx: false,
     },
@@ -431,7 +433,7 @@ export function editBuildingsData(data, custom, ctx) {
   });
   const added = [];
   for (const [id, e] of Object.entries(custom.meta)) {
-    if (!e.box || ids.has(id) || custom.models[id] || custom.remove.has(id)) continue;
+    if (!(e.box || validRing(e.poly)) || ids.has(id) || custom.models[id] || custom.remove.has(id)) continue;
     data.buildings.push(boxBuilding(id, e, ctx));
     added.push(id);
   }
@@ -557,7 +559,7 @@ export function applyCustom(custom, ctx) {
     if (done.has(id)) continue;
     const hit = all.get(id);
     if (!hit) {
-      if (!custom.remove.has(id)) report.warnings.push(`custom.json: объекта с кодом ${id} нет в модели, нет файла ${id}.glb и нет размеров box для нового здания`);
+      if (!custom.remove.has(id)) report.warnings.push(`custom.json: объекта с кодом ${id} нет в модели, нет файла ${id}.glb и нет размеров box или контура poly для нового здания`);
       continue;
     }
     Object.assign(hit.o, patchInfo(moveObject(hit.o, e), e));

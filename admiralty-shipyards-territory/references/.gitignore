@@ -1,0 +1,7 @@
+# Чужие снимки (citywalls.ru, PastVu, РГИС) — только локально: репозиторий публичный.
+# В git — README и снимки Wikimedia Commons под свободными лицензиями.
+*
+!*/
+!.gitignore
+!README.md
+!**/commons_*.jpg

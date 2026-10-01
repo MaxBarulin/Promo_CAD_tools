@@ -122,6 +122,12 @@ assert.ok(Math.abs(parted.info.footprint - Math.round(area(z197.poly))) <= 1, '�
 const tower = makeBuildingObject(editBuilding(z197, { parts: [{ circle: { x: cx197, y: cy197, r: 3 }, height: 30, roof: 'flat' }] }));
 assert.equal(tower.info.height, 30);
 assert.ok(tower.sink.triangleCount() > makeBuildingObject(z197).sink.triangleCount() * 0.8, 'основной объём здания на месте');
+// новое здание по контуру poly (без box)
+const byPoly = buildModel(getTerritory(), { contextDetail: 'low', custom: prepareCustom({ buildings: { N9: { name: 'По контуру', type: 'office', floors: 2, height: 8, poly: [[-450, 250], [-430, 250], [-430, 265], [-450, 265]] } } }, []) });
+const n9 = find(byPoly, 'N9');
+assert.ok(n9 && Math.abs(area(n9.o.proxy.poly) - 300) < 0.5, 'новое здание по контуру');
+assert.deepEqual(byPoly.custom.added, ['N9']);
+
 // выпрямление стен: дрожащий прямоугольник становится прямоугольником
 const wobbly = [[0, 0], [20, 0.4], [40, -0.3], [60, 0.2], [60.4, 20], [30, 19.6], [0.3, 20.2]];
 const st = straighten(wobbly);
