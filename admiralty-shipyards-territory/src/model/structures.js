@@ -114,11 +114,45 @@ export function buildBridge(sink, br) {
 // ---------- дымовая труба ----------
 
 export function buildChimney(sink, ch) {
+  if (ch.style === 'steel') return buildSteelChimney(sink, ch);
   sink.cylinder('chimney', ch.at, 0, ch.h - 6, ch.r, ch.r * 0.7, 16, { top: false });
   sink.cylinder('chimney_band', ch.at, ch.h - 6, ch.h - 3, ch.r * 0.7, ch.r * 0.66, 16, { top: false });
   sink.cylinder('white', ch.at, ch.h - 3, ch.h, ch.r * 0.66, ch.r * 0.62, 16, { top: false });
   sink.cylinder('r_bitumen', ch.at, ch.h - 0.05, ch.h, ch.r * 0.5, ch.r * 0.5, 12);
   sink.cylinder('chimney_band', ch.at, ch.h * 0.5, ch.h * 0.5 + 2.5, ch.r * 0.86, ch.r * 0.85, 16, { top: false });
+}
+
+// Стальная труба котельной на растяжках: тёмный ствол, оголовок, площадка обслуживания,
+// три троса к анкерам на земле (или на кровле соседних корпусов — guyZ).
+function buildSteelChimney(sink, ch) {
+  const [x, y] = ch.at;
+  const h = ch.h;
+  const r = ch.r;
+  sink.cylinder('steel_dark', ch.at, 0, h, r, r, 16, { top: false });
+  sink.cylinder('steel_dark', ch.at, 0, 1.2, r + 0.35, r + 0.35, 16);
+  sink.cylinder('steel', ch.at, h - 0.6, h, r + 0.12, r + 0.12, 16, { top: false });
+  sink.cylinder('r_bitumen', ch.at, h - 0.05, h, r * 0.9, r * 0.9, 12);
+  if (ch.platform) {
+    const zp = h - 3.5;
+    sink.cylinder('steel', ch.at, zp, zp + 0.2, r + 1.1, r + 1.1, 16, { bottom: true });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const p = [x + Math.cos(a) * (r + 1.05), y + Math.sin(a) * (r + 1.05)];
+      sink.beam('steel', [p[0], p[1], zp + 0.2], [p[0], p[1], zp + 1.2], 0.06);
+    }
+  }
+  // растяжки: к анкерам guys ([x, y] на высоте guyZ — на земле или на кровле корпуса) или
+  // три троса через 120° к земле
+  const zg = h * 0.72;
+  const R = Math.max(10, h * 0.42);
+  const anchors = ch.guys || [0, 1, 2].map((k) => {
+    const a = (((ch.guyAngle ?? 30) + k * 120) * Math.PI) / 180;
+    return [x + Math.cos(a) * R, y + Math.sin(a) * R];
+  });
+  for (const g of anchors) {
+    const L = Math.hypot(g[0] - x, g[1] - y) || 1;
+    sink.beam('steel_dark', [x + ((g[0] - x) / L) * r, y + ((g[1] - y) / L) * r, zg], [g[0], g[1], ch.guyZ ?? 0], 0.05);
+  }
 }
 
 // ---------- арка Новой Голландии ----------
@@ -186,25 +220,7 @@ export function buildCar(sink, p, angle, key) {
   sink.box(key, [c[0], c[1], 1.68], [2.1, 1.5, 0.06], angle);
 }
 
-// ---------- склад металла, секции, контейнеры ----------
-
-export function buildStock(sink, ring, seed) {
-  const R = rng(seed);
-  const [c0, c1, , c3] = ring;
-  const ux = norm(sub(c1, c0));
-  const uy = norm(sub(c3, c0));
-  const w = dist(c0, c1);
-  const d = dist(c0, c3);
-  const ang = (Math.atan2(ux[1], ux[0]) * 180) / Math.PI;
-  for (let x = 5; x < w - 5; x += 9) {
-    for (let y = 4; y < d - 3; y += 4.5) {
-      if (R() < 0.25) continue;
-      const p = add(add(c0, mul(ux, x)), mul(uy, y));
-      const hh = 0.4 + R() * 1.4;
-      sink.box('steel_stock', [p[0], p[1], hh / 2 + 0.05], [7.5, 2.6, hh], ang);
-    }
-  }
-}
+// ---------- секции корпуса, контейнеры ----------
 
 export function buildBlocks(sink, at, angle, list) {
   const c = Math.cos(angle * DEG);

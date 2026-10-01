@@ -4,11 +4,11 @@
 import { Sink, setTriangulator } from './geom.js';
 import { buildPlanar } from './planar.js';
 import { buildGround, buildQuayEdges, buildRoads, buildAreas, buildRails } from './terrain.js';
-import { buildBuilding, buildingSummary } from './buildings.js';
+import { buildBuilding, buildingSummary, archWallProxy } from './buildings.js';
 import { buildFence, autoFences } from './fences.js';
 import { buildCrane } from './cranes.js';
 import { buildShip, buildDock, buildSlipway, slipProfile, slipPitch } from './ships.js';
-import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildCar, buildStock, buildBlocks, buildContainers } from './structures.js';
+import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildCar, buildBlocks, buildContainers } from './structures.js';
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, DEG } from '../geo.js';
 import { PALETTE } from './materials.js';
@@ -165,35 +165,52 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   for (const ch of data.chimneys) {
     const s = new Sink();
     buildChimney(s, ch);
-    add_('production', { id: ch.id, name: ch.name, sink: s, info: { name: ch.name, info: `Высота ≈ ${ch.h} м.`, kind: 'chimney' }, proxy: boxProxy(ch.at, 0, ch.r * 2.4, ch.r * 2.4, 0, ch.h) });
+    add_('production', { id: ch.id, name: ch.name, sink: s, info: { name: ch.name, info: `${ch.info ? ch.info + ' ' : ''}Высота ≈ ${ch.h} м.`, kind: 'chimney' }, proxy: boxProxy(ch.at, 0, Math.max(ch.r * 2.4, 3), Math.max(ch.r * 2.4, 3), 0, ch.h) });
   }
 
-  // металлопрокат, секции, контейнеры
-  {
+  // укрупнённые секции корпуса на предстапельной площадке и контейнеры — каждый объект
+  // отдельно: их можно выбрать, сдвинуть, заменить моделью и удалить
+  const A2 = data.areas.find((x) => x.id === 'A2');
+  if (A2) {
+    const [c0, c1, , c3] = A2.polygon;
+    const ctr = [(c1[0] + c3[0]) / 2, (c1[1] + c3[1]) / 2];
+    const along = Math.atan2(c1[1] - c0[1], c1[0] - c0[0]) / DEG;
+    const ca = Math.cos(along * DEG);
+    const sa = Math.sin(along * DEG);
+    [
+      [-40, 0, 14, 12, 7],
+      [-18, 1, 12, 14, 9],
+      [8, 0, 16, 12, 6],
+      [34, 0, 12, 12, 8],
+    ].forEach(([u, v, w, d, h], i) => {
+      const s = new Sink();
+      buildBlocks(s, ctr, along, [[u, v, w, d, h]]);
+      const p = [ctr[0] + ca * u - sa * v, ctr[1] + sa * u + ca * v];
+      const name = 'Укрупнённая секция корпуса';
+      add_('production', {
+        id: `SB${i + 1}`,
+        name,
+        sink: s,
+        info: { name, info: `Секция на кильблоках, ≈ ${w} × ${d} × ${h} м. Предстапельная площадка у стапеля № 1.`, kind: 'misc' },
+        proxy: boxProxy(p, along, w, d, 0, h + 0.6),
+      });
+    });
+  }
+  for (const c of data.containers || []) {
     const s = new Sink();
-    const A1 = data.areas.find((a) => a.id === 'A1');
-    if (A1) buildStock(s, A1.polygon, 11);
-    const A3 = data.areas.find((a) => a.id === 'A3');
-    if (A3) buildStock(s, A3.polygon, 12);
-    // укрупнённые секции корпуса на предстапельной площадке
-    const A2 = data.areas.find((x) => x.id === 'A2');
-    if (A2) {
-      const [c0, c1, , c3] = A2.polygon;
-      const ctr = [(c1[0] + c3[0]) / 2, (c1[1] + c3[1]) / 2];
-      const along = Math.atan2(c1[1] - c0[1], c1[0] - c0[0]) / DEG;
-      buildBlocks(s, ctr, along, [
-        [-40, 0, 14, 12, 7],
-        [-18, 1, 12, 14, 9],
-        [8, 0, 16, 12, 6],
-        [34, 0, 12, 12, 8],
-      ]);
-    }
-    for (const c of data.containers || []) buildContainers(s, c.at, c.angle, c.n, c.seed);
+    buildContainers(s, c.at, c.angle, c.n, c.seed);
+    // ряд до четырёх контейнеров поперёк направления angle, ярусами
+    const row = Math.min(c.n, 4);
+    const tiers = Math.ceil(c.n / 4);
+    const off = ((row - 1) * 2.7) / 2;
+    const ctr = [c.at[0] - Math.sin(c.angle * DEG) * off, c.at[1] + Math.cos(c.angle * DEG) * off];
+    const name = 'Контейнеры (бытовки, склады)';
     add_('production', {
-      id: 'stock',
-      name: 'Складируемый металл, секции корпуса, контейнеры',
+      id: c.id,
+      name,
       sink: s,
-      info: { name: 'Секции корпуса и металлопрокат', info: 'Предстапельная площадка: укрупнённые секции корпуса; открытые склады металлопроката.', kind: 'misc' },
+      info: { name, info: `${c.n} контейнеров 20 футов (6,1 × 2,4 м), ${tiers} ${tiers === 1 ? 'ярус' : 'яруса'}.`, kind: 'misc' },
+      proxy: boxProxy(ctr, c.angle, 6.3, (row - 1) * 2.7 + 2.6, 0, tiers * 2.6 + 0.1),
     });
   }
 
@@ -346,7 +363,7 @@ export function makeBuildingObject(b, signs = []) {
     name: b.name,
     sink: s,
     info: { ...buildingSummary(b), kind: b.kind === 'shipyard' ? 'building' : 'context' },
-    proxy: prismProxy(b.poly, 0, b.h + roofH),
+    proxy: { ...prismProxy(b.poly, 0, b.h + roofH), ...(b.walls?.length ? { extra: b.walls.map(archWallProxy) } : {}) },
     generated: !!b.generated,
     edited: !!b.edited,
     scope: b.kind === 'shipyard' ? 'yard' : 'city',
@@ -482,14 +499,16 @@ export function buildPickMesh(THREE, model) {
         }
         continue;
       }
-      const { poly, z0, z1 } = o.proxy;
-      for (let i = 0; i < poly.length; i++) {
-        const a = poly[i];
-        const b = poly[(i + 1) % poly.length];
-        pushTri([a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], k);
-        pushTri([a[0], a[1], z0], [b[0], b[1], z1], [a[0], a[1], z1], k);
+      // призма выбора; extra — стены двора и прочие части объекта вне основного контура
+      for (const { poly, z0, z1 } of [o.proxy, ...(o.proxy.extra || [])]) {
+        for (let i = 0; i < poly.length; i++) {
+          const a = poly[i];
+          const b = poly[(i + 1) % poly.length];
+          pushTri([a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], k);
+          pushTri([a[0], a[1], z0], [b[0], b[1], z1], [a[0], a[1], z1], k);
+        }
+        for (let i = 1; i < poly.length - 1; i++) pushTri([poly[0][0], poly[0][1], z1], [poly[i][0], poly[i][1], z1], [poly[i + 1][0], poly[i + 1][1], z1], k);
       }
-      for (let i = 1; i < poly.length - 1; i++) pushTri([poly[0][0], poly[0][1], z1], [poly[i][0], poly[i][1], z1], [poly[i + 1][0], poly[i + 1][1], z1], k);
     }
   }
   const g = new THREE.BufferGeometry();

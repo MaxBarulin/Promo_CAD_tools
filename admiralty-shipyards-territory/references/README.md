@@ -190,6 +190,20 @@
 | `citywalls_26146_фото_645-660795.jpg` | [citywalls.ru](https://www.citywalls.ru/house26146.html) | Производственное здание с водонапорной башней акционерного общества Франко-русских заводов (бывш. заводов Ч. Берда) — Фото - tat_dt , 17.12.2020. | нет |
 | `citywalls_26146_фото_647-662853.jpg` | [citywalls.ru](https://www.citywalls.ru/house26146.html) | Производственное здание с водонапорной башней акционерного общества Франко-русских заводов (бывш. заводов Ч. Берда) — Фото - Влада , 05.2024. | нет |
 
+## Z173 — Котельная завода «Судомех» (лит. ЕЧ)
+
+Фото с противоположного берега Мойки: три чёрные стальные трубы на растяжках (в модели CH1–CH3); схема РГИС — контур совпадает с Z173.
+
+| Файл | Источник | Что на нём | В git |
+|---|---|---|---|
+| `citywalls_17563_схема_485-496926.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фрагмент схемы РГИС, 24.03.2021 (добавил peterburzhets ) | нет |
+| `citywalls_17563_схема_589-604112.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — 1840. План Санкт-Петербурга. | нет |
+| `citywalls_17563_схема_589-604113.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — 1880. План Санкт-Петербурга. | нет |
+| `citywalls_17563_схема_589-604114.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — 1913. План Санкт-Петербурга. | нет |
+| `citywalls_17563_титул_93-95584.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" | нет |
+| `citywalls_17563_фото_586-600474.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фото - Риэлтор , 11.2022. | нет |
+| `citywalls_17563_фото_589-604124.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фото - V_Malyj , 01.2022. | нет |
+
 ## _не_сопоставлено — Публикации, которые пока не привязаны к контурам модели
 
 | Файл | Источник | Что на нём | В git |
@@ -201,13 +215,6 @@
 | `citywalls_17562_схема_485-496925.jpg` | [citywalls.ru](https://www.citywalls.ru/house17562.html) | Адмиралтейские верфи. Очистные сооружения — Фрагмент схемы РГИС, 24.03.2021 (добавил peterburzhets ) | нет |
 | `citywalls_17562_титул_93-95583.jpg` | [citywalls.ru](https://www.citywalls.ru/house17562.html) | Адмиралтейские верфи. Очистные сооружения | нет |
 | `citywalls_17562_фото_589-604111.jpg` | [citywalls.ru](https://www.citywalls.ru/house17562.html) | Адмиралтейские верфи. Очистные сооружения — Фото - V_Malyj , 01.2022. | нет |
-| `citywalls_17563_схема_485-496926.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фрагмент схемы РГИС, 24.03.2021 (добавил peterburzhets ) | нет |
-| `citywalls_17563_схема_589-604112.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — 1840. План Санкт-Петербурга. | нет |
-| `citywalls_17563_схема_589-604113.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — 1880. План Санкт-Петербурга. | нет |
-| `citywalls_17563_схема_589-604114.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — 1913. План Санкт-Петербурга. | нет |
-| `citywalls_17563_титул_93-95584.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" | нет |
-| `citywalls_17563_фото_586-600474.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фото - Риэлтор , 11.2022. | нет |
-| `citywalls_17563_фото_589-604124.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фото - V_Malyj , 01.2022. | нет |
 | `citywalls_21032_титул_218-223512.jpg` | [citywalls.ru](https://www.citywalls.ru/house21032.html) | Адмиралтейский судостроительный завод. Мастерская | нет |
 | `citywalls_21032_фото_120-122971.jpg` | [citywalls.ru](https://www.citywalls.ru/house21032.html) | Адмиралтейский судостроительный завод. Мастерская — Фото 21.04.2012. | нет |
 | `citywalls_21032_фото_392-402053.jpg` | [citywalls.ru](https://www.citywalls.ru/house21032.html) | Адмиралтейский судостроительный завод. Мастерская — Фото - Влада , 04.2019. | нет |

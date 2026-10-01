@@ -360,11 +360,6 @@ async function main() {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > (e.pointerType === 'touch' ? 10 : 5)) return;
     setMouse(e);
     raycaster.setFromCamera(mouse, camera);
-    // во время правки щелчок не выбирает объекты, а может указать точку для здания
-    if (editor?.isEditing()) {
-      editor.onCanvasClick(raycaster.ray.intersectPlane(groundPlane, tmp) ? [tmp.x, -tmp.z] : null);
-      return;
-    }
     const hits = raycaster.intersectObject(pickMesh, false);
     const objs = pickMesh.userData.objects;
     const fo = pickMesh.userData.faceObj;
@@ -372,6 +367,13 @@ async function main() {
       const ob = objs[fo[h.faceIndex]];
       return !hiddenLayers[ob.layer] && !(yardOnly && ob.scope === 'city');
     });
+    // во время правки щелчок не выбирает объекты, а указывает точку: там, куда попал щелчок, —
+    // на крыше или стене здания, иначе на земле (луч до земли за крышей уводит точку далеко назад)
+    if (editor?.isEditing()) {
+      const pt = hit ? hit.point : raycaster.ray.intersectPlane(groundPlane, tmp);
+      editor.onCanvasClick(pt ? [pt.x, -pt.z] : null);
+      return;
+    }
     const o = hit ? objs[fo[hit.faceIndex]] : null;
     // двойной щелчок (на телефоне — двойное касание) по объекту — подлететь к нему
     const now = performance.now();
@@ -515,12 +517,14 @@ async function main() {
         pts.push(V3(a[0], a[1], p.h), V3(b[0], b[1], p.h), V3(a[0], a[1], 0.3), V3(b[0], b[1], 0.3));
       }
     } else {
-      const r = p.poly;
-      const z0 = Math.max(p.z0, 0.3);
-      for (let i = 0; i < r.length; i++) {
-        const a = r[i];
-        const b = r[(i + 1) % r.length];
-        pts.push(V3(a[0], a[1], z0), V3(b[0], b[1], z0), V3(a[0], a[1], p.z1), V3(b[0], b[1], p.z1), V3(a[0], a[1], z0), V3(a[0], a[1], p.z1));
+      for (const q of [p, ...(p.extra || [])]) {
+        const r = q.poly;
+        const z0 = Math.max(q.z0, 0.3);
+        for (let i = 0; i < r.length; i++) {
+          const a = r[i];
+          const b = r[(i + 1) % r.length];
+          pts.push(V3(a[0], a[1], z0), V3(b[0], b[1], z0), V3(a[0], a[1], q.z1), V3(b[0], b[1], q.z1), V3(a[0], a[1], z0), V3(a[0], a[1], q.z1));
+        }
       }
     }
     const geo = new THREE.BufferGeometry().setFromPoints(pts);

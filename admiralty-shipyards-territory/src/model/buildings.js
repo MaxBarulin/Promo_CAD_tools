@@ -39,6 +39,8 @@ const hash3 = (p) => {
 
 // Окна по типу здания; sill — высота низа окон первого этажа над землёй (по обмеру), м.
 function windowSpec(b) {
+  // глухие здания (подстанции, технические помещения) — без окон
+  if (b.windows === false) return null;
   const spec = baseWindowSpec(b);
   if (Number.isFinite(b.sill) && spec.rows.length) {
     const [r0] = spec.rows;
@@ -499,7 +501,100 @@ function portico(sink, a, b, pspec, h, roofKey, angle) {
 
 // ---------- здание целиком ----------
 
+// Стена двора с аркой проезда (принадлежит зданию): w = { line: [[x, y], [x, y]], h, t,
+// arch: { w — ширина проёма, h — высота до замка, at — место по длине стены, 0…1 } }.
+// Над аркой — аттик на пилонах. Без arch — глухая стена.
+export function archWallSize(w) {
+  const [a, b] = w.line;
+  const L = dist(a, b);
+  const t = w.t ?? 0.6;
+  const h = w.h ?? 3.5;
+  if (!w.arch) return { L, t, h, top: h + 0.15 };
+  const aw = Math.min(w.arch.w ?? 3.6, Math.max(1, L - 1.6));
+  const ah = Math.max(w.arch.h ?? 4, aw / 2 + 0.5);
+  const top = Math.max(h + 0.8, ah + 0.9);
+  return { L, t, h, aw, ah, top: top + 0.25, uc: Math.min(L - aw / 2 - 0.7, Math.max(aw / 2 + 0.7, L * (w.arch.at ?? 0.5))) };
+}
+export function archWallProxy(w) {
+  const { L, t, top } = archWallSize(w);
+  const [a, b] = w.line;
+  const d = [(b[0] - a[0]) / (L || 1), (b[1] - a[1]) / (L || 1)];
+  const n = [-d[1], d[0]];
+  const hw = Math.max(t + 0.3, 1.2) / 2;
+  const P = (u, v) => [a[0] + d[0] * u + n[0] * v, a[1] + d[1] * u + n[1] * v];
+  return { poly: ensureCCW([P(0, -hw), P(L, -hw), P(L, hw), P(0, hw)]), z0: 0, z1: top };
+}
+export function buildArchWall(sink, w, key) {
+  const { L, t, h, aw, ah, uc } = archWallSize(w);
+  if (L < 0.5) return;
+  const [a, b] = w.line;
+  const d = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+  const n = [-d[1], d[0]];
+  const P = (u, v, z) => [a[0] + d[0] * u + n[0] * v, a[1] + d[1] * u + n[1] * v, z];
+  // грань лицом наружу (out) — порядок вершин по нормали Ньюэлла
+  const put = (k, pts, out) => {
+    let nx = 0;
+    let ny = 0;
+    let nz = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const q = pts[(i + 1) % pts.length];
+      nx += (p[1] - q[1]) * (p[2] + q[2]);
+      ny += (p[2] - q[2]) * (p[0] + q[0]);
+      nz += (p[0] - q[0]) * (p[1] + q[1]);
+    }
+    if (Math.hypot(nx, ny, nz) < 1e-9) return;
+    sink.face(k, nx * out[0] + ny * out[1] + nz * out[2] < 0 ? pts.slice().reverse() : pts);
+  };
+  // выпуклый многоугольник в плоскости стены (u — вдоль, z — вверх), выдавленный на толщину th
+  const slab = (k, poly, th) => {
+    const f = poly.map(([u, z]) => P(u, -th / 2, z));
+    const r = poly.map(([u, z]) => P(u, th / 2, z));
+    put(k, f, [-n[0], -n[1], 0]);
+    put(k, r, [n[0], n[1], 0]);
+    for (let i = 0; i < poly.length; i++) {
+      const j = (i + 1) % poly.length;
+      const du = poly[j][0] - poly[i][0];
+      const dz = poly[j][1] - poly[i][1];
+      if (Math.hypot(du, dz) < 1e-6) continue;
+      // контур против часовой стрелки: наружу — вправо от ребра
+      put(k, [f[i], f[j], r[j], r[i]], [d[0] * dz, d[1] * dz, -du]);
+    }
+  };
+  const rect = (u0, u1, z0, z1) => [[u0, z0], [u1, z0], [u1, z1], [u0, z1]];
+  const run = (u0, u1) => {
+    if (u1 - u0 < 0.05) return;
+    slab(key, rect(u0, u1, 0, h), t);
+    slab('trim', rect(u0 - 0.04, u1 + 0.04, h, h + 0.15), t + 0.16);
+  };
+  if (!aw) return run(0, L);
+  const R = aw / 2;
+  const p = 0.7;
+  const zs = ah - R;
+  const top = Math.max(h + 0.8, ah + 0.9);
+  const tp = t + 0.3;
+  run(0, uc - R - p);
+  run(uc + R + p, L);
+  // пилоны и надарочная часть со сводом
+  slab(key, rect(uc - R - p, uc - R, 0, top), tp);
+  slab(key, rect(uc + R, uc + R + p, 0, top), tp);
+  const M = 12;
+  for (let i = 0; i < M; i++) {
+    const x0 = -R + (2 * R * i) / M;
+    const x1 = -R + (2 * R * (i + 1)) / M;
+    const z0 = zs + Math.sqrt(Math.max(0, R * R - x0 * x0));
+    const z1 = zs + Math.sqrt(Math.max(0, R * R - x1 * x1));
+    slab(key, [[uc + x0, z0], [uc + x1, z1], [uc + x1, top], [uc + x0, top]], tp);
+  }
+  slab('trim', rect(uc - R - p - 0.15, uc + R + p + 0.15, top, top + 0.25), tp + 0.2);
+}
+
 export function buildBuilding(sink, b, extras = {}) {
+  // стены двора с аркой — один раз, на уровне здания
+  if (b.walls && b.walls.length) {
+    for (const w of b.walls) buildArchWall(sink, w, w.wall || b.wall || 'light');
+    return buildBuilding(sink, { ...b, walls: undefined }, extras);
+  }
   // части здания (OSM building:part) — каждая на своей отметке, со своей высотой и кровлей;
   // основной объём рисуется, только если части закрывают контур не целиком
   if (b.parts && b.parts.length) {

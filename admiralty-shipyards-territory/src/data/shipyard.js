@@ -233,7 +233,15 @@ for (const b of BUILDINGS) {
   b.sign.edge = bi;
 }
 
-export const CHIMNEYS = [{ id: 'CH1', name: 'Дымовая труба котельной', at: px(395, 465), h: 50, r: 2.2 }];
+// Три стальные трубы котельной завода «Судомех» (Z173, лит. ЕЧ) на берегу Мойки — по фото
+// с противоположной набережной (citywalls.ru): самая высокая стоит перед фасадом, у внутреннего
+// угла корпуса; две другие поднимаются над кровлей. Высоты оценены по трёхэтажной части корпуса.
+const BOILER_INFO = 'Стальная дымовая труба на растяжках котельной завода «Судомех» (корпус Z173). Высота оценена по фото.';
+export const CHIMNEYS = [
+  { id: 'CH1', name: 'Дымовая труба котельной «Судомеха»', info: BOILER_INFO, style: 'steel', at: [97.7, 1297.9], h: 36, r: 0.85, guys: [[88.5, 1300], [100, 1308], [109, 1312.5]], guyZ: 12 },
+  { id: 'CH2', name: 'Дымовая труба котельной «Судомеха»', info: BOILER_INFO, style: 'steel', at: [99.5, 1305.5], h: 32, r: 0.8, guys: [[88.5, 1300], [100, 1318], [92, 1310]], guyZ: 12 },
+  { id: 'CH3', name: 'Дымовая труба котельной «Судомеха»', info: BOILER_INFO, style: 'steel', at: [107.5, 1311], h: 31, r: 0.65, platform: true, guys: [[100, 1318], [115, 1318], [100, 1308]], guyZ: 12 },
+];
 
 // ---------- стапели ----------
 
@@ -324,7 +332,6 @@ export const CRANES = [
   { id: 'C8', type: 'portal', name: 'Портальный кран причала у устья Мойки', at: onTrack(RW.pier, 0.3), track: trackAng(RW.pier), slew: toRiver(RW.pier) + 15, h: 36, jib: 34 },
   { id: 'C9', type: 'portal', name: 'Портальный кран причала у устья Мойки', at: onTrack(RW.pier, 0.72), track: trackAng(RW.pier), slew: toRiver(RW.pier) - 15, h: 36, jib: 34 },
   { id: 'C10', type: 'portal', name: 'Портальный кран (Новое Адмиралтейство)', at: onTrack(RW.novo, 0.5), track: trackAng(RW.novo), slew: toRiver(RW.novo), h: 32, jib: 30 },
-  { id: 'C11', type: 'gantry', name: 'Козловой кран открытого склада', at: px(88, 166), angle: pxAngle(0.12, 1), span: 30, len: 10, h: 16 },
 ];
 
 // ---------- суда и плавдоки ----------
@@ -392,7 +399,6 @@ export const FENCES = [];
 // ---------- площадки ----------
 
 export const AREAS = [
-  { id: 'A1', kind: 'storage', name: 'Открытый склад металлопроката', polygon: L([70, 145], [100, 140], [105, 185], [80, 192]) },
   { id: 'A2', kind: 'apron', name: 'Площадка сборки секций у стапеля № 1', polygon: L([389, 130], [389, 188], [407, 188], [407, 130]) },
 ];
 
@@ -424,9 +430,9 @@ function freeSpot([x0, y0], need) {
 
 // Контейнеры (бытовки, склады) на открытых площадках
 export const CONTAINERS = [
-  { at: freeSpot([150, 262], 9), angle: pxAngle(1, 0) - 90, n: 10, seed: 7 },
-  { at: freeSpot([1095, 262], 8), angle: pxAngle(1, 0) - 90, n: 8, seed: 8 },
-  { at: freeSpot([620, 400], 9), angle: pxAngle(1, 0), n: 6, seed: 9 },
+  { id: 'K1', at: freeSpot([150, 262], 9), angle: pxAngle(1, 0) - 90, n: 10, seed: 7 },
+  { id: 'K2', at: freeSpot([1095, 262], 8), angle: pxAngle(1, 0) - 90, n: 8, seed: 8 },
+  { id: 'K3', at: freeSpot([620, 400], 9), angle: pxAngle(1, 0), n: 6, seed: 9 },
 ].filter((c) => c.at);
 
 // ---------- подписи ----------

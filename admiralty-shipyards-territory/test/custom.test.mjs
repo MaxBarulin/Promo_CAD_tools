@@ -137,15 +137,30 @@ assert.ok(Math.abs(area(st) - 1200) < 25);
 // сдвиг и поворот прочих объектов: дымовая труба и кран — в модели и в данных (DXF, GeoJSON)
 const dataM = getTerritory();
 const ch0 = dataM.chimneys.find((c) => c.id === 'CH1').at;
-const a11 = dataM.cranes.find((c) => c.id === 'C11').angle;
-const moved = buildModel(dataM, { contextDetail: 'low', custom: prepareCustom({ buildings: { CH1: { move: [10, 5] }, C11: { rotate: 30 } } }, []) });
+const a10 = dataM.cranes.find((c) => c.id === 'C10').slew;
+const moved = buildModel(dataM, { contextDetail: 'low', custom: prepareCustom({ buildings: { CH1: { move: [10, 5] }, C10: { rotate: 30 } } }, []) });
 const chObj = find(moved, 'CH1').o;
 const [mx, my] = centroid(chObj.proxy.poly);
 assert.ok(Math.hypot(mx - ch0[0] - 10, my - ch0[1] - 5) < 0.01, 'труба сдвинута');
 assert.ok(Math.hypot(dataM.chimneys.find((c) => c.id === 'CH1').at[0] - ch0[0] - 10, dataM.chimneys.find((c) => c.id === 'CH1').at[1] - ch0[1] - 5) < 0.01, 'и в данных');
-assert.ok(Math.abs(dataM.cranes.find((c) => c.id === 'C11').angle - a11 - 30) < 1e-9, 'кран повёрнут');
-assert.equal(getTerritory().cranes.find((c) => c.id === 'C11').angle, a11, 'исходные данные не меняются');
+assert.ok(Math.abs(dataM.cranes.find((c) => c.id === 'C10').slew - a10 - 30) < 1e-9, 'кран повёрнут');
+assert.equal(getTerritory().cranes.find((c) => c.id === 'C10').slew, a10, 'исходные данные не меняются');
 assert.deepEqual(moved.custom.warnings, []);
+
+// стена двора с аркой — часть здания: строится вместе с ним, выбирается по своему контуру
+{
+  const base = getTerritory().buildings.find((b) => b.id === 'Z197');
+  const withWall = editBuilding(base, { walls: [{ line: [[-183.3, -40.1], [-200, -49.1]], h: 3.5, arch: { w: 3.6, h: 4.2 } }], move: [5, 0] });
+  assert.equal(withWall.walls.length, 1);
+  assert.ok(Math.abs(withWall.walls[0].line[0][0] - -178.3) < 1e-6, 'стена сдвигается вместе со зданием');
+  const o = makeBuildingObject(withWall);
+  assert.equal(o.proxy.extra.length, 1);
+  assert.ok(o.proxy.extra[0].z1 > 5, 'над аркой — аттик');
+  assert.ok(o.sink.triangleCount() > makeBuildingObject(editBuilding(base, { move: [5, 0] })).sink.triangleCount());
+  // глухое здание: без окон треугольников меньше
+  const plain = getTerritory().buildings.find((b) => b.id === 'Z195');
+  assert.ok(makeBuildingObject(editBuilding(plain, { windows: false })).sink.triangleCount() < makeBuildingObject(plain).sink.triangleCount());
+}
 
 // поворот вокруг центра: точка (1, 0) от центра на 90° → (0, 1)
 const t = transformRing([[11, 5]], [10, 5], [2, 3], 90)[0];

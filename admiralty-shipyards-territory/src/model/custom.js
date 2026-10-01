@@ -173,6 +173,7 @@ export function transformRing(ring, pivot, move, rotate) {
   });
 }
 
+const validWall = (w) => w && Array.isArray(w.line) && w.line.length === 2 && w.line.every((p) => Array.isArray(p) && Number.isFinite(+p[0]) && Number.isFinite(+p[1])) && Math.hypot(w.line[1][0] - w.line[0][0], w.line[1][1] - w.line[0][1]) >= 0.5;
 const validRing = (r) => Array.isArray(r) && r.length >= 3 && r.every((p) => Array.isArray(p) && Number.isFinite(+p[0]) && Number.isFinite(+p[1]));
 
 // Контур части здания из записи: poly — многоугольник, box — прямоугольник { x, y, length, width, angle },
@@ -240,6 +241,8 @@ export function editBuilding(orig, e) {
   if (Array.isArray(e.units)) b.units = cleanUnits(e.units);
   if (has(e.src)) b.refined = e.src;
   if (has(e.sill)) b.sill = +e.sill;
+  if (e.windows === false) b.windows = false;
+  else if (e.windows === true) delete b.windows;
   const retype = has(e.type) && e.type !== orig.type;
   const reheight = has(e.height) && +e.height !== orig.h;
   if (retype) b.type = e.type;
@@ -255,6 +258,8 @@ export function editBuilding(orig, e) {
   b.poly = tf(baseRing);
   if (reshape) delete b.holes;
   else if (orig.holes) b.holes = orig.holes.map(tf);
+  // стены двора с аркой — тоже в исходном положении здания
+  if (Array.isArray(e.walls)) b.walls = e.walls.filter(validWall).map((w) => ({ ...w, line: tf(w.line.map(([x, y]) => [+x, +y])) }));
   // кровля и проёмы — заново под новый тип, высоту и контур
   if (retype || reheight || reshape) b = decorate({ ...b, roof: undefined, doors: undefined, roofColor: orig.roof?.color }, null);
   applyRoof(b, e);
@@ -395,6 +400,7 @@ export function prepareCustom(config = {}, files = []) {
     if (m.wall && !WALLS.includes(m.wall)) warnings.push(`custom.json, ${id}: неизвестная отделка «${m.wall}» (допустимы ${WALLS.join(', ')})`);
     if (m.poly !== undefined && !validRing(m.poly)) warnings.push(`custom.json, ${id}: poly должен быть списком точек [[x, y], …], не меньше трёх`);
     if (m.parts !== undefined && (!Array.isArray(m.parts) || m.parts.some((p) => !partRing(p)))) warnings.push(`custom.json, ${id}: parts — список частей { "poly" | "box" | "circle", "floors", "height", "roof" }`);
+    if (m.walls !== undefined && (!Array.isArray(m.walls) || !m.walls.every(validWall))) warnings.push(`custom.json, ${id}: walls — список стен { "line": [[x, y], [x, y]], "h", "t", "arch": { "w", "h", "at" } }`);
     if (m.roofColor && !ROOF_COLORS.includes(m.roofColor)) warnings.push(`custom.json, ${id}: неизвестное покрытие кровли «${m.roofColor}» (допустимы ${ROOF_COLORS.join(', ')})`);
     if (m.roof && !ROOF_TYPES[m.roof]) warnings.push(`custom.json, ${id}: неизвестная форма кровли «${m.roof}» (допустимы ${Object.keys(ROOF_TYPES).join(', ')})`);
     if (m.units !== undefined && !Array.isArray(m.units)) warnings.push(`custom.json, ${id}: units должен быть списком [{ "name": …, "role": "occupant" | "owner", "person": … }]`);

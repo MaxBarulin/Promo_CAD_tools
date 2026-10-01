@@ -52,9 +52,14 @@ for (let i = 0; i < polys.length; i++) {
     const a = polys[i];
     const b = polys[j];
     if ((a.o.generated && b.o.generated) || !bbHit(a, b)) continue;
-    const ov = mpArea(pc.intersection(a.mp, b.mp));
-    // пристройки на карте примыкают к корпусам общей стеной — небольшое касание допустимо
-    const tol = /^[ZY]/.test(a.o.id) && /^[ZY]/.test(b.o.id) ? 30 : 1;
+    const inter = pc.intersection(a.mp, b.mp);
+    const ov = mpArea(inter);
+    // полоска вдоль общей стены (средняя толщина 2S/P меньше 0,3 м) — касание, не наложение
+    const perim = inter.reduce((s, P) => s + P.reduce((t, r) => t + r.slice(1).reduce((u, p, i) => u + Math.hypot(p[0] - r[i][0], p[1] - r[i][1]), 0), 0), 0);
+    if (perim && (2 * ov) / perim < 0.3) continue;
+    // пристройки примыкают к корпусам общей стеной — допустимо только касание: здания верфи из
+    // разных источников (карта предприятия и космоснимок), заходящие друг в друга, — ошибка
+    const tol = a.o.info?.kind === 'building' && b.o.info?.kind === 'building' ? 2 : /^[ZY]/.test(a.o.id) && /^[ZY]/.test(b.o.id) ? 30 : 1;
     if (ov <= tol) continue;
     const msg = `${a.o.id} «${a.o.name}» и ${b.o.id} «${b.o.name}» пересекаются (${ov.toFixed(0)} м²)`;
     // у моделей из custom/ контур — выпуклая оболочка: пересечение — повод проверить, не ошибка
