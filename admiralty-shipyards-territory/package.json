@@ -1,0 +1,25 @@
+{
+  "name": "admiralty-shipyards-territory",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Цифровая 3D-модель территории АО «Адмиралтейские верфи» (Санкт-Петербург)",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --serve",
+    "export": "node scripts/export.mjs",
+    "check": "node scripts/check.mjs",
+    "osm:fetch": "node scripts/osm-fetch.mjs",
+    "osm:convert": "node scripts/osm-convert.mjs",
+    "all": "npm run check && npm run build && npm run export",
+    "test": "node test/osm-pipeline.test.mjs && node scripts/check.mjs",
+    "screenshots": "node scripts/screenshots.mjs docs/img"
+  },
+  "dependencies": {
+    "polygon-clipping": "0.15.7",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

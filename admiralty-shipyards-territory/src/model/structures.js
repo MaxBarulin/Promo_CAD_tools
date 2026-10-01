@@ -1,0 +1,234 @@
+// Прочие сооружения: мосты, дымовые трубы, арка Новой Голландии, деревья,
+// автомобили, складируемый металл, секции корпуса, контейнеры.
+
+import { sub, add, mul, norm, dist, lerp, rect, pointInRing, bbox, rng, DEG } from '../geo.js';
+
+// ---------- мосты ----------
+
+export function buildBridge(sink, br) {
+  const dir = norm(sub(br.to, br.from));
+  const n = [-dir[1], dir[0]];
+  const ext = 3;
+  const a = add(br.from, mul(dir, -ext));
+  const b = add(br.to, mul(dir, ext));
+  const L = dist(a, b);
+  const hw = br.w / 2;
+  const P = (u, v, z) => {
+    const p = add(add(a, mul(dir, u)), mul(n, v));
+    return [p[0], p[1], z];
+  };
+  const hump = br.type === 'kalinkin' ? 1.8 : br.type === 'industrial' ? 0.1 : 0.7;
+  const zTop = (u) => 0.3 + hump * Math.sin((Math.PI * u) / L);
+  const N = 12;
+  const deckKey = br.type === 'industrial' ? 'bridge_steel' : 'bridge_deck';
+  const sideKey = br.type === 'industrial' ? 'bridge_steel' : 'bridge';
+  const thick = br.type === 'kalinkin' ? 1.2 : 0.9;
+  for (let k = 0; k < N; k++) {
+    const u0 = (L * k) / N;
+    const u1 = (L * (k + 1)) / N;
+    sink.quad(deckKey, P(u0, -hw, zTop(u0)), P(u1, -hw, zTop(u1)), P(u1, hw, zTop(u1)), P(u0, hw, zTop(u0)));
+    // фасады пролётного строения
+    sink.quad(sideKey, P(u0, -hw, zTop(u0) - thick), P(u1, -hw, zTop(u1) - thick), P(u1, -hw, zTop(u1)), P(u0, -hw, zTop(u0)));
+    sink.quad(sideKey, P(u1, hw, zTop(u1) - thick), P(u0, hw, zTop(u0) - thick), P(u0, hw, zTop(u0)), P(u1, hw, zTop(u1)));
+    sink.quad(sideKey, P(u1, -hw, zTop(u1) - thick), P(u0, -hw, zTop(u0) - thick), P(u0, hw, zTop(u0) - thick), P(u1, hw, zTop(u1) - thick));
+  }
+  // тротуары на мосту (кроме заводских)
+  if (br.type !== 'industrial' && br.w >= 9) {
+    for (const s of [-1, 1]) {
+      for (let k = 0; k < N; k++) {
+        const u0 = (L * k) / N;
+        const u1 = (L * (k + 1)) / N;
+        const v0 = s * hw;
+        const v1 = s * (hw - 2.2);
+        const q = [P(u0, v0, zTop(u0) + 0.15), P(u1, v0, zTop(u1) + 0.15), P(u1, v1, zTop(u1) + 0.15), P(u0, v1, zTop(u0) + 0.15)];
+        sink.quad('sidewalk', ...(s < 0 ? q : q.slice().reverse()));
+      }
+    }
+  }
+  // ограждение
+  for (const s of [-1, 1]) {
+    const v = s * (hw - 0.2);
+    for (let k = 0; k < N; k++) {
+      const u0 = (L * k) / N;
+      const u1 = (L * (k + 1)) / N;
+      if (br.type === 'kalinkin') {
+        sink.beam('parapet', P(u0, v, zTop(u0) + 0.55), P(u1, v, zTop(u1) + 0.55), 0.5, 1.1);
+      } else {
+        sink.beam(br.type === 'industrial' ? 'crane_yellow' : 'railing', P(u0, v, zTop(u0) + 1.1), P(u1, v, zTop(u1) + 1.1), 0.08, 0.08);
+        sink.beam('railing', P(u0, v, zTop(u0) + 0.2), P(u1, v, zTop(u1) + 0.2), 0.06, 0.06);
+        for (let t = 0; t < 3; t++) {
+          const u = u0 + ((u1 - u0) * t) / 3;
+          sink.beam('railing', P(u, v, zTop(u)), P(u, v, zTop(u) + 1.1), 0.06, 0.06);
+        }
+      }
+    }
+  }
+  // опоры и своды
+  if (br.type === 'kalinkin') {
+    const spans = [
+      [ext - 1, L * 0.36],
+      [L * 0.36, L * 0.64],
+      [L * 0.64, L - ext + 1],
+    ];
+    for (const [s0, s1] of spans) {
+      const M = 10;
+      for (let k = 0; k < M; k++) {
+        const t0 = k / M;
+        const t1 = (k + 1) / M;
+        const u0 = s0 + (s1 - s0) * t0;
+        const u1 = s0 + (s1 - s0) * t1;
+        const rise = 3.4;
+        const za = (t) => -2.4 + 0.6 + rise * Math.sin(Math.PI * t);
+        // тимпаны (стенки над сводом)
+        for (const s of [-1, 1]) {
+          const v = s * hw;
+          const q = [P(u0, v, za(t0)), P(u1, v, za(t1)), P(u1, v, zTop(u1) - thick), P(u0, v, zTop(u0) - thick)];
+          sink.quad('bridge', ...(s < 0 ? q : [q[1], q[0], q[3], q[2]]));
+        }
+        // внутренняя поверхность свода
+        sink.quad('bridge', P(u1, -hw, za(t1)), P(u0, -hw, za(t0)), P(u0, hw, za(t0)), P(u1, hw, za(t1)));
+      }
+    }
+    // быки и башни-павильоны
+    for (const u of [L * 0.36, L * 0.64]) {
+      const c = P(u, 0, 0);
+      sink.box('bridge', [c[0], c[1], -3.4 + 2.2], [3.5, br.w + 2, 4.4], (Math.atan2(dir[1], dir[0]) * 180) / Math.PI);
+      for (const s of [-1, 1]) {
+        const t = P(u, s * (hw + 0.9), 0);
+        const z0 = zTop(u);
+        sink.box('bridge', [t[0], t[1], z0 + 3.2], [2.6, 2.6, 6.4], (Math.atan2(dir[1], dir[0]) * 180) / Math.PI);
+        sink.box('trim', [t[0], t[1], z0 + 6.6], [3.0, 3.0, 0.4], (Math.atan2(dir[1], dir[0]) * 180) / Math.PI);
+        sink.cylinder('r_dark', [t[0], t[1]], z0 + 6.8, z0 + 9.2, 1.4, 0.15, 10);
+        sink.cylinder('railing', [t[0], t[1]], z0 + 9.2, z0 + 10.4, 0.08, 0.04, 6);
+      }
+    }
+  } else {
+    // опора посередине для длинных пролётов
+    if (dist(br.from, br.to) > 32) {
+      const c = P(L / 2, 0, 0);
+      sink.box(sideKey, [c[0], c[1], (-3.4 + zTop(L / 2) - thick) / 2], [1.6, br.w - 1, zTop(L / 2) - thick + 3.4], (Math.atan2(dir[1], dir[0]) * 180) / Math.PI);
+    }
+  }
+}
+
+// ---------- дымовая труба ----------
+
+export function buildChimney(sink, ch) {
+  sink.cylinder('chimney', ch.at, 0, ch.h - 6, ch.r, ch.r * 0.7, 16, { top: false });
+  sink.cylinder('chimney_band', ch.at, ch.h - 6, ch.h - 3, ch.r * 0.7, ch.r * 0.66, 16, { top: false });
+  sink.cylinder('white', ch.at, ch.h - 3, ch.h, ch.r * 0.66, ch.r * 0.62, 16, { top: false });
+  sink.cylinder('r_bitumen', ch.at, ch.h - 0.05, ch.h, ch.r * 0.5, ch.r * 0.5, 12);
+  sink.cylinder('chimney_band', ch.at, ch.h * 0.5, ch.h * 0.5 + 2.5, ch.r * 0.86, ch.r * 0.85, 16, { top: false });
+}
+
+// ---------- арка Новой Голландии ----------
+
+export function buildArch(sink, a) {
+  const dir = [Math.cos(a.angle * DEG), Math.sin(a.angle * DEG)];
+  const n = [-dir[1], dir[0]];
+  const P = (u, v) => add(add(a.at, mul(dir, u)), mul(n, v));
+  const span = a.w;
+  const depth = 27;
+  for (const s of [-1, 1]) {
+    const c = P((s * (span / 2 + 2.2)), 0);
+    sink.box('brick', [c[0], c[1], a.h / 2], [4.4, depth, a.h], a.angle);
+    // колонны тосканского ордера на фасаде к Мойке
+    for (const k of [-1, 1]) {
+      const cc = add(P(s * (span / 2 + 2.2) + k * 1.4, -depth / 2 - 0.9), [0, 0]);
+      sink.cylinder('column', cc, 0, a.h - 5, 0.7, 0.62, 12);
+    }
+  }
+  // свод
+  const R = span / 2;
+  const zs = a.h - 5 - R;
+  const M = 12;
+  for (let k = 0; k < M; k++) {
+    const t0 = (Math.PI * k) / M;
+    const t1 = (Math.PI * (k + 1)) / M;
+    const p0 = P(-Math.cos(t0) * R, 0);
+    const p1 = P(-Math.cos(t1) * R, 0);
+    sink.beam('brick', [p0[0], p0[1], zs + Math.sin(t0) * R + 0.8], [p1[0], p1[1], zs + Math.sin(t1) * R + 0.8], depth, 1.6);
+  }
+  // аттик и антаблемент
+  const c = P(0, 0);
+  sink.box('brick', [c[0], c[1], a.h - 2.5], [span + 2, depth, 5], a.angle);
+  const f = P(0, -depth / 2 - 0.9);
+  sink.box('trim', [f[0], f[1], a.h - 4.6], [span + 9, 2.4, 1.2], a.angle);
+  sink.box('trim', [c[0], c[1], a.h + 0.2], [span + 10, depth + 2, 0.4], a.angle);
+}
+
+// ---------- деревья ----------
+
+export function buildTree(sink, p, h, r, key) {
+  sink.box('trunk', [p[0], p[1], h * 0.22], [0.35, 0.35, h * 0.44], 0);
+  sink.blob(key, [p[0], p[1], h * 0.62], r, r, h * 0.4, 7, 5);
+}
+
+export function scatterInPolygon(ring, spacing, seed, margin = 2) {
+  const R = rng(seed);
+  const bb = bbox(ring);
+  const out = [];
+  for (let x = bb.minX + margin; x < bb.maxX - margin; x += spacing) {
+    for (let y = bb.minY + margin; y < bb.maxY - margin; y += spacing) {
+      const p = [x + (R() - 0.5) * spacing * 0.6, y + (R() - 0.5) * spacing * 0.6];
+      if (pointInRing(p, ring)) out.push(p);
+    }
+  }
+  return out;
+}
+
+// ---------- автомобили ----------
+
+export function buildCar(sink, p, angle, key) {
+  sink.box(key, [p[0], p[1], 0.75], [4.3, 1.8, 0.75], angle);
+  const c = [p[0] - Math.cos(angle * DEG) * 0.3, p[1] - Math.sin(angle * DEG) * 0.3];
+  sink.box('glass', [c[0], c[1], 1.38], [2.3, 1.6, 0.55], angle);
+  sink.box(key, [c[0], c[1], 1.68], [2.1, 1.5, 0.06], angle);
+}
+
+// ---------- склад металла, секции, контейнеры ----------
+
+export function buildStock(sink, ring, seed) {
+  const R = rng(seed);
+  const [c0, c1, , c3] = ring;
+  const ux = norm(sub(c1, c0));
+  const uy = norm(sub(c3, c0));
+  const w = dist(c0, c1);
+  const d = dist(c0, c3);
+  const ang = (Math.atan2(ux[1], ux[0]) * 180) / Math.PI;
+  for (let x = 5; x < w - 5; x += 9) {
+    for (let y = 4; y < d - 3; y += 4.5) {
+      if (R() < 0.25) continue;
+      const p = add(add(c0, mul(ux, x)), mul(uy, y));
+      const hh = 0.4 + R() * 1.4;
+      sink.box('steel_stock', [p[0], p[1], hh / 2 + 0.05], [7.5, 2.6, hh], ang);
+    }
+  }
+}
+
+export function buildBlocks(sink, at, angle, list) {
+  const c = Math.cos(angle * DEG);
+  const s = Math.sin(angle * DEG);
+  for (const [u, v, w, d, h] of list) {
+    const p = [at[0] + c * u - s * v, at[1] + s * u + c * v];
+    sink.box('hull_primer', [p[0], p[1], h / 2 + 0.6], [w, d, h], angle);
+    for (const k of [-0.35, 0.35]) {
+      const q = [p[0] + c * k * w, p[1] + s * k * w];
+      sink.box('keelblock', [q[0], q[1], 0.3], [1.2, d * 0.8, 0.6], angle);
+    }
+  }
+}
+
+export function buildContainers(sink, at, angle, n, seed) {
+  const R = rng(seed);
+  const c = Math.cos(angle * DEG);
+  const s = Math.sin(angle * DEG);
+  for (let i = 0; i < n; i++) {
+    const u = (i % 4) * 2.7;
+    const lvl = Math.floor(i / 4);
+    const p = [at[0] - s * u, at[1] + c * u];
+    sink.box(R() < 0.5 ? 'container' : 'container2', [p[0], p[1], 1.3 + lvl * 2.6], [6.1, 2.44, 2.59], angle);
+  }
+}
+
+export { rect, lerp };
