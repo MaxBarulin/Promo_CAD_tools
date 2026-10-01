@@ -41,6 +41,11 @@ const hash3 = (p) => {
 function windowSpec(b) {
   // глухие здания (подстанции, технические помещения) — без окон
   if (b.windows === false) return null;
+  const floors = b.floors || Math.max(1, Math.round(b.h / 3.6));
+  // сплошное остекление в сетку: от цоколя почти до верха, над ним — глухой пояс
+  if (b.glazing === 'grid') return { rows: [{ z0: 1.2, h: Math.max(2, b.h * 0.78 - 1.2) }], w: 2.84, step: 3, frame: 'frame_dark', glass: 'glass_green', grid: 1.5 };
+  // ленточные окна по этажам
+  if (b.glazing === 'ribbon') return { rows: Array.from({ length: floors }, (_, i) => ({ z0: (i * b.h) / floors + (b.h / floors) * 0.32, h: (b.h / floors) * 0.42 })), w: 2.9, step: 3, frame: 'frame_dark', glass: 'glass', minEdge: 3.5 };
   const spec = baseWindowSpec(b);
   if (Number.isFinite(b.sill) && spec.rows.length) {
     const [r0] = spec.rows;
@@ -154,19 +159,25 @@ function facade(sink, a, b, spec, doors, opts) {
   const start = (L - n * step) / 2 + step / 2;
   const hw = spec.w / 2;
   for (const row of spec.rows) {
-    const z0 = row.z0;
     const z1 = Math.min(row.z0 + row.h, opts.h - 0.4);
-    if (z1 - z0 < 0.5) continue;
+    if (z1 - row.z0 < 0.5) continue;
     for (let i = 0; i < n; i++) {
       const uc = start + i * step;
       const u0 = uc - hw;
       const u1 = uc + hw;
-      if (blocked.some(([b0, b1, bh]) => u1 > b0 && u0 < b1 && z0 < bh)) continue;
+      let z0 = row.z0;
+      const hit = blocked.filter(([b0, b1, bh]) => u1 > b0 && u0 < b1 && z0 < bh);
+      // сплошное остекление продолжается над воротами, обычные окна над ними не ставятся
+      if (hit.length && !spec.grid) continue;
+      if (hit.length) z0 = Math.max(...hit.map((x) => x[2])) + 0.3;
+      if (z1 - z0 < 1) continue;
       rectQ(spec.frame, u0 - 0.1, u1 + 0.1, z0 - 0.1, z1 + 0.1, 0.03);
       const wp = P(uc, z0, 0);
       const lit = spec.glass === 'glass' && hash3(wp) < 0.42;
       rectQ(lit ? 'glass_lit' : spec.glass, u0, u1, z0, z1, 0.05);
       if (spec.mullion && spec.w > 1.1) rectQ(spec.frame, uc - 0.05, uc + 0.05, z0, z1, 0.07);
+      // сетка остекления: горизонтальные импосты с шагом spec.grid
+      if (spec.grid) for (let zg = z0 + spec.grid; zg < z1 - 0.3; zg += spec.grid) rectQ(spec.frame, u0, u1, zg - 0.05, zg + 0.05, 0.07);
       if (spec.transom && z1 - z0 > 3) {
         const zt = z0 + (z1 - z0) * 0.72;
         rectQ(spec.frame, u0, u1, zt - 0.06, zt + 0.06, 0.07);

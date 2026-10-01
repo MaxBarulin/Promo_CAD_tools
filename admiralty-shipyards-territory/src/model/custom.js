@@ -146,7 +146,9 @@ export const ROOF_TYPES = { flat: 'Плоская', gable: 'Двускатная
 // Покрытие кровли
 export const ROOF_COLORS = ['r_gray', 'r_light', 'r_dark', 'r_bitumen', 'r_blue', 'r_green', 'r_rust', 'r_copper'];
 // Отделка фасада, доступная в редакторе
-export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco'];
+export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco', 'mint', 'green_dark'];
+// остекление фасада: сплошное в сетку (цеха 1960-х) или ленточные окна по этажам
+export const GLAZING = { grid: 'сплошное в сетку', ribbon: 'ленточные окна' };
 
 const has = (v) => v !== undefined && v !== null && v !== '';
 const DEG = Math.PI / 180;
@@ -243,6 +245,7 @@ export function editBuilding(orig, e) {
   if (has(e.sill)) b.sill = +e.sill;
   if (liftOf(e)) b.lift = liftOf(e);
   else delete b.lift;
+  if (GLAZING[e.glazing]) b.glazing = e.glazing;
   if (e.windows === false) b.windows = false;
   else if (e.windows === true) delete b.windows;
   const retype = has(e.type) && e.type !== orig.type;
@@ -280,6 +283,7 @@ export function editBuilding(orig, e) {
       applyRoof(part, { roof: p.roof || b.roof?.type || 'flat', roofH: p.roofH });
       if (ROOF_COLORS.includes(p.roofColor)) part.roof.color = p.roofColor;
       if (has(p.wall)) part.wall = p.wall;
+      if (GLAZING[p.glazing]) part.glazing = p.glazing;
       part.minH = 0;
       parts.push(part);
     }
@@ -407,6 +411,7 @@ export function prepareCustom(config = {}, files = []) {
     if (m.wall && !WALLS.includes(m.wall)) warnings.push(`custom.json, ${id}: неизвестная отделка «${m.wall}» (допустимы ${WALLS.join(', ')})`);
     if (m.poly !== undefined && !validRing(m.poly)) warnings.push(`custom.json, ${id}: poly должен быть списком точек [[x, y], …], не меньше трёх`);
     if (m.parts !== undefined && (!Array.isArray(m.parts) || m.parts.some((p) => !partRing(p)))) warnings.push(`custom.json, ${id}: parts — список частей { "poly" | "box" | "circle", "floors", "height", "roof" }`);
+    if (m.glazing !== undefined && !GLAZING[m.glazing]) warnings.push(`custom.json, ${id}: glazing — ${Object.keys(GLAZING).join(' или ')}`);
     if (m.lift !== undefined && !Number.isFinite(+m.lift)) warnings.push(`custom.json, ${id}: lift — подъём (+) или опускание (−) в метрах, число`);
     if (m.walls !== undefined && (!Array.isArray(m.walls) || !m.walls.every(validWall))) warnings.push(`custom.json, ${id}: walls — список стен { "line": [[x, y], [x, y]], "h", "t", "arch": { "w", "h", "at" } }`);
     if (m.roofColor && !ROOF_COLORS.includes(m.roofColor)) warnings.push(`custom.json, ${id}: неизвестное покрытие кровли «${m.roofColor}» (допустимы ${ROOF_COLORS.join(', ')})`);

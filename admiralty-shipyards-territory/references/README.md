@@ -204,6 +204,16 @@
 | `citywalls_17563_фото_586-600474.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фото - Риэлтор , 11.2022. | нет |
 | `citywalls_17563_фото_589-604124.jpg` | [citywalls.ru](https://www.citywalls.ru/house17563.html) | Котельная завода "Судомех" — Фото - V_Malyj , 01.2022. | нет |
 
+## Z32 — Цех (лит. ЕЯ), 1965
+
+Вид с Васильевского острова через Неву: коробка со сплошным серо-зелёным остеклением в сетку и мятным верхним поясом, у северного торца — тёмно-зелёный блок с ленточными окнами; перед ним — портальный кран на причале.
+
+| Файл | Источник | Что на нём | В git |
+|---|---|---|---|
+| `citywalls_26155_титул_218-223528.jpg` | [citywalls.ru](https://www.citywalls.ru/house26155.html) | Адмиралтейские верфи. Цех | нет |
+| `citywalls_26155_фото_218-223529.jpg` | [citywalls.ru](https://www.citywalls.ru/house26155.html) | Адмиралтейские верфи. Цех — Фото 05.2015, Влада | нет |
+| `citywalls_26155_фото_588-602597.jpg` | [citywalls.ru](https://www.citywalls.ru/house26155.html) | Адмиралтейские верфи. Цех — Фото - Galina Vabishchevich , 2010. | нет |
+
 ## _не_сопоставлено — Публикации, которые пока не привязаны к контурам модели
 
 | Файл | Источник | Что на нём | В git |
@@ -223,9 +233,6 @@
 | `citywalls_26153_титул_218-223523.jpg` | [citywalls.ru](https://www.citywalls.ru/house26153.html) | Новое Адмиралтейство. Экипажные магазины - Адмиралтейские верфи. Цех | нет |
 | `citywalls_26153_фото_218-223525.jpg` | [citywalls.ru](https://www.citywalls.ru/house26153.html) | Новое Адмиралтейство. Экипажные магазины - Адмиралтейские верфи. Цех — Фото - Влада , 05.2015. | нет |
 | `citywalls_26153_фото_392-402073.jpg` | [citywalls.ru](https://www.citywalls.ru/house26153.html) | Новое Адмиралтейство. Экипажные магазины - Адмиралтейские верфи. Цех — Фото - Влада , 04.2019. | нет |
-| `citywalls_26155_титул_218-223528.jpg` | [citywalls.ru](https://www.citywalls.ru/house26155.html) | Адмиралтейские верфи. Цех | нет |
-| `citywalls_26155_фото_218-223529.jpg` | [citywalls.ru](https://www.citywalls.ru/house26155.html) | Адмиралтейские верфи. Цех — Фото 05.2015, Влада | нет |
-| `citywalls_26155_фото_588-602597.jpg` | [citywalls.ru](https://www.citywalls.ru/house26155.html) | Адмиралтейские верфи. Цех — Фото - Galina Vabishchevich , 2010. | нет |
 | `citywalls_26156_титул_218-223530.jpg` | [citywalls.ru](https://www.citywalls.ru/house26156.html) | Адмиралтейские верфи. Цех | нет |
 | `citywalls_26156_фото_588-602596.jpg` | [citywalls.ru](https://www.citywalls.ru/house26156.html) | Адмиралтейские верфи. Цех — Фото - Galina Vabishchevich , 2010. | нет |
 | `citywalls_26156_фото_647-662845.jpg` | [citywalls.ru](https://www.citywalls.ru/house26156.html) | Адмиралтейские верфи. Цех — Фото - Влада , 05.2024. | нет |
