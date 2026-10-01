@@ -16,10 +16,11 @@ const FONTS =
   '<link rel="preconnect" href="https://fonts.googleapis.com" />\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n' +
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap" />';
 
-async function writeHtml(js) {
+async function writeHtml(js, artifactJs = js) {
   const css = await readFile(path.join(root, 'src/viewer/style.css'), 'utf8');
   const body = await readFile(path.join(root, 'src/viewer/body.html'), 'utf8');
   const safeJs = js.replace(/<\/script/gi, '<\\/script');
+  const safeArtifactJs = artifactJs.replace(/<\/script/gi, '<\\/script');
   const full = `<!doctype html>
 <html lang="ru">
 <head>
@@ -47,9 +48,8 @@ ${FONTS}
 ${css}
 </style>
 ${body}
-<script>window.__ARTIFACT__ = true;</script>
 <script>
-${safeJs}
+${safeArtifactJs}
 </script>
 `;
   await mkdir(dist, { recursive: true });
@@ -67,6 +67,7 @@ const options = {
   write: false,
   legalComments: 'none',
   logLevel: 'warning',
+  define: { __ARTIFACT_BUILD__: 'false' },
 };
 
 if (serve) {
@@ -90,6 +91,7 @@ if (serve) {
   console.log(`Откройте http://localhost:${port}/`);
 } else {
   const res = await esbuild.build(options);
-  const size = await writeHtml(res.outputFiles[0].text);
+  const art = await esbuild.build({ ...options, define: { __ARTIFACT_BUILD__: 'true' } });
+  const size = await writeHtml(res.outputFiles[0].text, art.outputFiles[0].text);
   console.log(`Готово: dist/index.html (${(size / 1024).toFixed(0)} КБ), dist/artifact.html`);
 }

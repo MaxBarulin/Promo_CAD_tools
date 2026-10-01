@@ -98,9 +98,11 @@ export function buildQuayEdges(sinkParapet, sinkBollards, data, P) {
             sinkParapet.beam('parapet', [q0[0], q0[1], 0.45], [q1[0], q1[1], 0.45], 0.45, 0.9);
           }
         } else {
-          // кнехты по кромке причалов верфи на Неве
-          const outside = [lerp(a, b, 0.5)[0] + dir[1] * 6, lerp(a, b, 0.5)[1] - dir[0] * 6];
-          if (!inMP(outside, P.features.neva.mp)) continue;
+          // кнехты по кромке причалов верфи на широкой воде (Нева, ковши)
+          const m = lerp(a, b, 0.5);
+          const outside = [m[0] + dir[1] * 6, m[1] - dir[0] * 6];
+          const far = [m[0] + dir[1] * 40, m[1] - dir[0] * 40];
+          if (!inMP(outside, P.water) || !inMP(far, P.water)) continue;
           for (let s = 6; s < L - 3; s += 22) {
             const p = add(lerp(a, b, s / L), mul(nIn, 1.0));
             sinkBollards.cylinder('bollard', p, 0, 0.6, 0.22, 0.2, 8);
@@ -142,8 +144,12 @@ export function buildRoads(sinkRoads, sinkMarks, data, P) {
       sinkMarks.beam('marking', [a[0], a[1], Z.carriageway + 0.01], [b[0], b[1], Z.carriageway + 0.01], 0.5, 0.02);
     }
   };
-  zebra([-36, 62], [0.932, 0.364], 12, 4);
-  zebra([40, 34], [0.454, -0.891], 16, 4);
+  for (const z of data.crossings || []) {
+    const st = data.streets.find((x) => x.id === z.street);
+    if (!st) continue;
+    const { p, dir } = pointAt(st.line, z.s);
+    zebra(p, [-dir[1], dir[0]], st.w, 4);
+  }
 }
 
 export function buildAreas(sink, data, P) {

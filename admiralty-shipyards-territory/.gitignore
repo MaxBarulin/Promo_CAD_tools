@@ -5,3 +5,4 @@ data/osm/raw*.json
 *.log
 .DS_Store
 dist/artifact.html
+__pycache__/

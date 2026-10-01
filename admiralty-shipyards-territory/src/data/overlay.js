@@ -44,6 +44,7 @@ export function applyOverlay(data, ov) {
   if (ov.water && ov.water.length) out.water = { ...data.water, osmPolygons: ov.water };
   if (ov.fences && ov.fences.length > 3) {
     out.fences = ov.fences.map((f, i) => ({ id: `OF${i + 1}`, name: 'Ограждение (OSM)', type: f.type, h: f.h, line: f.line }));
+    out.autoFence = false;
   }
   if (ov.streets && ov.streets.length) {
     const yard = data.zones.filter((z) => z.kind === 'shipyard').map((z) => z.polygon);

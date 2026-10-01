@@ -1,7 +1,7 @@
 // Ограждение: ж/б забор с колючей проволокой, сетчатое ограждение, исторический
 // кирпичный забор; ворота (откатные) со столбами и шлагбаумом.
 
-import { polylineLength, pointAt, add, mul, sub, norm, dist } from '../geo.js';
+import { polylineLength, pointAt, project, add, mul, sub, norm, dist, pointInRing, ensureCCW } from '../geo.js';
 
 // Разбиение полилинии на участки [s0, s1] за вычетом проёмов ворот.
 function pieces(line, gates) {
@@ -110,4 +110,160 @@ export function buildFence(sink, f) {
     const e = add(sa, mul(dir, g.w * 0.9));
     sink.beam('crane_red', [sa[0], sa[1], 1.0], [e[0], e[1], 1.0], 0.1, 0.1);
   }
+}
+
+// ---------- автоматическая ограда по контуру территории ----------
+//
+// Контур каждого участка верфи обходится с шагом 2 м; по тому, что снаружи, выбирается тип:
+//   • городская суша — ж/б забор (на Ново-Адмиралтейском острове — исторический кирпичный);
+//   • узкая вода (Фонтанка, Пряжка, Мойка, канал), за которой город, — ограждение по кромке
+//     набережной (на Ново-Адмиралтейском острове — кирпичная стена);
+//   • Нева, ковши, протоки между участками верфи — без ограды (причальный фронт);
+//   • стена здания на границе участка — без ограды (здание само служит оградой).
+// Ворота (data.gates) вырезаются в ближайшем участке ограды.
+
+const inMP = (p, mp) => mp.some((poly) => pointInRing(p, poly[0]) && !poly.slice(1).some((h) => pointInRing(p, h)));
+
+function distToRing(p, ring) {
+  let best = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const ab = sub(b, a);
+    const l2 = ab[0] * ab[0] + ab[1] * ab[1] || 1;
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / l2));
+    best = Math.min(best, dist(p, [a[0] + ab[0] * t, a[1] + ab[1] * t]));
+  }
+  return best;
+}
+
+// Упрощение полилинии (Дуглас — Пекер).
+function simplify(pts, tol) {
+  if (pts.length < 3) return pts;
+  const keep = new Array(pts.length).fill(false);
+  keep[0] = keep[pts.length - 1] = true;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [i0, i1] = stack.pop();
+    const a = pts[i0];
+    const b = pts[i1];
+    const d = norm(sub(b, a));
+    let worst = -1;
+    let wi = -1;
+    for (let i = i0 + 1; i < i1; i++) {
+      const v = sub(pts[i], a);
+      const e = Math.abs(v[0] * d[1] - v[1] * d[0]);
+      if (e > worst) {
+        worst = e;
+        wi = i;
+      }
+    }
+    if (worst > tol) {
+      keep[wi] = true;
+      stack.push([i0, wi], [wi, i1]);
+    }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+
+export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
+  const yard = P.shipyardMP;
+  const water = P.water;
+  const yardBuildings = data.buildings.filter((b) => b.kind === 'shipyard').map((b) => ensureCCW(b.poly));
+  const nearBuilding = (p) => yardBuildings.some((r) => pointInRing(p, r) || distToRing(p, r) < 1.6);
+  const rivers = data.water.rivers || [];
+  const out = [];
+
+  const classify = (p, n, zoneId) => {
+    const q = add(p, mul(n, 5));
+    if (inMP(q, yard)) return 'none';
+    if (!inMP(q, water)) return zoneId === 'novo' ? 'wall' : 'concrete';
+    // вода: ищем противоположный берег
+    for (let d = 10; d <= 130; d += 5) {
+      const r = add(p, mul(n, d));
+      if (inMP(r, water)) continue;
+      if (inMP(r, yard)) return 'none';
+      return zoneId === 'novo' ? 'wall' : 'mesh';
+    }
+    return 'none';
+  };
+
+  for (const z of data.zones.filter((zz) => zz.kind === 'shipyard')) {
+    for (const poly of P.zones[z.id] || []) {
+      const ring = ensureCCW(poly[0]);
+      const closed = [...ring, ring[0]];
+      const L = polylineLength(closed);
+      const samples = [];
+      for (let s = 0; s < L; s += step) {
+        const { p, dir } = pointAt(closed, s);
+        const n = [dir[1], -dir[0]]; // наружу (контур против часовой — суша слева)
+        let type = classify(p, n, z.id);
+        if (type !== 'none' && nearBuilding(add(p, mul(n, -1)))) type = 'none';
+        samples.push({ s, p, n, type });
+      }
+      // сглаживание: короткие вкрапления другого типа поглощаются соседями
+      const k = Math.ceil(minRun / step);
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < samples.length; i++) {
+          const prev = samples[(i - 1 + samples.length) % samples.length].type;
+          let j = i;
+          while (j - i < k && samples[j % samples.length].type === samples[i].type) j++;
+          const next = samples[j % samples.length].type;
+          if (j - i < k && prev === next && prev !== samples[i].type) for (let m = i; m < j; m++) samples[m % samples.length].type = prev;
+        }
+      }
+      // начинаем обход со смены типа, чтобы не разрывать участок на стыке начала контура
+      let start = samples.findIndex((x, i) => x.type !== samples[(i - 1 + samples.length) % samples.length].type);
+      if (start < 0) start = 0;
+      const seq = [...samples.slice(start), ...samples.slice(0, start)];
+      const runs = [];
+      for (const x of seq) {
+        const last = runs[runs.length - 1];
+        if (last && last.type === x.type) last.pts.push(x);
+        else runs.push({ type: x.type, pts: [x] });
+      }
+      if (runs.length > 1 && runs[0].type === runs[runs.length - 1].type) runs[0].pts = [...runs.pop().pts, ...runs[0].pts];
+      for (const r of runs) {
+        if (r.type === 'none' || r.pts.length * step < minRun) continue;
+        const inset = r.type === 'wall' ? 0.9 : r.type === 'mesh' ? 0.6 : 0.7;
+        // продлеваем на полшага к соседям, чтобы не было щелей у изломов
+        const pts = r.pts.map((x) => add(x.p, mul(x.n, -inset)));
+        const line = simplify(pts, 0.35);
+        if (polylineLength(line) < minRun) continue;
+        out.push({ id: `F-${z.id}-${out.length + 1}`, zone: z.id, type: r.type, h: r.type === 'wall' ? 3.2 : r.type === 'mesh' ? 2.2 : 2.8, line, gates: [] });
+      }
+    }
+  }
+
+  // ворота: в ближайший участок ограды
+  for (const g of data.gates || []) {
+    let best = null;
+    for (const f of out) {
+      const pr = project(f.line, g.at);
+      if (!best || pr.d < best.pr.d) best = { f, pr };
+    }
+    if (best && best.pr.d < 25) {
+      const L = polylineLength(best.f.line);
+      const s = Math.min(Math.max(best.pr.s, g.w / 2 + 1), L - g.w / 2 - 1);
+      best.f.gates.push({ s, w: g.w, name: g.name });
+    }
+  }
+
+  // названия — по ближайшей улице или реке снаружи
+  const named = [
+    ...data.streets.map((s) => ({ line: s.line, name: s.name })),
+    ...rivers.map((r) => ({ line: r.line, name: r.name.startsWith('р.') || /канал/.test(r.name) ? r.name : `р. ${r.name}` })),
+  ];
+  const kindName = { concrete: 'Ж/б забор', mesh: 'Ограждение по кромке набережной', wall: 'Кирпичная ограда' };
+  for (const f of out) {
+    const mid = pointAt(f.line, polylineLength(f.line) / 2).p;
+    let near = null;
+    for (const c of named) {
+      const pr = project(c.line, mid);
+      if (pr.d < 90 && (!near || pr.d < near.d)) near = { d: pr.d, name: c.name };
+    }
+    const zone = data.zones.find((z) => z.id === f.zone);
+    f.name = `${kindName[f.type]}${near ? ` (${near.name})` : ''} — ${zone ? zone.name : ''}`;
+  }
+  return out;
 }

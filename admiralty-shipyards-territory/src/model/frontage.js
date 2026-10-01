@@ -65,7 +65,7 @@ export function generateFrontage(data, P, explicitBuildings, { contextDetail = '
     ...P.features.water,
     ...P.features.streets,
     ...P.features.internal,
-    ...P.features.zones,
+    ...P.features.zones.filter((z) => z.kind !== 'civil'), // в жилой части Матисова о. дома допустимы
     ...P.features.areas.filter((a) => a.kind !== 'industrial'),
     ...P.features.bridges,
   ];

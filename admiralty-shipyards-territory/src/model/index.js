@@ -5,7 +5,7 @@ import { Sink, setTriangulator } from './geom.js';
 import { buildPlanar } from './planar.js';
 import { buildGround, buildQuayEdges, buildRoads, buildAreas, buildRails } from './terrain.js';
 import { buildBuilding, buildingSummary } from './buildings.js';
-import { buildFence } from './fences.js';
+import { buildFence, autoFences } from './fences.js';
 import { buildCrane } from './cranes.js';
 import { buildShip, buildDock, buildSlipway, slipProfile, slipPitch } from './ships.js';
 import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildCar, buildStock, buildBlocks, buildContainers } from './structures.js';
@@ -76,6 +76,11 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
   }
 
   // ---------- ограждение ----------
+  // автоматическая ограда по контуру участков (один раз на набор данных — её видят и экспорты)
+  if (data.autoFence && !data.autoFenced) {
+    data.fences = [...data.fences, ...autoFences(data, P)];
+    data.autoFenced = true;
+  }
   for (const f of data.fences) {
     const s = new Sink();
     buildFence(s, f);
@@ -157,14 +162,20 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
     if (A1) buildStock(s, A1.polygon, 11);
     const A3 = data.areas.find((a) => a.id === 'A3');
     if (A3) buildStock(s, A3.polygon, 12);
-    buildBlocks(s, [-236, 236], 96, [
-      [-40, 0, 14, 12, 7],
-      [-18, 1, 12, 14, 9],
-      [8, 0, 16, 12, 6],
-      [34, 0, 12, 12, 8],
-    ]);
-    buildContainers(s, [-500, 30], 254, 10, 7);
-    buildContainers(s, [-335, 1015], 86, 8, 8);
+    // укрупнённые секции корпуса на предстапельной площадке
+    const A2 = data.areas.find((x) => x.id === 'A2');
+    if (A2) {
+      const [c0, c1, , c3] = A2.polygon;
+      const ctr = [(c1[0] + c3[0]) / 2, (c1[1] + c3[1]) / 2];
+      const along = Math.atan2(c1[1] - c0[1], c1[0] - c0[0]) / DEG;
+      buildBlocks(s, ctr, along, [
+        [-40, 0, 14, 12, 7],
+        [-18, 1, 12, 14, 9],
+        [8, 0, 16, 12, 6],
+        [34, 0, 12, 12, 8],
+      ]);
+    }
+    for (const c of data.containers || []) buildContainers(s, c.at, c.angle, c.n, c.seed);
     add_('production', {
       id: 'stock',
       name: 'Складируемый металл, секции корпуса, контейнеры',
@@ -288,11 +299,17 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
         buildCar(c, p, ang, carKeys[Math.floor(R() * carKeys.length)]);
       }
     }
-    // автомобили на внутренних проездах и у корпусов
-    for (const [x, y, a] of [
-      [-120, 98, 96], [-125, 104, 96], [-130, 110, 96], [-175, 200, 96], [-245, 705, 0], [-250, 698, 0],
-      [-190, 1240, 28], [-100, 1290, 28], [150, 1385, 22], [-60, 130, 21], [-66, 145, 21],
-    ]) buildCar(c, [x, y], a, carKeys[Math.floor(R() * carKeys.length)]);
+    // автомобили у обочин внутризаводских проездов
+    for (const r of data.internalRoads) {
+      const L = polylineLength(r.line);
+      for (let d = 15 + R() * 20; d < L - 10; d += 40 + R() * 60) {
+        const { p, dir } = pointAt(r.line, d);
+        const side = R() < 0.5 ? -1 : 1;
+        const q = add(p, mul(perp(dir), side * (r.w / 2 - 1.2)));
+        if (!onLand(q)) continue;
+        buildCar(c, q, Math.atan2(dir[1], dir[0]) / DEG, carKeys[Math.floor(R() * carKeys.length)]);
+      }
+    }
     // движение на городских улицах
     for (const id of ['sadovaya', 'dekabristov', 'rimskogo', 'peterhofsky', 'english-emb', 'lotsmanskaya', 'rizhsky']) {
       const st = data.streets.find((x) => x.id === id);

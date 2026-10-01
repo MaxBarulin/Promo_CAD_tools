@@ -3,29 +3,29 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { getTerritory } from '../data/index.js';
-import { initModel, buildModel, toMergedGroups, buildPickMesh, toObjectHierarchy, LAYERS } from '../model/index.js';
+import { initModel, buildModel, toMergedGroups, buildPickMesh } from '../model/index.js';
 import { createMaterialFactory } from '../model/materials.js';
 import { toLatLon, centroid, area } from '../geo.js';
-import { buildDXF } from '../export/dxf.js';
-import { buildGeoJSON } from '../export/geojson.js';
+import { setupExports } from './exports.js';
 
-const IS_ARTIFACT = !!window.__ARTIFACT__;
+/* global __ARTIFACT_BUILD__ */
+// __ARTIFACT_BUILD__ подставляет esbuild: true — сборка для публикации в виде Artifact
+// (в ней нет кода выгрузки файлов), false — обычная локальная версия с экспортом.
 const $ = (id) => document.getElementById(id);
 
 // модель (x восток, y север, z вверх) → three (X, Y вверх, Z = −север)
 const V3 = (x, y, z) => new THREE.Vector3(x, z, -y);
 
 const VIEWS = [
-  { id: 'overview', name: 'Общий вид', eye: [-1720, -1040, 1480], target: [-200, 720, 0] },
-  { id: 'plan', name: 'План', eye: [-255, 692, 3150], target: [-255, 700, 0] },
-  { id: 'checkpoint', name: 'Главная проходная', eye: [110, 40, 70], target: [-50, 15, 5] },
-  { id: 'slipways', name: 'Стапели', eye: [-760, 330, 150], target: [-330, 240, 8] },
-  { id: 'novo', name: 'Новое Адмиралтейство', eye: [-160, 1880, 230], target: [60, 1420, 10] },
-  { id: 'matisov', name: 'Матисов остров', eye: [-820, 860, 230], target: [-250, 760, 5] },
-  { id: 'neva', name: 'Вид с Невы', eye: [-720, 600, 48], target: [-380, 760, 16] },
-  { id: 'south', name: 'Со стороны Фонтанки', eye: [-180, -700, 600], target: [-240, 480, 0] },
+  { id: 'overview', name: 'Общий вид', eye: [-1500, -900, 1350], target: [-330, 480, 0] },
+  { id: 'plan', name: 'План', eye: [-400, 402, 3750], target: [-400, 410, 0] },
+  { id: 'checkpoint', name: 'Главная проходная', eye: [70, -120, 70], target: [-70, -30, 5] },
+  { id: 'slipways', name: 'Стапели', eye: [-930, 170, 180], target: [-560, -110, 8] },
+  { id: 'novo', name: 'Новое Адмиралтейство', eye: [-600, 1830, 280], target: [-170, 1250, 10] },
+  { id: 'matisov', name: 'Матисов остров', eye: [-1000, 830, 280], target: [-360, 620, 5] },
+  { id: 'neva', name: 'Вид с Невы', eye: [-800, 250, 42], target: [-520, 560, 14] },
+  { id: 'south', name: 'Со стороны Фонтанки', eye: [260, -720, 650], target: [-330, 400, 0] },
 ];
 
 const KIND_LABEL = {
@@ -42,22 +42,24 @@ const KIND_LABEL = {
   misc: 'Оборудование',
 };
 
-const ZONE_LABEL = { galerny: 'Галерный остров', matisov: 'Матисов остров', novo: 'Ново-Адмиралтейский остров' };
+const ZONE_LABEL = { galerny: 'Галерный остров', kolomna: 'Основная площадка (между Фонтанкой и Пряжкой)', matisov: 'Матисов остров', novo: 'Ново-Адмиралтейский остров' };
 
 // Короткие подписи-«булавки»: id объекта → [текст, дальность видимости, м]
 const PINS = {
-  G1: ['Главная проходная', 2600],
-  G2: ['Заводоуправление', 1600],
-  G4: ['Мастерская 1910 г.', 1400],
-  G10: ['Корпусосборочный цех', 1400],
+  Z200: ['Главная проходная', 2600],
+  Z182: ['Заводоуправление', 1600],
+  Z129: ['Корпусосборочный цех', 1600],
+  Z3: ['Главный корпус Галерного острова', 1800],
   S1: ['Стапель № 1', 2600],
   S2: ['Стапель № 2', 2600],
-  M1: ['Корпусообрабатывающий цех', 1600],
-  M2: ['Сборочно-сварочный цех', 1600],
-  N1: ['Большой каменный эллинг', 2600],
-  N2: ['Малый каменный эллинг', 1800],
-  N3: ['Крытый эллинг', 2600],
-  N6: ['Северная проходная', 1800],
+  Z14: ['Корпусообрабатывающий цех', 1400],
+  Z58: ['Сборочно-сварочный цех', 1600],
+  Z68: ['Цех у устья Мойки', 1400],
+  Z136: ['Большой каменный эллинг', 2600],
+  Z153: ['Малый каменный эллинг', 1800],
+  Z126: ['Крытый эллинг', 2600],
+  Z187: ['КПП Нового Адмиралтейства', 1600],
+  Z161: ['Караульный дом', 1400],
   D1: ['Плавдок «Луга»', 1800],
   D2: ['Плавдок СПД-2М', 1600],
   K1: ['Поликлиника верфей', 1200],
@@ -125,7 +127,7 @@ async function main() {
   scene.add(root);
   const pickMesh = buildPickMesh(THREE, model);
   scene.add(pickMesh);
-  const center = V3(-255, 700, 0);
+  const center = V3(-330, 480, 0);
   sun.target.position.copy(center);
 
   // вывеска на главной проходной
@@ -187,11 +189,16 @@ async function main() {
   const shipyardArea = (data.zones.filter((z) => z.kind === 'shipyard').reduce((s, z) => s + mpArea(model.planar.zones[z.id]), 0) / 1e4).toFixed(0);
   const nShip = model.layers.find((l) => l.id === 'shipyard').objects.length;
   const nCranes = data.cranes.filter((c) => !c.id.startsWith('BC')).length;
-  $('facts').innerHTML = [`≈${shipyardArea} га`, `${nShip} зданий`, `${data.slipways.length} стапеля`, `${nCranes} кранов`, `3 острова`].map((t) => `<span class="fact">${t}</span>`).join('');
+  const plural = (n, one, few, many) => {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    return `${n} ${m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many}`;
+  };
+  $('facts').innerHTML = [`≈${shipyardArea} га`, plural(nShip, 'здание', 'здания', 'зданий'), plural(data.slipways.length, 'стапель', 'стапеля', 'стапелей'), plural(nCranes, 'кран', 'крана', 'кранов'), `3 острова и площадка`].map((t) => `<span class="fact">${t}</span>`).join('');
   $('note').innerHTML = data.meta.source === 'osm'
     ? `<b>Источник геометрии.</b> Контуры зданий, вода, улицы и ограждения — OpenStreetMap (© участники OSM, ODbL)${data.meta.osm?.fetched ? ', данные на ' + data.meta.osm.fetched.slice(0, 10) : ''}. Названия и описания объектов верфи — по открытым источникам.` +
       `<br /><span style="font-family:var(--font-data);font-size:11px">${model.stats.buildings} зданий · ${(model.stats.triangles / 1e6).toFixed(2)} млн треугольников</span>`
-    : '<b>Точность.</b> Схема собрана по открытым источникам: адресам, описаниям и размерам объектов (стапели 259×35 м, эллинги, плавдоки). Берега и улицы привязаны к опорным точкам с точностью около ±30–80 м. Внутренняя планировка верфи условная, такие объекты помечены в карточке. ' +
+    : '<b>Источник.</b> Контуры территории, всех зданий, причалов, ковшей и мостов верфи сняты с карты предприятия (масштаб по площади 67 га, север по стрелке карты); проезды проложены по свободным полосам карты, ограда — по контуру территории. Назначение и высоты большинства зданий условные, это отмечено в карточке. Улицы и застройка вокруг — по открытым источникам, точность около ±30–80 м. ' +
     `<br /><span style="font-family:var(--font-data);font-size:11px">${model.stats.buildings} зданий · ${(model.stats.triangles / 1e6).toFixed(2)} млн треугольников</span>`;
 
   const viewsEl = $('views');
@@ -246,15 +253,11 @@ async function main() {
     flyTo([e.x, -e.z, e.y], [t.x, -t.z, t.y], 700);
   });
 
-  if (IS_ARTIFACT) {
+  if (__ARTIFACT_BUILD__) {
     $('exportGroup').innerHTML =
       '<h2>Файлы модели</h2><p class="note" style="border:0;padding:0;margin:0">GLB (3D), DXF (генплан) и GeoJSON лежат в репозитории в папке <code>admiralty-shipyards-territory/dist</code>; там же локальная версия этой страницы с кнопками экспорта.</p>';
   } else {
-    $('expGLB').addEventListener('click', exportGLB);
-    $('expDXF').addEventListener('click', () => download(new Blob([buildDXF(data, model)], { type: 'application/dxf' }), 'admiralty-shipyards-plan.dxf'));
-    $('expGEO').addEventListener('click', () =>
-      download(new Blob([JSON.stringify(buildGeoJSON(data, model))], { type: 'application/geo+json' }), 'admiralty-shipyards.geojson'),
-    );
+    setupExports({ $, data, model });
   }
 
   // ---------- выбор объектов ----------
@@ -366,6 +369,7 @@ async function main() {
   scene.background = sky.day;
   scene.fog = new THREE.Fog(0xcfdbe5, 4200, 11000);
   function setEvening(on) {
+    $('optEvening').checked = on;
     scene.background = on ? sky.evening : sky.day;
     scene.fog.color.set(on ? 0x2a3140 : 0xcfdbe5);
     sun.color.set(on ? 0xffb37a : 0xfff3e0);
@@ -475,37 +479,9 @@ async function main() {
     root.add(m);
   }
 
-  async function exportGLB() {
-    const btn = $('expGLB');
-    btn.textContent = '…';
-    await new Promise((r) => setTimeout(r, 30));
-    const hier = toObjectHierarchy(THREE, model, createMaterialFactory(THREE, { forExport: true }));
-    new GLTFExporter().parse(
-      hier,
-      (buf) => {
-        download(new Blob([buf], { type: 'model/gltf-binary' }), 'admiralty-shipyards.glb');
-        btn.textContent = 'GLB';
-      },
-      (err) => {
-        console.error(err);
-        btn.textContent = 'GLB';
-      },
-      { binary: true },
-    );
-  }
+
 }
 
-function download(blob, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    URL.revokeObjectURL(a.href);
-    a.remove();
-  }, 1000);
-}
 
 // Эквирект-панорама неба для отражений (зенит → горизонт → «земля»).
 function skyEquirect([zenith, mid, horizon, ground]) {

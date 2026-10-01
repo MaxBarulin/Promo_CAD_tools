@@ -18,8 +18,8 @@ assert.equal(ov.streets.length, 1);
 assert.match(ov.buildings[1].name, /Декабристов/);
 
 const data = applyOverlay(getTerritory({ useOSM: false }), ov);
-assert.ok(data.overlayReport.matched.includes('N1'), 'название «Большой каменный эллинг» перенесено на OSM-контур');
-assert.equal(data.buildings.find((b) => b.id === 'N1').name, 'Большой каменный эллинг');
+assert.ok(data.overlayReport.matched.includes('Z136'), 'название «Большой каменный эллинг» перенесено на OSM-контур');
+assert.equal(data.buildings.find((b) => b.id === 'Z136').name, 'Большой каменный эллинг');
 
 initModel(THREE);
 const model = buildModel(data);

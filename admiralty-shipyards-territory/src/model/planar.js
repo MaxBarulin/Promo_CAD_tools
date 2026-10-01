@@ -36,25 +36,43 @@ export function cleanMP(mp) {
     .filter((poly) => poly.length && area(poly[0]) > 0.5);
 }
 
+// polygon-clipping иногда не может замкнуть кольцо на почти совпадающих рёбрах —
+// повторяем операцию с округлением координат.
+const roundMP = (mp, q) => mp.map((poly) => poly.map((ring) => ring.map(([x, y]) => [Math.round(x / q) * q, Math.round(y / q) * q])));
+function robust(op, args) {
+  try {
+    return op(...args);
+  } catch (e) {
+    for (const q of [0.01, 0.05, 0.2]) {
+      try {
+        return op(...args.map((a) => roundMP(a, q)));
+      } catch (e2) {
+        /* следующая попытка */
+      }
+    }
+    throw e;
+  }
+}
+
 export function safeUnion(list) {
   const items = list.filter((x) => x && x.length);
   if (!items.length) return [];
   let acc = items[0];
   // объединяем порциями — быстрее и устойчивее
-  for (let i = 1; i < items.length; i += 8) acc = pc.union(acc, ...items.slice(i, i + 8));
+  for (let i = 1; i < items.length; i += 8) acc = robust(pc.union, [acc, ...items.slice(i, i + 8)]);
   return acc;
 }
 
 export function inter(a, b) {
   if (!a.length || !b.length) return [];
-  return pc.intersection(a, b);
+  return robust(pc.intersection, [a, b]);
 }
 
 export function diff(a, ...b) {
   const bs = b.filter((x) => x && x.length);
   if (!a.length) return [];
   if (!bs.length) return a;
-  return pc.difference(a, ...bs);
+  return robust(pc.difference, [a, ...bs]);
 }
 
 // Признак с ограничивающим прямоугольником для быстрых проверок пересечений.
@@ -72,7 +90,7 @@ export function overlapArea(ring, features) {
   let s = 0;
   for (const f of features) {
     if (!bbOverlap(bb, f.bb)) continue;
-    s += mpArea(pc.intersection(mp, f.mp));
+    s += mpArea(robust(pc.intersection, [mp, f.mp]));
   }
   return s;
 }
@@ -88,16 +106,25 @@ export function buildPlanar(data) {
   const bboxMP = toMP(bboxRing);
 
   // --- вода ---
+  // Акватория у верфи — с карты предприятия; Нева за пределами карты — полигон NEVA;
+  // из них вычитается суша, изображённая на карте фоном (Васильевский о., Английская наб.).
+  // Реки за пределами карты добавляются буферами осевых линий; участки верфи — всегда суша.
   const osmWater = data.water.osmPolygons;
-  const waterParts = osmWater ? osmWater.map(toMP) : [toMP(data.water.neva.polygon)];
   const riverFeatures = [];
-  for (const r of osmWater ? [] : data.water.rivers) {
-    const ring = bufferPolyline(r.line, r.width / 2, { capExtend: 6 });
-    const mp = toMP(ring);
-    waterParts.push(mp);
-    riverFeatures.push(feature(inter(mp, bboxMP), { id: r.id, name: r.name }));
+  let water;
+  if (osmWater) {
+    water = cleanMP(inter(safeUnion(osmWater.map(toMP)), bboxMP));
+  } else {
+    const base = safeUnion([toMP(data.water.neva.polygon), ...(data.water.map || []).map(toMP)]);
+    const open = diff(base, ...(data.water.cuts || []).map((c) => toMP(c.polygon)));
+    const parts = [open];
+    for (const r of data.water.rivers) {
+      const mp = toMP(bufferPolyline(r.line, r.width / 2, { capExtend: 6 }));
+      parts.push(mp);
+      riverFeatures.push(feature(inter(mp, bboxMP), { id: r.id, name: r.name }));
+    }
+    water = cleanMP(inter(diff(safeUnion(parts), ...(data.landPieces || []).map(toMP)), bboxMP));
   }
-  const water = cleanMP(inter(safeUnion(waterParts), bboxMP));
   const land = cleanMP(diff(bboxMP, water));
 
   // --- зоны ---
@@ -151,8 +178,8 @@ export function buildPlanar(data) {
     internal: internalUnion,
     areas,
     features: {
-      water: osmWater ? [feature(water, { id: 'water' })] : [feature(cleanMP(inter(toMP(data.water.neva.polygon), bboxMP)), { id: 'neva' }), ...riverFeatures],
-      neva: osmWater ? feature(water, { id: 'water' }) : feature(toMP(data.water.neva.polygon), { id: 'neva' }),
+      water: [feature(water, { id: 'water' }), ...riverFeatures],
+      neva: feature(water, { id: 'water' }),
       streets: streetFeatures,
       internal: internalFeatures,
       zones: data.zones.map((z) => feature(zones[z.id], { id: z.id, kind: z.kind })),

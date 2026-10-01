@@ -40,7 +40,9 @@ for (let i = 0; i < polys.length; i++) {
     const b = polys[j];
     if (a.o.generated && b.o.generated) continue;
     const ov = mpArea(pc.intersection(a.mp, b.mp));
-    if (ov > 1) warn(`${a.o.id} «${a.o.name}» и ${b.o.id} «${b.o.name}» пересекаются (${ov.toFixed(0)} м²)`);
+    // пристройки на карте примыкают к корпусам общей стеной — небольшое касание допустимо
+    const tol = a.o.id.startsWith('Z') && b.o.id.startsWith('Z') ? 25 : 1;
+    if (ov > tol) warn(`${a.o.id} «${a.o.name}» и ${b.o.id} «${b.o.name}» пересекаются (${ov.toFixed(0)} м²)`);
   }
 }
 if (!problems) console.log('  ✓ замечаний нет');
