@@ -2,9 +2,12 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import CUSTOM from 'custom:files';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { getTerritory } from '../data/index.js';
 import { initModel, buildModel, toMergedGroups, buildPickMesh } from '../model/index.js';
+import { prepareCustom } from '../model/custom.js';
 import { createMaterialFactory } from '../model/materials.js';
 import { toLatLon, centroid, area } from '../geo.js';
 import { setupExports } from './exports.js';
@@ -126,7 +129,11 @@ async function main() {
   await step('геометрия: острова, здания, краны, суда');
   // на телефонах и планшетах окружение строится упрощённо (без окон) — меньше нагрузка на GPU
   const touch = window.matchMedia('(pointer: coarse)').matches;
-  const model = buildModel(data, { contextDetail: touch ? 'low' : 'auto' });
+  // доработки из папки custom/: модели из Blender, удаления, новые здания
+  const customFiles = CUSTOM.files.map((f) => ({ file: f.file, bytes: Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0)) }));
+  const custom = prepareCustom(CUSTOM.config, customFiles);
+  const model = buildModel(data, { contextDetail: touch ? 'low' : 'auto', custom });
+  for (const w of model.custom?.warnings || []) console.warn('custom/: ' + w);
   await step('материалы и освещение');
   const getMaterial = createMaterialFactory(THREE);
   const groups = toMergedGroups(THREE, model, getMaterial);
@@ -402,6 +409,7 @@ async function main() {
     scene.add(highlight);
     const i = o.info;
     const rows = [];
+    rows.push(['Код', o.id]);
     if (i.zone && ZONE_LABEL[i.zone]) rows.push(['Участок', ZONE_LABEL[i.zone]]);
     if (i.dims) rows.push(['Размеры', `${i.dims[0]} × ${i.dims[1]} м`]);
     if (i.height) rows.push(['Высота', `${i.height} м`]);
@@ -410,6 +418,7 @@ async function main() {
     const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
     const [lat, lon] = toLatLon(c);
     rows.push(['Координаты', `${lat.toFixed(5)}, ${lon.toFixed(5)}`]);
+    if (o.custom) rows.push(['Модель', `из Blender: custom/${o.custom}`]);
     card.innerHTML = `
       <div class="card-tools">
         <button class="icon-btn fold" type="button" data-act="min"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
@@ -480,6 +489,42 @@ async function main() {
     if (localStorage.getItem('admiralty-yard-only') === '1' || location.hash.includes('yard')) setYardOnly(true);
   } catch {
     /* хранилище недоступно */
+  }
+
+  // ---------- модели из custom/ (Blender): на место своего объекта, в свой слой ----------
+  const gltfLoader = new GLTFLoader();
+  for (const layer of model.layers) {
+    for (const o of layer.objects) {
+      if (!o.custom) continue;
+      const f = customFiles.find((x) => x.file === o.custom);
+      const buf = f.bytes.buffer.slice(f.bytes.byteOffset, f.bytes.byteOffset + f.bytes.byteLength);
+      gltfLoader.parse(
+        buf,
+        '',
+        (gltf) => {
+          const obj = gltf.scene;
+          obj.name = `${o.id} ${o.name}`;
+          obj.traverse((c) => {
+            if (c.isMesh) {
+              c.castShadow = true;
+              c.receiveShadow = true;
+            }
+          });
+          const g = groups.find((x) => x.userData.layer === layer.id);
+          const scope = o.scope || 'city';
+          let sg = g.children.find((x) => x.userData.scope === scope);
+          if (!sg) {
+            sg = new THREE.Group();
+            sg.name = `${layer.id}:${scope}`;
+            sg.userData.scope = scope;
+            sg.visible = !(yardOnly && scope === 'city');
+            g.add(sg);
+          }
+          sg.add(obj);
+        },
+        (err) => console.warn(`custom/${o.custom}: не удалось загрузить модель — ${err?.message || err}`),
+      );
+    }
   }
 
   // ---------- реестр зданий и сооружений ----------

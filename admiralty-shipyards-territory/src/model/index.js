@@ -12,6 +12,7 @@ import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buil
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, DEG } from '../geo.js';
 import { PALETTE } from './materials.js';
+import { removeFromData, applyCustom } from './custom.js';
 
 export const LAYERS = [
   { id: 'terrain', name: 'Рельеф, вода, набережные' },
@@ -44,8 +45,10 @@ const hashStr = (t) => {
   return h % 100000;
 };
 
-export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {}) {
+// custom — доработки из папки custom/ (см. prepareCustom в custom.js): удаление, замена, новые здания
+export function buildModel(data, { frontage = true, contextDetail = 'auto', custom = null } = {}) {
   const t0 = Date.now();
+  const removedFromData = custom ? removeFromData(data, custom.remove) : new Set();
   const P = buildPlanar(data);
   const layers = Object.fromEntries(LAYERS.map((l) => [l.id, { ...l, objects: [] }]));
   // scope: 'yard' — относится к верфи, 'city' — окружение (скрывается кнопкой «Только верфь»),
@@ -98,6 +101,8 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
     data.fences = [...data.fences, ...autoFences(data, P)];
     data.autoFenced = true;
   }
+  if (custom) for (const f of data.fences) if (custom.remove.has(f.id)) removedFromData.add(f.id);
+  if (custom) data.fences = data.fences.filter((f) => !custom.remove.has(f.id));
   for (const f of data.fences) {
     const s = new Sink();
     buildFence(s, f);
@@ -321,6 +326,11 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
     add_('greenery', { id: 'cars-yard', name: 'Автомобили на территории верфи', sink: cY, scope: 'yard' });
   }
 
+  // ---------- доработки вручную: замена моделью из Blender, новые здания ----------
+  const customReport = custom
+    ? applyCustom(custom, { layers, signs, data, removedFromData, inYard: inYardMP, summary: buildingSummary, Sink })
+    : null;
+
   // статистика
   let tris = 0;
   for (const l of Object.values(layers)) for (const o of l.objects) tris += o.sink.triangleCount();
@@ -329,6 +339,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
     layers: LAYERS.map((l) => layers[l.id]),
     signs,
     generatedCount: generated.length,
+    custom: customReport,
     stats: { triangles: tris, ms: Date.now() - t0, buildings: explicit.length + generated.length },
   };
 }
@@ -391,7 +402,7 @@ export function toObjectHierarchy(THREE, model, getMaterial) {
   return root;
 }
 
-function cleanUserData(info) {
+export function cleanUserData(info) {
   const out = {};
   for (const [k, v] of Object.entries(info)) if (v != null && typeof v !== 'object') out[k] = v;
   if (info.dims) out.dims = info.dims.join(' × ');
@@ -440,7 +451,7 @@ export function buildPickMesh(THREE, model) {
     for (const o of layer.objects) {
       if (!o.proxy || !o.info) continue;
       const k = objs.length;
-      objs.push({ id: o.id, name: o.name, layer: layer.id, scope: o.scope, info: o.info, proxy: o.proxy, generated: o.generated });
+      objs.push({ id: o.id, name: o.name, layer: layer.id, scope: o.scope, info: o.info, proxy: o.proxy, generated: o.generated, custom: o.custom });
       if (o.proxy.line) {
         const line = o.proxy.line;
         for (let i = 0; i < line.length - 1; i++) {

@@ -1,0 +1,7 @@
+{
+  "remove": ["Y707ec3", "Y34cacb", "C2"],
+  "buildings": {
+    "N1": { "name": "Новый склад (пример)", "type": "warehouse", "info": "Пример нового здания из Blender." },
+    "Z161": { "info": "Описание изменено через custom.json." }
+  }
+}
