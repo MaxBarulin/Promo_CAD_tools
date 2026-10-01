@@ -27,7 +27,7 @@ export function placementTRS(t) {
   const [dx, dy] = t.move || [0, 0];
   const P = [cx, 0, -cy];
   const RP = [P[0] * Math.cos(a) + P[2] * Math.sin(a), 0, -P[0] * Math.sin(a) + P[2] * Math.cos(a)];
-  const out = { translation: [cx + dx - RP[0], 0, -(cy + dy) - RP[2]] };
+  const out = { translation: [cx + dx - RP[0], t.lift || 0, -(cy + dy) - RP[2]] };
   if (a) out.rotation = [0, Math.sin(a / 2), 0, Math.cos(a / 2)];
   return out;
 }

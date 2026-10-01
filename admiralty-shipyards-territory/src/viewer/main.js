@@ -514,7 +514,8 @@ async function main() {
       for (let i = 0; i < p.line.length - 1; i++) {
         const a = p.line[i];
         const b = p.line[i + 1];
-        pts.push(V3(a[0], a[1], p.h), V3(b[0], b[1], p.h), V3(a[0], a[1], 0.3), V3(b[0], b[1], 0.3));
+        const z0 = (p.z0 || 0) + 0.3;
+        pts.push(V3(a[0], a[1], z0 - 0.3 + p.h), V3(b[0], b[1], z0 - 0.3 + p.h), V3(a[0], a[1], z0), V3(b[0], b[1], z0));
       }
     } else {
       for (const q of [p, ...(p.extra || [])]) {
@@ -545,7 +546,6 @@ async function main() {
     cityGround.color.copy(cityGroundColor);
     if (on) cityGround.color.lerp(new THREE.Color(0xd9dde1), 0.6);
     $('scopeBtn').setAttribute('aria-pressed', String(on));
-    $('optYardOnly').checked = on;
     if (on && selected && selected.scope === 'city') select(null);
     try {
       localStorage.setItem('admiralty-yard-only', on ? '1' : '0');
@@ -554,7 +554,40 @@ async function main() {
     }
   }
   $('scopeBtn').addEventListener('click', () => setYardOnly(!yardOnly));
-  $('optYardOnly').addEventListener('change', (e) => setYardOnly(e.target.checked));
+  // разделы левой панели сворачиваются; какие свёрнуты — запоминается (только удобство)
+  {
+    let closed = {};
+    try {
+      closed = JSON.parse(localStorage.getItem('admiralty-panel-groups') || '{}') || {};
+    } catch {
+      closed = {};
+    }
+    for (const d of document.querySelectorAll('details.group[data-grp]')) {
+      if (closed[d.dataset.grp]) d.open = false;
+      d.addEventListener('toggle', () => {
+        closed[d.dataset.grp] = !d.open;
+        try {
+          localStorage.setItem('admiralty-panel-groups', JSON.stringify(closed));
+        } catch {
+          /* только удобство */
+        }
+      });
+    }
+  }
+  // подсказка по управлению: закрывается и больше не показывается
+  try {
+    if (localStorage.getItem('admiralty-hint-closed') === '1') $('hint').hidden = true;
+  } catch {
+    /* только удобство */
+  }
+  $('hintClose').addEventListener('click', () => {
+    $('hint').hidden = true;
+    try {
+      localStorage.setItem('admiralty-hint-closed', '1');
+    } catch {
+      /* только удобство */
+    }
+  });
   try {
     if (localStorage.getItem('admiralty-yard-only') === '1' || location.hash.includes('yard')) setYardOnly(true);
   } catch {
@@ -576,7 +609,7 @@ async function main() {
     }
     const [cx, cy] = t.pivot;
     const [dx, dy] = t.move || [0, 0];
-    holder.position.set(cx + dx, 0, -(cy + dy));
+    holder.position.set(cx + dx, t.lift || 0, -(cy + dy));
     holder.rotation.set(0, ((t.rotate || 0) * Math.PI) / 180, 0);
     if (inner) inner.position.set(-cx, 0, cy);
   }

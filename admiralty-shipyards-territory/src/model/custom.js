@@ -241,6 +241,8 @@ export function editBuilding(orig, e) {
   if (Array.isArray(e.units)) b.units = cleanUnits(e.units);
   if (has(e.src)) b.refined = e.src;
   if (has(e.sill)) b.sill = +e.sill;
+  if (liftOf(e)) b.lift = liftOf(e);
+  else delete b.lift;
   if (e.windows === false) b.windows = false;
   else if (e.windows === true) delete b.windows;
   const retype = has(e.type) && e.type !== orig.type;
@@ -339,19 +341,24 @@ export function boxBuilding(id, e, { inYard, zoneOf }) {
     null,
   );
   if (has(e.src)) b.refined = e.src;
+  if (liftOf(e)) b.lift = liftOf(e);
+  if (e.windows === false) b.windows = false;
   return { ...applyRoof(b, e), edited: true };
 }
 
 // Модель из Blender на месте: контур и отметки после сдвига и поворота из записи e.
 export function placeModel(a, e) {
-  const out = { hull: a.hull, z0: a.z0, z1: a.z1, transform: null };
-  if (e && (e.move || e.rotate)) {
+  const lift = liftOf(e);
+  const out = { hull: a.hull, z0: a.z0 + lift, z1: a.z1 + lift, transform: null };
+  if (e && (e.move || e.rotate || lift)) {
     const pivot = centroid(a.hull);
-    out.transform = { pivot, move: e.move || [0, 0], rotate: e.rotate || 0 };
+    out.transform = { pivot, move: e.move || [0, 0], rotate: e.rotate || 0, ...(lift ? { lift } : {}) };
     out.hull = ensureCCW(transformRing(a.hull, pivot, e.move, e.rotate));
   }
   return out;
 }
+// Подъём (+) или опускание (−) объекта по высоте, м.
+export const liftOf = (e) => (Number.isFinite(+e?.lift) ? +e.lift : 0);
 
 // Сведения о новом здании-модели (без своих данных) — для карточки и реестра.
 export function modelBuilding(id, m, e, { inYard, zoneOf }) {
@@ -400,6 +407,7 @@ export function prepareCustom(config = {}, files = []) {
     if (m.wall && !WALLS.includes(m.wall)) warnings.push(`custom.json, ${id}: неизвестная отделка «${m.wall}» (допустимы ${WALLS.join(', ')})`);
     if (m.poly !== undefined && !validRing(m.poly)) warnings.push(`custom.json, ${id}: poly должен быть списком точек [[x, y], …], не меньше трёх`);
     if (m.parts !== undefined && (!Array.isArray(m.parts) || m.parts.some((p) => !partRing(p)))) warnings.push(`custom.json, ${id}: parts — список частей { "poly" | "box" | "circle", "floors", "height", "roof" }`);
+    if (m.lift !== undefined && !Number.isFinite(+m.lift)) warnings.push(`custom.json, ${id}: lift — подъём (+) или опускание (−) в метрах, число`);
     if (m.walls !== undefined && (!Array.isArray(m.walls) || !m.walls.every(validWall))) warnings.push(`custom.json, ${id}: walls — список стен { "line": [[x, y], [x, y]], "h", "t", "arch": { "w", "h", "at" } }`);
     if (m.roofColor && !ROOF_COLORS.includes(m.roofColor)) warnings.push(`custom.json, ${id}: неизвестное покрытие кровли «${m.roofColor}» (допустимы ${ROOF_COLORS.join(', ')})`);
     if (m.roof && !ROOF_TYPES[m.roof]) warnings.push(`custom.json, ${id}: неизвестная форма кровли «${m.roof}» (допустимы ${Object.keys(ROOF_TYPES).join(', ')})`);
@@ -489,12 +497,14 @@ export function objectPivot(proxy) {
 // поэтому повторная правка считается от него, а не от уже сдвинутого.
 export function moveObject(o, e) {
   const src = o.unmoved || o;
-  if (!e?.move && !e?.rotate) return o.unmoved ? { ...o, sink: src.sink, proxy: src.proxy } : o;
+  const lift = liftOf(e);
+  if (!e?.move && !e?.rotate && !lift) return o.unmoved ? { ...o, sink: src.sink, proxy: src.proxy } : o;
   const pivot = objectPivot(src.proxy);
   if (!pivot) return o;
   const tf = (ring) => transformRing(ring, pivot, e.move, e.rotate);
-  const proxy = { ...src.proxy, ...(src.proxy.poly ? { poly: tf(src.proxy.poly) } : {}), ...(src.proxy.line ? { line: tf(src.proxy.line) } : {}) };
-  return { ...o, sink: src.sink.transformed(pivot, e.move, e.rotate), proxy, unmoved: { sink: src.sink, proxy: src.proxy } };
+  const p0 = src.proxy;
+  const proxy = { ...p0, ...(p0.poly ? { poly: tf(p0.poly), z0: p0.z0 + lift, z1: p0.z1 + lift } : {}), ...(p0.line ? { line: tf(p0.line), z0: (p0.z0 || 0) + lift } : {}) };
+  return { ...o, sink: src.sink.transformed(pivot, e.move, e.rotate, lift), proxy, unmoved: { sink: src.sink, proxy: src.proxy } };
 }
 // Те же сдвиг и поворот в данных (по ним строятся DXF и GeoJSON): точки, линии и углы.
 const POINT_KEYS = ['at', 'head', 'from', 'to'];

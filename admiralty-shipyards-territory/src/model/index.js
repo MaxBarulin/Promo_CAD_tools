@@ -355,15 +355,24 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
 // Используется при сборке и редактором на сайте (перестройка одного здания).
 export const buildingLayer = (b) => (b.kind === 'shipyard' ? 'shipyard' : 'context');
 export function makeBuildingObject(b, signs = []) {
-  const s = new Sink();
+  let s = new Sink();
   buildBuilding(s, b, { signs });
   const roofH = b.roof && b.roof.type !== 'flat' ? (b.roof.h ?? 3) : 0;
+  // поднятое или опущенное здание (lift, м)
+  const lift = b.lift || 0;
+  if (lift) {
+    const up = new Sink();
+    up.mergeShifted(s, lift);
+    s = up;
+    for (const sg of signs) if (sg.id === b.id && sg.center) sg.center = [sg.center[0], sg.center[1], sg.center[2] + lift];
+  }
+  const shift = (p) => ({ ...p, z0: p.z0 + lift, z1: p.z1 + lift });
   return {
     id: b.id,
     name: b.name,
     sink: s,
     info: { ...buildingSummary(b), kind: b.kind === 'shipyard' ? 'building' : 'context' },
-    proxy: { ...prismProxy(b.poly, 0, b.h + roofH), ...(b.walls?.length ? { extra: b.walls.map(archWallProxy) } : {}) },
+    proxy: { ...shift(prismProxy(b.poly, 0, b.h + roofH)), ...(b.walls?.length ? { extra: b.walls.map((w) => shift(archWallProxy(w))) } : {}) },
     generated: !!b.generated,
     edited: !!b.edited,
     scope: b.kind === 'shipyard' ? 'yard' : 'city',
@@ -490,12 +499,13 @@ export function buildPickMesh(THREE, model) {
       objs.push({ id: o.id, name: o.name, layer: layer.id, scope: o.scope, info: o.info, proxy: o.proxy, generated: o.generated, custom: o.custom });
       if (o.proxy.line) {
         const line = o.proxy.line;
+        const z0 = o.proxy.z0 || 0;
+        const h = z0 + o.proxy.h;
         for (let i = 0; i < line.length - 1; i++) {
           const a = line[i];
           const b = line[i + 1];
-          const h = o.proxy.h;
-          pushTri([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], h], k);
-          pushTri([a[0], a[1], 0], [b[0], b[1], h], [a[0], a[1], h], k);
+          pushTri([a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], h], k);
+          pushTri([a[0], a[1], z0], [b[0], b[1], h], [a[0], a[1], h], k);
         }
         continue;
       }

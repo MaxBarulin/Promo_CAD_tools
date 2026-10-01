@@ -162,6 +162,16 @@ assert.deepEqual(moved.custom.warnings, []);
   assert.ok(makeBuildingObject(editBuilding(plain, { windows: false })).sink.triangleCount() < makeBuildingObject(plain).sink.triangleCount());
 }
 
+// подъём и опускание (lift): здание, кран и модель — вместе с контуром выбора
+{
+  const lifted = buildModel(getTerritory(), { contextDetail: 'low', custom: prepareCustom({ buildings: { Z195: { lift: 4 }, C10: { lift: -1.5 } } }, []) });
+  assert.equal(find(lifted, 'Z195').o.proxy.z0, 4);
+  assert.equal(find(lifted, 'C10').o.proxy.z0, -1.5);
+  const minY = (o) => Math.min(...[...o.sink.bufs.values()].flatMap((b) => b.pos.filter((_, i) => i % 3 === 1)));
+  assert.ok(minY(find(lifted, 'Z195').o) > 3.9, 'здание поднято целиком');
+  assert.ok(Math.abs(placeModel({ hull: [[0, 0], [1, 0], [1, 1]], z0: 0, z1: 5 }, { lift: 2 }).transform.lift - 2) < 1e-9);
+}
+
 // поворот вокруг центра: точка (1, 0) от центра на 90° → (0, 1)
 const t = transformRing([[11, 5]], [10, 5], [2, 3], 90)[0];
 assert.ok(Math.hypot(t[0] - 12, t[1] - 9) < 1e-9);

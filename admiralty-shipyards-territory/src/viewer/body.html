@@ -20,48 +20,59 @@
       </button>
     </div>
     <div class="panel-scroll" id="paneControls" role="tabpanel" aria-labelledby="tabControls">
-      <section class="group">
-        <h2>Виды</h2>
-        <div class="views" id="views"></div>
-      </section>
-      <section class="group">
-        <h2>Слои</h2>
-        <div class="layers" id="layers"></div>
-      </section>
-      <section class="group">
-        <h2>Отображение</h2>
-        <label class="toggle"><input type="checkbox" id="optYardOnly" /><span class="box"></span>Только территория верфи</label>
-        <label class="toggle"><input type="checkbox" id="optLabels" checked /><span class="box"></span>Подписи</label>
-        <label class="toggle"><input type="checkbox" id="optShadows" checked /><span class="box"></span>Тени</label>
-        <label class="toggle"><input type="checkbox" id="optEvening" /><span class="box"></span>Вечернее освещение</label>
-      </section>
-      <section class="group">
-        <h2>Технический учёт</h2>
-        <button class="btn wide reg-open-btn" type="button" id="regOpen" aria-expanded="false" aria-controls="registry">Реестр зданий и сооружений</button>
-        <p class="reg-summary" id="regSummary"></p>
-      </section>
-      <section class="group" id="editGroup" hidden>
-        <h2>Редактирование</h2>
-        <div class="ed-tools">
-          <button class="btn" type="button" id="edNew">Новое здание</button>
-          <label class="btn ed-file" id="edNewGlbLabel">Новое из .glb<input type="file" id="edNewGlb" accept=".glb,model/gltf-binary" hidden /></label>
+      <details class="group" data-grp="views" open>
+        <summary><h2>Виды</h2></summary>
+        <div class="group-body">
+          <div class="views" id="views"></div>
         </div>
-        <p class="reg-summary" id="edSummary"></p>
-        <div class="ed-tools">
-          <button class="btn" type="button" id="edExport" title="Архив для папки custom/: custom.json и модели .glb">Скачать изменения</button>
-          <label class="btn ed-file" id="edImportLabel" title="Архив .zip или custom.json">Загрузить<input type="file" id="edImport" accept=".zip,.json,application/zip,application/json" hidden /></label>
-          <button class="btn" type="button" id="edReset">Отменить все</button>
+      </details>
+      <details class="group" data-grp="layers" open>
+        <summary><h2>Слои</h2></summary>
+        <div class="group-body">
+          <div class="layers" id="layers"></div>
         </div>
-        <p class="reg-summary" id="edStatus" aria-live="polite"></p>
-      </section>
-      <section class="group" id="exportGroup">
-        <h2>Экспорт</h2>
-        <div class="exports">
-          <button class="btn" type="button" id="expGLB" title="3D-модель glTF (Blender, 3ds Max, SketchUp, Revit через конвертер)">GLB</button>
-          <button class="btn" type="button" id="expDXF" title="Генплан DXF R12 (AutoCAD, nanoCAD, КОМПАС)">DXF</button>
-          <button class="btn" type="button" id="expGEO" title="Слои в WGS84 для QGIS / geojson.io">GeoJSON</button>
+      </details>
+      <details class="group" data-grp="display" open>
+        <summary><h2>Отображение</h2></summary>
+        <div class="group-body">
+          <label class="toggle"><input type="checkbox" id="optLabels" checked /><span class="box"></span>Подписи</label>
+          <label class="toggle"><input type="checkbox" id="optShadows" checked /><span class="box"></span>Тени</label>
+          <label class="toggle"><input type="checkbox" id="optEvening" /><span class="box"></span>Вечернее освещение</label>
         </div>
-      </section>
+      </details>
+      <details class="group" data-grp="registry" open>
+        <summary><h2>Технический учёт</h2></summary>
+        <div class="group-body">
+          <button class="btn wide reg-open-btn" type="button" id="regOpen" aria-expanded="false" aria-controls="registry">Реестр зданий и сооружений</button>
+          <p class="reg-summary" id="regSummary"></p>
+        </div>
+      </details>
+      <details class="group" data-grp="edit" open id="editGroup" hidden>
+        <summary><h2>Редактирование</h2></summary>
+        <div class="group-body">
+          <div class="ed-tools">
+            <button class="btn" type="button" id="edNew">Новое здание</button>
+            <label class="btn ed-file" id="edNewGlbLabel">Новое из .glb<input type="file" id="edNewGlb" accept=".glb,model/gltf-binary" hidden /></label>
+          </div>
+          <p class="reg-summary" id="edSummary"></p>
+          <div class="ed-tools">
+            <button class="btn" type="button" id="edExport" title="Архив для папки custom/: custom.json и модели .glb">Скачать изменения</button>
+            <label class="btn ed-file" id="edImportLabel" title="Архив .zip или custom.json">Загрузить<input type="file" id="edImport" accept=".zip,.json,application/zip,application/json" hidden /></label>
+            <button class="btn" type="button" id="edReset">Отменить все</button>
+          </div>
+          <p class="reg-summary" id="edStatus" aria-live="polite"></p>
+        </div>
+      </details>
+      <details class="group" data-grp="export" open id="exportGroup">
+        <summary><h2>Экспорт</h2></summary>
+        <div class="group-body">
+          <div class="exports">
+            <button class="btn" type="button" id="expGLB" title="3D-модель glTF (Blender, 3ds Max, SketchUp, Revit через конвертер)">GLB</button>
+            <button class="btn" type="button" id="expDXF" title="Генплан DXF R12 (AutoCAD, nanoCAD, КОМПАС)">DXF</button>
+            <button class="btn" type="button" id="expGEO" title="Слои в WGS84 для QGIS / geojson.io">GeoJSON</button>
+          </div>
+        </div>
+      </details>
       <p class="note" id="note"></p>
     </div>
     <div class="panel-pane" id="paneObjects" role="tabpanel" aria-labelledby="tabObjects" hidden>
@@ -88,7 +99,7 @@
 
   <section class="registry sheet" id="registry" hidden aria-label="Реестр зданий и сооружений"></section>
 
-  <div class="hint sheet" id="hint">Сдвиг — левая кнопка, вращение — правая (или Shift + левая), масштаб — колесо. Щелчок по объекту — сведения о нём, двойной щелчок — подлететь к нему.</div>
+  <div class="hint sheet" id="hint"><span>Сдвиг — левая кнопка, вращение — правая (или Shift + левая), масштаб — колесо. Щелчок по объекту — сведения о нём, двойной щелчок — подлететь к нему.</span><button class="icon-btn" type="button" id="hintClose" title="Скрыть подсказку" aria-label="Скрыть подсказку">×</button></div>
 
   <div class="hud">
     <div class="coords sheet" id="coords"><span>Курсор:</span> —</div>
