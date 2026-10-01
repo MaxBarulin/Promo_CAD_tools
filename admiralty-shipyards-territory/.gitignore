@@ -6,3 +6,4 @@ data/osm/raw*.json
 .DS_Store
 dist/artifact.html
 __pycache__/
+data/overture/*.parquet

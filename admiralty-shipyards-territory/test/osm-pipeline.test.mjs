@@ -5,11 +5,11 @@ import { readFile } from 'node:fs/promises';
 import { convertOverpass } from '../src/osm/convert.js';
 import { applyOverlay } from '../src/data/overlay.js';
 import { getTerritory } from '../src/data/index.js';
-import { ZONES } from '../src/data/shipyard.js';
+import { YARD_ZONES } from '../src/data/real.js';
 import { initModel, buildModel } from '../src/model/index.js';
 
 const json = JSON.parse(await readFile(new URL('./fixtures/overpass-sample.json', import.meta.url), 'utf8'));
-const ov = convertOverpass(json, { shipyardZones: ZONES.filter((z) => z.kind === 'shipyard').map((z) => z.polygon) });
+const ov = convertOverpass(json, { shipyardZones: YARD_ZONES.map((z) => z.polygon) });
 assert.equal(ov.buildings.length, 2);
 assert.equal(ov.buildings.filter((b) => b.kind === 'shipyard').length, 1, 'эллинг должен попасть на территорию верфи');
 assert.equal(ov.water.length, 2, 'Нева (мультиполигон из двух путей) и Фонтанка');

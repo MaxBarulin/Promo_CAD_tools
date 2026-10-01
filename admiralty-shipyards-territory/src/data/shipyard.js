@@ -47,7 +47,7 @@ function boxFromRect([cx, cy, w, h, angle], grow = 1.1) {
 // ---------- участки (зоны) ----------
 
 const pieceIdx = (cx) => MAP_PIECES.findIndex((p) => Math.abs(p.cxPx - cx) < 60);
-const PIECE_INFO = [
+export const PIECE_INFO = [
   { cx: 201, id: 'galerny', name: 'Галерный остров', label: px(185, 230) },
   { cx: 495, id: 'kolomna', name: 'Основная площадка', label: px(560, 420) },
   { cx: 896, id: 'matisov', name: 'Матисов остров', label: px(830, 380) },
@@ -75,7 +75,7 @@ const DECK_IDX = new Set([81]);
 // Стапели
 const SLIP_IDX = { 8: 'S1', 9: 'S2' };
 
-const NAMED = {
+export const NAMED = {
   200: { name: 'Главная проходная', info: 'Главная проходная у площади Репина (адрес предприятия: наб. реки Фонтанки, 203).', type: 'checkpoint', h: 8, floors: 2, wall: 'light', sign: true },
   199: { name: 'Павильон главной проходной', info: 'Крытый павильон у главной проходной.', type: 'checkpoint', h: 4, floors: 1, wall: 'light' },
   182: { name: 'Заводоуправление', info: 'Протяжённый административный корпус вдоль Лоцманской улицы (≈190 м).', type: 'office', h: 19, floors: 5, wall: 'sand' },
@@ -110,9 +110,9 @@ const NAMED = {
   50: { name: 'Служебный корпус', info: 'Вспомогательный корпус вдоль Невы.', type: 'office', h: 11, floors: 3, wall: 'light' },
 };
 
-const HALL_WALLS = ['blue_gray', 'light', 'panel', 'blue_gray', 'gray', 'blue', 'light', 'panel'];
-const OFFICE_WALLS = ['sand', 'cream', 'light', 'yellow'];
-const HALL_ROOFS = ['r_light', 'r_gray', 'r_light', 'r_blue'];
+export const HALL_WALLS = ['blue_gray', 'light', 'panel', 'blue_gray', 'gray', 'blue', 'light', 'panel'];
+export const OFFICE_WALLS = ['sand', 'cream', 'light', 'yellow'];
+export const HALL_ROOFS = ['r_light', 'r_gray', 'r_light', 'r_blue'];
 
 function classify(raw) {
   const named = NAMED[raw.index];
@@ -204,7 +204,7 @@ function classify(raw) {
   };
 }
 
-function defaultName(type, A) {
+export function defaultName(type, A) {
   if (type === 'hall') return A > 6000 ? 'Производственный корпус' : 'Цех';
   if (type === 'elling') return 'Эллинг';
   if (type === 'warehouse') return 'Склад';

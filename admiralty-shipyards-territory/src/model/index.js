@@ -38,6 +38,12 @@ export function initModel(THREE) {
 const prismProxy = (poly, z0, z1) => ({ poly: ensureCCW(poly), z0, z1 });
 const boxProxy = (at, angle, L, B, z0, z1) => prismProxy(rect(at[0], at[1], L, B, angle), z0, z1);
 
+const hashStr = (t) => {
+  let h = 7;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  return h % 100000;
+};
+
 export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {}) {
   const t0 = Date.now();
   const P = buildPlanar(data);
@@ -98,7 +104,8 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
   }
 
   // ---------- здания ----------
-  const explicit = data.buildings;
+  // contextDetail: 'low' — окружение без окон (для лёгкого экспорта)
+  const explicit = contextDetail === 'low' ? data.buildings.map((b) => (b.kind === 'context' ? { ...b, detail: 'low' } : b)) : data.buildings;
   const generated = frontage && data.frontage !== false ? generateFrontage(data, P, explicit, { contextDetail }) : [];
   for (const b of [...explicit, ...generated]) {
     const s = new Sink();
@@ -256,9 +263,15 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
         buildTree(s, p, h, 2.4 + R() * 1.6, keys[Math.floor(R() * 3)]);
       }
     };
+    // деревья в скверах и на газонах (с ограничением общего числа — модель смотрят и с телефона)
+    let budget = 1400;
     for (const a of data.areas) {
-      if (a.kind === 'garden') plant(scatterInPolygon(a.polygon, a.id === 'repina-garden' ? 12 : 9, a.id.length * 31 + 7, 3));
-      if (a.kind === 'lawn') plant(scatterInPolygon(a.polygon, 8, a.id.length * 13 + 3, 2), 6, 10);
+      if (budget <= 0) break;
+      const pts = a.kind === 'garden' ? scatterInPolygon(a.polygon, 11, hashStr(a.id) + 7, 3) : a.kind === 'lawn' ? scatterInPolygon(a.polygon, 14, hashStr(a.id) + 3, 3) : [];
+      const sel = pts.slice(0, Math.min(pts.length, budget, a.kind === 'lawn' ? 6 : 60));
+      budget -= sel.length;
+      if (a.kind === 'garden') plant(sel);
+      else plant(sel, 6, 10);
     }
     // аллеи вдоль улиц
     for (const id of ['rizhsky', 'peterhofsky', 'fontanka-s', 'sadovaya']) {

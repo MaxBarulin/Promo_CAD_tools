@@ -188,7 +188,7 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
     return 'none';
   };
 
-  for (const z of data.zones.filter((zz) => zz.kind === 'shipyard')) {
+  for (const z of [...new Map(data.zones.filter((zz) => zz.kind === 'shipyard').map((zz) => [zz.id, zz])).values()]) {
     for (const poly of P.zones[z.id] || []) {
       const ring = ensureCCW(poly[0]);
       const closed = [...ring, ring[0]];

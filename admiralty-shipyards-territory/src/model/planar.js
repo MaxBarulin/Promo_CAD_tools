@@ -112,7 +112,12 @@ export function buildPlanar(data) {
   const osmWater = data.water.osmPolygons;
   const riverFeatures = [];
   let water;
-  if (osmWater) {
+  const zoneMP = (z) => [[z.polygon.map((p) => [p[0], p[1]]), ...(z.holes || []).map((h) => h.map((p) => [p[0], p[1]]))]];
+  if (data.water.real) {
+    // реальная вода (Overture/OSM); территория верфи — всегда суша
+    const yardMP = safeUnion(data.zones.filter((z) => z.kind === 'shipyard').map(zoneMP));
+    water = cleanMP(inter(diff(safeUnion(data.water.real.map((poly) => [poly])), yardMP), bboxMP));
+  } else if (osmWater) {
     water = cleanMP(inter(safeUnion(osmWater.map(toMP)), bboxMP));
   } else {
     const base = safeUnion([toMP(data.water.neva.polygon), ...(data.water.map || []).map(toMP)]);
@@ -129,7 +134,10 @@ export function buildPlanar(data) {
 
   // --- зоны ---
   const zones = {};
-  for (const z of data.zones) zones[z.id] = cleanMP(inter(toMP(z.polygon), land));
+  for (const z of data.zones) {
+    const mp = cleanMP(inter(zoneMP(z), land));
+    zones[z.id] = zones[z.id] ? cleanMP(safeUnion([zones[z.id], mp])) : mp;
+  }
   const shipyardMP = safeUnion(data.zones.filter((z) => z.kind === 'shipyard').map((z) => zones[z.id]));
   const civilMP = safeUnion(data.zones.filter((z) => z.kind === 'civil').map((z) => zones[z.id]));
   const cityGround = cleanMP(diff(land, shipyardMP, civilMP));
@@ -182,7 +190,7 @@ export function buildPlanar(data) {
       neva: feature(water, { id: 'water' }),
       streets: streetFeatures,
       internal: internalFeatures,
-      zones: data.zones.map((z) => feature(zones[z.id], { id: z.id, kind: z.kind })),
+      zones: [...new Map(data.zones.map((z) => [z.id, z])).values()].map((z) => feature(zones[z.id], { id: z.id, kind: z.kind })),
       areas: areas.map((a) => feature(a.mp, { id: a.id, kind: a.kind })),
       bridges: bridgeFeatures,
     },

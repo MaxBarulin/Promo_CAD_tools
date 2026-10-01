@@ -6,14 +6,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { convertOverpass } from '../src/osm/convert.js';
-import { ZONES } from '../src/data/shipyard.js';
+import { YARD_ZONES } from '../src/data/real.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = path.join(root, 'src/data/osm-overlay.js');
 
 export async function convertFile(rawPath) {
   const json = JSON.parse(await readFile(rawPath, 'utf8'));
-  const ov = convertOverpass(json, { shipyardZones: ZONES.filter((z) => z.kind === 'shipyard').map((z) => z.polygon) });
+  const ov = convertOverpass(json, { shipyardZones: YARD_ZONES.map((z) => z.polygon) });
   const body = `// Сгенерировано scripts/osm-convert.mjs из ${path.relative(root, rawPath)} — не редактировать вручную.\n// Данные © участники OpenStreetMap, лицензия ODbL.\nexport default ${JSON.stringify(ov)};\n`;
   await writeFile(target, body);
   const yard = ov.buildings.filter((b) => b.kind === 'shipyard').length;

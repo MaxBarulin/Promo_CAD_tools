@@ -1,7 +1,7 @@
 // Генерация зданий: стены, цоколь, карнизы, кровли (плоская с парапетом, двускатная,
 // вальмовая, многопролётная), окна по этажам, двери и ворота, портики, вывески.
 
-import { ensureCCW, sub, add, mul, norm, len, dist, lerp, centroid, area } from '../geo.js';
+import { ensureCCW, ensureCW, sub, add, mul, norm, len, dist, lerp, centroid, area } from '../geo.js';
 import { dedupe } from './geom.js';
 
 // Смещение замкнутого контура (CCW) наружу на d (d < 0 — внутрь).
@@ -325,6 +325,7 @@ function portico(sink, a, b, pspec, h, roofKey, angle) {
 // ---------- здание целиком ----------
 
 export function buildBuilding(sink, b, extras = {}) {
+  if (b.holes && b.holes.length) return buildCourtyardBuilding(sink, b);
   const ring = ensureCCW(dedupe(b.poly));
   const h = b.h;
   const roof = b.roof || { type: 'flat' };
@@ -333,16 +334,16 @@ export function buildBuilding(sink, b, extras = {}) {
   const spec = windowSpec(b);
   const plinthH = b.type === 'hall' || b.type === 'warehouse' || b.type === 'elling' ? 0.5 : 0.75;
 
-  // цоколь
-  ledge(sink, 'plinth', ring, 0.07, 0, plinthH);
+  const low = b.detail === 'low';
+
+  // цоколь (у упрощённых домов окружения — без цоколя и карниза)
+  if (!low) ledge(sink, 'plinth', ring, 0.07, 0, plinthH);
 
   // стены
   for (let i = 0; i < ring.length; i++) sink.wall(wallKey, ring[i], ring[(i + 1) % ring.length], 0, h);
 
-  const low = b.detail === 'low';
-
   // карниз и междуэтажные тяги
-  if (HAS_CORNICE.has(b.type)) {
+  if (HAS_CORNICE.has(b.type) && !low) {
     const ext = b.type === 'office' || b.type === 'checkpoint' ? 0.12 : 0.32;
     ledge(sink, 'trim', ring, ext, h - 0.55, h - 0.03);
   }
@@ -413,6 +414,30 @@ export function buildBuilding(sink, b, extras = {}) {
   }
 }
 
+// Здание с внутренними дворами: стены по внешнему контуру и по дворам, плоская кровля.
+function buildCourtyardBuilding(sink, b) {
+  const outer = ensureCCW(dedupe(b.poly));
+  const holes = b.holes.map((h) => ensureCW(dedupe(h))).filter((h) => h.length >= 3);
+  const h = b.h;
+  const wallKey = b.wall || 'light';
+  const spec = windowSpec(b);
+  const low = b.detail === 'low';
+  if (!low) {
+    ledge(sink, 'plinth', outer, 0.07, 0, 0.75);
+    ledge(sink, 'trim', outer, 0.25, h - 0.55, h - 0.03);
+  }
+  for (const ring of [outer, ...holes]) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const c = ring[(i + 1) % ring.length];
+      sink.wall(wallKey, a, c, 0, h);
+      const dir = sub(c, a);
+      facade(sink, a, c, low ? null : spec, [], { h, angle: (Math.atan2(dir[1], dir[0]) * 180) / Math.PI, doorKey: 'door' });
+    }
+  }
+  sink.flat((b.roof && b.roof.color) || 'r_gray', outer, h, { holes });
+}
+
 export function buildingSummary(b) {
   const ring = ensureCCW(dedupe(b.poly));
   const c = centroid(ring);
@@ -430,6 +455,7 @@ export function buildingSummary(b) {
     dims: ring.length === 4 ? [+dist(ring[0], ring[1]).toFixed(1), +dist(ring[1], ring[2]).toFixed(1)] : null,
     center: c,
     approx: !!b.approx,
+    geomSrc: b.geomSrc,
   };
 }
 

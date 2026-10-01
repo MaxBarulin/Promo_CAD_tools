@@ -43,6 +43,7 @@ const full = process.argv.includes('--full');
 
 initModel(THREE);
 const data = getTerritory();
+if (noContext) data.buildings = data.buildings.filter((b) => b.kind !== 'context');
 const model = buildModel(data, { frontage: !noContext, contextDetail: full ? 'auto' : 'low' });
 const getMaterial = createMaterialFactory(THREE, { forExport: true });
 await mkdir(dist, { recursive: true });

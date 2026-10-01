@@ -139,12 +139,19 @@ export function buildRoads(sinkRoads, sinkMarks, data, P) {
     const n = [-d[1], d[0]];
     for (let k = -len / 2; k <= len / 2; k += 1.0) {
       const p = add(c, mul(d, k));
+      if (!inMP(p, P.carriageways)) continue;
       const a = add(p, mul(n, -width / 2));
       const b = add(p, mul(n, width / 2));
       sinkMarks.beam('marking', [a[0], a[1], Z.carriageway + 0.01], [b[0], b[1], Z.carriageway + 0.01], 0.5, 0.02);
     }
   };
   for (const z of data.crossings || []) {
+    if (z.line) {
+      const a = z.line[0];
+      const b = z.line[z.line.length - 1];
+      zebra(lerp(a, b, 0.5), sub(b, a), dist(a, b), 3.5);
+      continue;
+    }
     const st = data.streets.find((x) => x.id === z.street);
     if (!st) continue;
     const { p, dir } = pointAt(st.line, z.s);

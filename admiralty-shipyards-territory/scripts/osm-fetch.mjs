@@ -6,7 +6,7 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { BOUNDS } from '../src/data/water.js';
+import REAL from '../src/data/real-data.js';
 import { toLatLon } from '../src/geo.js';
 import { overpassQuery } from '../src/osm/convert.js';
 import { convertFile } from './osm-convert.mjs';
@@ -14,6 +14,7 @@ import { convertFile } from './osm-convert.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const url = process.env.OVERPASS_URL || 'https://overpass-api.de/api/interpreter';
 
+const BOUNDS = REAL.bounds;
 const [s, w] = toLatLon([BOUNDS.minX, BOUNDS.minY]);
 const [n, e] = toLatLon([BOUNDS.maxX, BOUNDS.maxY]);
 const query = overpassQuery([s, w, n, e]);

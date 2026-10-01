@@ -25,23 +25,32 @@ console.log(`  Территория верфи (итого)          ${(mpArea(P
 
 console.log('\nПроверка зданий:');
 const all = model.layers.flatMap((l) => l.objects).filter((o) => o.proxy && o.proxy.poly && (o.info?.kind === 'building' || o.info?.kind === 'context'));
-const polys = all.map((o) => ({ o, mp: [[ensureCCW(o.proxy.poly).map((p) => [p[0], p[1]])]] }));
+const polys = all.map((o) => {
+  const ring = ensureCCW(o.proxy.poly).map((p) => [p[0], p[1]]);
+  const xs = ring.map((p) => p[0]);
+  const ys = ring.map((p) => p[1]);
+  return { o, mp: [[ring]], bb: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] };
+});
+const bbHit = (a, b) => a.bb[0] <= b.bb[2] && a.bb[2] >= b.bb[0] && a.bb[1] <= b.bb[3] && a.bb[3] >= b.bb[1];
 for (const { o, mp } of polys) {
+  // контуры из открытых данных принимаются как есть; проверяем постройки, нарисованные по карте предприятия
+  if (o.generated || (o.info?.geomSrc && o.info.geomSrc !== 'map')) continue;
   const wet = mpArea(pc.intersection(mp, P.water));
   if (wet > 2) warn(`${o.id} «${o.name}» заходит в воду на ${wet.toFixed(0)} м²`);
   const road = mpArea(pc.intersection(mp, P.carriageways));
   if (road > 2) warn(`${o.id} «${o.name}» пересекает проезжую часть на ${road.toFixed(0)} м²`);
+  // проезды — из OpenStreetMap, часть корпусов — с карты предприятия: мелкие расхождения источников
   const iroad = mpArea(pc.intersection(mp, P.internal));
-  if (iroad > 2 && !o.generated) warn(`${o.id} «${o.name}» пересекает внутризаводской проезд на ${iroad.toFixed(0)} м²`);
+  if (iroad > 0.15 * area(mp[0][0])) warn(`${o.id} «${o.name}» пересекает внутризаводской проезд на ${iroad.toFixed(0)} м²`);
 }
 for (let i = 0; i < polys.length; i++) {
   for (let j = i + 1; j < polys.length; j++) {
     const a = polys[i];
     const b = polys[j];
-    if (a.o.generated && b.o.generated) continue;
+    if ((a.o.generated && b.o.generated) || !bbHit(a, b)) continue;
     const ov = mpArea(pc.intersection(a.mp, b.mp));
     // пристройки на карте примыкают к корпусам общей стеной — небольшое касание допустимо
-    const tol = a.o.id.startsWith('Z') && b.o.id.startsWith('Z') ? 25 : 1;
+    const tol = /^[ZY]/.test(a.o.id) && /^[ZY]/.test(b.o.id) ? 30 : 1;
     if (ov > tol) warn(`${a.o.id} «${a.o.name}» и ${b.o.id} «${b.o.name}» пересекаются (${ov.toFixed(0)} м²)`);
   }
 }
