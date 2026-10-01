@@ -1,0 +1,60 @@
+<div id="app">
+  <canvas id="scene" tabindex="0" aria-label="3D-модель территории АО «Адмиралтейские верфи»"></canvas>
+  <div id="labels"></div>
+
+  <header class="brand sheet">
+    <div class="eyebrow">Санкт-Петербург · наб. реки Фонтанки, 203</div>
+    <h1>Адмиралтейские верфи</h1>
+    <p>Цифровая модель территории: Галерный, Матисов и Ново-Адмиралтейский острова.</p>
+    <div class="facts" id="facts"></div>
+  </header>
+
+  <aside class="panel sheet" id="panel">
+    <button class="menu-toggle" id="menuToggle" type="button" aria-expanded="true">Виды и слои</button>
+    <div class="panel-scroll">
+      <section class="group">
+        <h2>Виды</h2>
+        <div class="views" id="views"></div>
+      </section>
+      <section class="group">
+        <h2>Слои</h2>
+        <div class="layers" id="layers"></div>
+      </section>
+      <section class="group">
+        <h2>Отображение</h2>
+        <label class="toggle"><input type="checkbox" id="optLabels" checked /><span class="box"></span>Подписи</label>
+        <label class="toggle"><input type="checkbox" id="optShadows" checked /><span class="box"></span>Тени</label>
+        <label class="toggle"><input type="checkbox" id="optEvening" /><span class="box"></span>Вечернее освещение</label>
+      </section>
+      <section class="group" id="exportGroup">
+        <h2>Экспорт</h2>
+        <div class="exports">
+          <button class="btn" type="button" id="expGLB" title="3D-модель glTF (Blender, 3ds Max, SketchUp, Revit через конвертер)">GLB</button>
+          <button class="btn" type="button" id="expDXF" title="Генплан DXF R12 (AutoCAD, nanoCAD, КОМПАС)">DXF</button>
+          <button class="btn" type="button" id="expGEO" title="Слои в WGS84 для QGIS / geojson.io">GeoJSON</button>
+        </div>
+      </section>
+      <p class="note" id="note"></p>
+    </div>
+  </aside>
+
+  <section class="card sheet" id="card" hidden aria-live="polite"></section>
+
+  <div class="hint sheet" id="hint">Вращение — левая кнопка, сдвиг — правая, масштаб — колесо. Щелчок по объекту — сведения о нём.</div>
+
+  <div class="hud">
+    <div class="coords sheet" id="coords"><span>Курсор:</span> —</div>
+    <button class="compass sheet" id="compass" type="button" title="Север вверх" aria-label="Повернуть картой на север">
+      <svg viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="20" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+        <path d="M22 5 L27 22 L22 19 L17 22 Z" fill="var(--signal)" />
+        <path d="M22 39 L27 22 L22 25 L17 22 Z" fill="currentColor" fill-opacity="0.35" />
+        <text x="22" y="16" text-anchor="middle" font-size="7" font-family="var(--font-data)" fill="var(--accent-ink)">С</text>
+      </svg>
+    </button>
+  </div>
+
+  <div class="loading" id="loading">
+    <div>Строим модель территории…<small id="loadingStep">подготовка данных</small></div>
+  </div>
+</div>
