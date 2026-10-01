@@ -10,6 +10,7 @@ import REAL from './real-data.js';
 import * as Y from './shipyard.js';
 import { MAP_BUILDINGS_RAW, MAP_PIECES, px } from './mapdata.js';
 import { minRect, hash, decorate } from './decorate.js';
+import { straighten } from '../model/straighten.js';
 import { PALETTE } from '../model/materials.js';
 import { ensureCCW, area, centroid, dist, sub, norm, add, mul, pointInRing, bbox, angleOf, polylineLength, pointAt } from '../geo.js';
 
@@ -135,6 +136,13 @@ function yardBuildings() {
     b.info = b.info.replace(/Контур — по карте предприятия[^.]*\./, '') + ` Контур — по карте предприятия (${note}). Высота оценена.`;
     b.zone = zoneOf(centroid(b.poly)) || b.zone;
     b.geomSrc = 'map';
+    // оцифровка карты даёт «дрожащие» стены — выпрямляем, если это не искажает корпус
+    // (прямоугольники карты уже ровные: у них ворота и кровля привязаны к сторонам)
+    const st = b.poly.length > 4 ? straighten(b.poly) : null;
+    if (st) {
+      b.poly = st;
+      if (st.length === 4) return decorate({ ...b, roofColor: b.roof?.color }, Y.NAMED[m.index]);
+    }
     return b;
   };
   let k = 0;
@@ -172,7 +180,8 @@ function yardBuildings() {
       zone,
       name,
       info: `${named?.info ? named.info + ' ' : ''}Контур — ${r.src === 'osm' ? 'OpenStreetMap' : 'Microsoft ML Buildings (распознавание космоснимков)'}, ${Math.round(len)}×${Math.round(wid)} м. ${r.h ? 'Высота — по OpenStreetMap.' : 'Высота оценена по площади и типу здания.'}`,
-      poly: r.ring,
+      // контуры, распознанные по космоснимкам, — с кривыми стенами; выпрямляем
+      poly: r.src === 'ml' && !r.holes?.length ? straighten(r.ring) || r.ring : r.ring,
       holes: r.holes,
       geomSrc: r.src,
       h,

@@ -593,6 +593,26 @@ function buildCourtyardBuilding(sink, b) {
 
 const SINGLE_STOREY = new Set(['hall', 'elling', 'elling_historic', 'warehouse']);
 
+// Части здания разной высоты (custom.json, parts): площадь этажей и объём — по частям.
+function partsSummary(b) {
+  const parts = b.parts.map((p) => {
+    const A = area(ensureCCW(dedupe(p.poly)));
+    const rh = p.roof && p.roof.type !== 'flat' ? (p.roof.h ?? 3) : 0;
+    const floors = p.floors || (SINGLE_STOREY.has(p.type) ? 1 : Math.max(1, Math.round(p.h / 3.4)));
+    return { A, floors, known: !!p.floors, vol: A * (p.h + rh / 2) };
+  });
+  const fl = parts.map((p) => p.floors);
+  const lo = Math.min(...fl);
+  const hi = Math.max(...fl);
+  return {
+    floorsText: lo === hi ? String(hi) : `${lo}–${hi}`,
+    totalArea: Math.round(parts.reduce((s, p) => s + p.A * p.floors, 0)),
+    volume: Math.round(parts.reduce((s, p) => s + p.vol, 0)),
+    floorsKnown: parts.every((p) => p.known),
+    parts: b.parts.length,
+  };
+}
+
 export function buildingSummary(b) {
   const ring = ensureCCW(dedupe(b.poly));
   const c = centroid(ring);
@@ -622,6 +642,7 @@ export function buildingSummary(b) {
     roof: b.roof?.type || 'flat',
     units: b.units,
     refined: b.refined,
+    ...(b.partsCustom ? partsSummary(b) : {}),
   };
 }
 

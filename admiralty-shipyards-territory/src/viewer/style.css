@@ -1432,3 +1432,31 @@ body.ed-picking #scene {
     transition: none;
   }
 }
+
+/* части здания разной высоты, башни */
+.ed-part {
+  display: grid;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.ed-part:last-child {
+  border-bottom: 0;
+}
+.ed-part-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.ed-part-head span {
+  color: var(--muted);
+  margin-right: auto;
+}
+.ed-part-head .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.ed-shape {
+  width: auto;
+}

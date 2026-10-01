@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { getTerritory } from '../src/data/index.js';
 import { initModel, buildModel, makeBuildingObject } from '../src/model/index.js';
-import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel, editBuilding } from '../src/model/custom.js';
+import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel, editBuilding, splitRing } from '../src/model/custom.js';
+import { straighten } from '../src/model/straighten.js';
 import { mergeGlb, placementTRS } from '../src/export/glb-merge.js';
 import { centroid, area } from '../src/geo.js';
 import { readCustomDir } from '../scripts/custom-files.mjs';
@@ -106,6 +107,39 @@ for (let i = 0; i < roofTris.idx.length; i += 3) {
   assert.ok(Math.max(...P.map((q) => q[2])) <= bar0.h + 4 + 1e-6, 'скаты не выше конька');
 }
 assert.ok(Math.abs(roofArea - area(bar0.poly)) < 1, 'кровля закрывает весь контур, все скаты смотрят вверх');
+
+// части разной этажности: разрез по линии, у каждой части свои этажи и высота
+const L = [[0, 0], [60, 0], [60, 15], [15, 15], [15, 50], [0, 50]];
+const halves = splitRing(L, [0, 20], [15, 20]);
+assert.deepEqual(halves.map((h) => Math.round(area(h))).sort((x, y) => x - y), [450, 975], 'режется только крыло, через которое проведена линия');
+const z197 = src.find((b) => b.id === 'Z197');
+const [cx197, cy197] = centroid(z197.poly);
+const cut = splitRing(z197.poly, [cx197 - 2, cy197 - 40], [cx197 + 2, cy197 + 40]);
+const parted = makeBuildingObject(editBuilding(z197, { parts: [{ poly: cut[0] }, { poly: cut[1], floors: 2, height: 7 }] }));
+assert.equal(parted.info.floorsText, `2–${z197.floors}`);
+assert.ok(Math.abs(parted.info.footprint - Math.round(area(z197.poly))) <= 1, 'площадь застройки — по всему контуру');
+// башня: части только «сверху» — основной объём остаётся
+const tower = makeBuildingObject(editBuilding(z197, { parts: [{ circle: { x: cx197, y: cy197, r: 3 }, height: 30, roof: 'flat' }] }));
+assert.equal(tower.info.height, 30);
+assert.ok(tower.sink.triangleCount() > makeBuildingObject(z197).sink.triangleCount() * 0.8, 'основной объём здания на месте');
+// выпрямление стен: дрожащий прямоугольник становится прямоугольником
+const wobbly = [[0, 0], [20, 0.4], [40, -0.3], [60, 0.2], [60.4, 20], [30, 19.6], [0.3, 20.2]];
+const st = straighten(wobbly);
+assert.equal(st.length, 4);
+assert.ok(Math.abs(area(st) - 1200) < 25);
+
+// сдвиг и поворот прочих объектов: дымовая труба и кран — в модели и в данных (DXF, GeoJSON)
+const dataM = getTerritory();
+const ch0 = dataM.chimneys.find((c) => c.id === 'CH1').at;
+const a11 = dataM.cranes.find((c) => c.id === 'C11').angle;
+const moved = buildModel(dataM, { contextDetail: 'low', custom: prepareCustom({ buildings: { CH1: { move: [10, 5] }, C11: { rotate: 30 } } }, []) });
+const chObj = find(moved, 'CH1').o;
+const [mx, my] = centroid(chObj.proxy.poly);
+assert.ok(Math.hypot(mx - ch0[0] - 10, my - ch0[1] - 5) < 0.01, 'труба сдвинута');
+assert.ok(Math.hypot(dataM.chimneys.find((c) => c.id === 'CH1').at[0] - ch0[0] - 10, dataM.chimneys.find((c) => c.id === 'CH1').at[1] - ch0[1] - 5) < 0.01, 'и в данных');
+assert.ok(Math.abs(dataM.cranes.find((c) => c.id === 'C11').angle - a11 - 30) < 1e-9, 'кран повёрнут');
+assert.equal(getTerritory().cranes.find((c) => c.id === 'C11').angle, a11, 'исходные данные не меняются');
+assert.deepEqual(moved.custom.warnings, []);
 
 // поворот вокруг центра: точка (1, 0) от центра на 90° → (0, 1)
 const t = transformRing([[11, 5]], [10, 5], [2, 3], 90)[0];

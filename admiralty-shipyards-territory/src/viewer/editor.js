@@ -9,13 +9,15 @@
 //   • локальный файл — этот браузер (localStorage, модели — IndexedDB).
 // «Скачать изменения» — архив для папки custom/: после сборки правки становятся частью модели.
 
-import { BUILDING_TYPES, WALLS, ROOF_TYPES, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb } from '../model/custom.js';
+import { BUILDING_TYPES, WALLS, ROOF_TYPES, ROOF_COLORS, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb, transformRing, partRing, splitRing, moveObject, moveDataItem, objectPivot, NEW_LAYERS, LAYER_KIND } from '../model/custom.js';
+import { straighten } from '../model/straighten.js';
 import { makeBuildingObject, buildingLayer } from '../model/index.js';
 import { buildingSummary } from '../model/buildings.js';
 import { Sink } from '../model/geom.js';
 import { PALETTE } from '../model/materials.js';
 import { zipStore, unzipFiles } from '../registry/xlsx.js';
-import { centroid } from '../geo.js';
+import { centroid, area, pointInRing, ensureCCW } from '../geo.js';
+import pc from 'polygon-clipping';
 
 const LS_KEY = 'admiralty-edits-v1';
 const TYPE_NAMES = {
@@ -28,10 +30,11 @@ const TYPE_NAMES = {
   utility: 'Вспомогательное здание',
   historic: 'Историческое здание',
 };
-const EDITABLE_KINDS = new Set(['building', 'context', 'crane', 'vessel', 'dock', 'slipway', 'bridge', 'fence', 'chimney', 'landmark']);
+const EDITABLE_KINDS = new Set(['building', 'context', 'crane', 'vessel', 'dock', 'slipway', 'bridge', 'fence', 'chimney', 'landmark', 'misc']);
 const BUILDING_KINDS = new Set(['building', 'context']);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const wallName = (k) => (PALETTE[k]?.name || k).replace(/^Стена_/, '').replace(/_/g, ' ');
+const roofColorName = (k) => (k ? (PALETTE[k]?.name || k).replace(/^Кровля_/, '').replace(/_/g, ' ') : '');
 const round = (v, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
 const has = (v) => v !== undefined && v !== null && v !== '';
 
@@ -152,8 +155,8 @@ export function setupEditor(api) {
         layerId = oo.layerId;
       } else {
         const b = modelBuilding(id, m, e, ctx);
-        layerId = buildingLayer(b);
-        obj = { id, name: b.name, sink: new Sink(), custom: m.file, transform: m.transform, info: { ...buildingSummary(b), kind: layerId === 'shipyard' ? 'building' : 'context' }, proxy: { poly: m.hull, z0: m.z0, z1: m.z1 }, scope: b.kind === 'shipyard' ? 'yard' : 'city' };
+        layerId = NEW_LAYERS[e?.layer] ? e.layer : buildingLayer(b);
+        obj = { id, name: b.name, sink: new Sink(), custom: m.file, transform: m.transform, info: { ...buildingSummary(b), kind: LAYER_KIND[layerId] }, proxy: { poly: m.hull, z0: m.z0, z1: m.z1 }, scope: b.kind === 'shipyard' ? 'yard' : 'city' };
       }
     } else if (orig) {
       const b = lowDetail(editBuilding(orig, e));
@@ -167,7 +170,7 @@ export function setupEditor(api) {
       layerId = buildingLayer(b);
     } else if (origObjects.has(id)) {
       const oo = origObjects.get(id);
-      obj = patchInfo(oo.o, e);
+      obj = patchInfo(moveObject(oo.o, e), e);
       layerId = oo.layerId;
     }
     if (!obj) return dirty;
@@ -178,7 +181,16 @@ export function setupEditor(api) {
   }
   // данные кранов, судов, мостов… — без удалённых (по ним строятся DXF и GeoJSON)
   function syncData() {
-    for (const k of DATA_KEYS) if (k !== 'buildings' && origData[k]) data[k] = origData[k].filter((o) => !isRemoved(o.id) && !(o.onSlip && isRemoved(o.onSlip)) && !(o.onDock && isRemoved(o.onDock)));
+    for (const k of DATA_KEYS) {
+      if (k === 'buildings' || !origData[k]) continue;
+      data[k] = origData[k]
+        .filter((o) => !isRemoved(o.id) && !(o.onSlip && isRemoved(o.onSlip)) && !(o.onDock && isRemoved(o.onDock)))
+        .map((o) => {
+          const e = effective(o.id);
+          const oo = origObjects.get(o.id)?.o;
+          return e && (e.move || e.rotate) && oo && !modelFor(o.id) ? moveDataItem(o, objectPivot((oo.unmoved || oo).proxy), e) : o;
+        });
+    }
   }
   function applyMany(ids, selectId) {
     const dirty = new Set();
@@ -300,10 +312,14 @@ export function setupEditor(api) {
     const cur = findObject(id);
     const mdl = preset?.model || modelFor(id);
     const isBuilding = !cur || BUILDING_KINDS.has(cur.o.info?.kind) || !!effective(id)?.box;
+    const oo = origObjects.get(id)?.o;
+    // двигать и заменять моделью можно любой объект с контуром выбора: краны, трубы, суда, мосты…
+    const movable = isBuilding || !!mdl || !!(oo && objectPivot((oo.unmoved || oo).proxy));
     session = {
       id,
       isNew: !cur,
       isBuilding,
+      movable,
       draft: preset?.draft || { ...(effective(id) || {}) },
       hadUnits: !!(effective(id)?.units || cur?.o.info?.units?.length),
       model: preset?.model || null, // новая модель .glb (ещё не сохранена)
@@ -313,7 +329,7 @@ export function setupEditor(api) {
       holder: null,
     };
     // здание на время правки рисуется отдельно (предпросмотр); у кранов, судов и т. п. правятся только сведения
-    if (cur && isBuilding) {
+    if (cur && movable) {
       api.rebuildLayers([cur.layer.id], new Set([id]));
       api.setModelVisible(id, false);
       api.setSignsVisible(id, false);
@@ -377,6 +393,11 @@ export function setupEditor(api) {
       const obj = makeBuildingObject(boxBuilding(session.id, e, ctx));
       return { kind: 'building', obj, proxy: obj.proxy };
     }
+    const oo = origObjects.get(session.id)?.o;
+    if (oo && session.movable) {
+      const obj = moveObject(oo, e);
+      return { kind: 'object', obj, proxy: obj.proxy };
+    }
     const cur = findObject(session.id);
     return { kind: 'other', proxy: cur?.o.proxy || null };
   }
@@ -387,7 +408,7 @@ export function setupEditor(api) {
       session.preview.traverse((c) => c.geometry && c.geometry.dispose());
       session.preview = null;
     }
-    if (st.kind === 'building') {
+    if (st.kind === 'building' || st.kind === 'object') {
       const g = new THREE.Group();
       for (const { key, geometry } of st.obj.sink.toGeometries(THREE)) {
         const mesh = new THREE.Mesh(geometry, getMaterial(key));
@@ -410,6 +431,8 @@ export function setupEditor(api) {
     const s = session;
     session = null;
     pickPoint = false;
+    splitPts = null;
+    pickPart = -1;
     document.body.classList.remove('ed-picking');
     if (s.preview) {
       scene.remove(s.preview);
@@ -417,7 +440,7 @@ export function setupEditor(api) {
     }
     if (s.holder) scene.remove(s.holder);
     api.highlightProxy(null);
-    if (restore && s.layerId && s.isBuilding) {
+    if (restore && s.layerId && s.movable) {
       api.rebuildLayers([s.layerId]);
       api.setModelVisible(s.id, true);
       api.setSignsVisible(s.id, true);
@@ -430,8 +453,10 @@ export function setupEditor(api) {
     const mdl = currentModel();
     if (mdl) return { pivot: centroid(mdl.a.hull) };
     const orig = origBuildings.get(session.id);
-    if (orig) return { pivot: centroid(orig.poly) };
-    return null;
+    if (orig) return { pivot: centroid(session.draft.poly || orig.poly) };
+    const oo = origObjects.get(session.id)?.o;
+    const pivot = oo && objectPivot((oo.unmoved || oo).proxy);
+    return pivot ? { pivot } : null;
   }
   function getPos() {
     const e = session.draft;
@@ -485,6 +510,153 @@ export function setupEditor(api) {
     setPos(p.x, p.y, p.rot + sign * (+($('edAStep')?.value || 5)) * k);
   }
 
+  // ---------- контур и части ----------
+  // Контур (poly) и части (parts) хранятся в исходном положении здания — до сдвига и поворота.
+  const r2 = (p) => [round(p[0], 2), round(p[1], 2)];
+  function baseRing() {
+    return session.draft.poly || origBuildings.get(session.id)?.poly || null;
+  }
+  function toWorld(p) {
+    const e = session.draft;
+    return transformRing([p], centroid(baseRing()), e.move, e.rotate)[0];
+  }
+  function toBase(p) {
+    const e = session.draft;
+    const [dx, dy] = e.move || [0, 0];
+    return transformRing([[p[0] - dx, p[1] - dy]], centroid(baseRing()), [0, 0], -(e.rotate || 0))[0];
+  }
+  const isTower = (p) => !!(p.circle || p.box);
+  let splitPts = null; // точки линии разреза (на карте)
+  let pickPart = -1; // башня, которую ставим щелчком
+  function setTool(name) {
+    splitPts = name === 'split' ? [] : null;
+    pickPart = typeof name === 'number' ? name : -1;
+    if (name !== 'pick') pickPoint = false;
+    document.body.classList.toggle('ed-picking', !!name);
+    const f = $('edForm');
+    if (f) {
+      f.querySelector('[data-act="split"]')?.setAttribute('aria-pressed', String(name === 'split'));
+      f.querySelector('[data-act="pick"]')?.setAttribute('aria-pressed', String(name === 'pick'));
+    }
+  }
+  function doSplit(a, b) {
+    const e = session.draft;
+    const A = toBase(a);
+    const B = toBase(b);
+    const m = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
+    const parts = e.parts?.length ? e.parts.map((p) => ({ ...p })) : [{ poly: baseRing().map(r2) }];
+    const i = parts.findIndex((p) => p.poly && pointInRing(m, ensureCCW(p.poly)));
+    if (i < 0) return msg('Середина линии должна быть внутри здания — проведите её поперёк нужной части.');
+    const halves = splitRing(parts[i].poly, A, B);
+    if (!halves) return msg('Не удалось разрезать: линия должна пересекать здание.');
+    const { poly, ...rest } = parts[i];
+    parts.splice(i, 1, { ...rest, poly: halves[0].map(r2) }, { ...rest, poly: halves[1].map(r2) });
+    e.parts = parts;
+    updatePreview();
+    renderForm();
+    msg(`Здание разделено: ${parts.filter((p) => p.poly).length} части. Задайте этажность и высоту каждой.`);
+  }
+  // убрать часть: соседняя часть забирает её площадь
+  function dropPart(i) {
+    const e = session.draft;
+    const parts = e.parts.map((p) => ({ ...p }));
+    const [gone] = parts.splice(i, 1);
+    if (gone.poly) {
+      let best = -1;
+      let merged = null;
+      parts.forEach((p, j) => {
+        if (!p.poly || best >= 0) return;
+        try {
+          const u = pc.union([ensureCCW(gone.poly)], [ensureCCW(p.poly)]);
+          if (u.length === 1 && u[0].length === 1) [best, merged] = [j, u[0][0].slice(0, -1)];
+        } catch {
+          /* не соседи */
+        }
+      });
+      if (best >= 0) parts[best].poly = ensureCCW(merged).map(r2);
+    }
+    if (parts.filter((p) => p.poly).length <= 1 && !parts.some(isTower)) delete e.parts;
+    else e.parts = parts;
+    updatePreview();
+    renderForm();
+  }
+  function partsHtml() {
+    const e = session.draft;
+    const fl = e.floors ?? origBuildings.get(session.id)?.floors ?? '';
+    return (e.parts || [])
+      .map((p, i) => {
+        const tower = isTower(p);
+        const ring = partRing(p);
+        const A = ring ? Math.round(area(ring)) : 0;
+        const n = (e.parts || []).slice(0, i + 1).filter((q) => !isTower(q)).length;
+        const roofs = `<option value="">${tower ? '—' : 'как у здания'}</option>${Object.entries(ROOF_TYPES).map(([k, v]) => `<option value="${k}"${p.roof === k ? ' selected' : ''}>${esc(v)}</option>`).join('')}`;
+        let place = '';
+        if (tower) {
+          const c = p.circle ? [p.circle.x, p.circle.y] : [p.box.x, p.box.y];
+          const w = toWorld(c);
+          place = `<div class="ed-3">
+            <label class="ed-f">X, м<input class="field" data-p="x" type="number" step="any" value="${round(w[0])}" /></label>
+            <label class="ed-f">Y, м<input class="field" data-p="y" type="number" step="any" value="${round(w[1])}" /></label>
+            <label class="ed-f">${p.circle ? 'Диаметр' : 'Сторона'}, м<input class="field" data-p="size" type="number" min="1" step="any" value="${round(p.circle ? p.circle.r * 2 : p.box.length)}" /></label>
+          </div>
+          <div class="ed-row"><select class="field ed-shape" data-p="shape" aria-label="Форма башни"><option value="circle"${p.circle ? ' selected' : ''}>Круглая</option><option value="box"${p.box ? ' selected' : ''}>Квадратная</option></select>
+          <button type="button" class="btn" data-act="pickpart" data-i="${i}" aria-pressed="${pickPart === i}">Указать на карте</button></div>`;
+        }
+        return `<div class="ed-part" data-i="${i}">
+          <div class="ed-part-head"><b>${tower ? 'Башня' : `Часть ${n}`}</b><span>${A.toLocaleString('ru-RU')} м²</span><button type="button" class="icon-btn" data-act="delpart" data-i="${i}" title="${tower ? 'Убрать башню' : 'Присоединить к соседней части'}" aria-label="Убрать">×</button></div>
+          <div class="ed-3">
+            <label class="ed-f">Этажей<input class="field" data-p="floors" type="number" min="1" max="60" step="1" value="${esc(p.floors ?? '')}" placeholder="${tower ? '' : esc(fl)}" /></label>
+            <label class="ed-f">Высота, м<input class="field" data-p="height" type="number" min="1" max="200" step="any" value="${esc(p.height ?? '')}" placeholder="${tower ? '' : 'как у здания'}" /></label>
+            <label class="ed-f">Кровля<select class="field" data-p="roof">${roofs}</select></label>
+          </div>
+          ${place}
+        </div>`;
+      })
+      .join('');
+  }
+  function onPartInput(t) {
+    const row = t.closest('.ed-part');
+    const i = +row.dataset.i;
+    const e = session.draft;
+    const p = { ...e.parts[i] };
+    const k = t.dataset.p;
+    const v = t.value;
+    if (k === 'floors') v ? (p.floors = Math.max(1, Math.round(+v))) : delete p.floors;
+    else if (k === 'height') +v >= 1 ? (p.height = +v) : !v && delete p.height;
+    else if (k === 'roof') v ? (p.roof = v) : delete p.roof;
+    else if (k === 'x' || k === 'y' || k === 'size' || k === 'shape') {
+      const c0 = p.circle ? [p.circle.x, p.circle.y] : [p.box.x, p.box.y];
+      const size0 = p.circle ? p.circle.r * 2 : p.box.length;
+      let c = c0;
+      let size = size0;
+      if ((k === 'x' || k === 'y') && v !== '' && Number.isFinite(+v)) {
+        const w = toWorld(c0);
+        w[k === 'x' ? 0 : 1] = +v;
+        c = r2(toBase(w));
+      }
+      if (k === 'size' && +v >= 1) size = +v;
+      const shape = k === 'shape' ? v : p.circle ? 'circle' : 'box';
+      delete p.circle;
+      delete p.box;
+      if (shape === 'circle') p.circle = { x: c[0], y: c[1], r: round(size / 2, 2) };
+      else p.box = { x: c[0], y: c[1], length: size, width: size, angle: 0 };
+    } else return;
+    e.parts = e.parts.map((q, j) => (j === i ? p : q));
+    updatePreview();
+    if (k === 'shape') renderForm();
+    else {
+      const A = partRing(p) ? Math.round(area(partRing(p))) : 0;
+      row.querySelector('.ed-part-head span').textContent = `${A.toLocaleString('ru-RU')} м²`;
+    }
+  }
+  function highlightPart(i) {
+    const p = session?.draft.parts?.[i];
+    const ring = p && partRing(p);
+    if (!ring) return api.highlightProxy(session?.state?.proxy || null);
+    const h = +(p.height ?? session.draft.height ?? origBuildings.get(session.id)?.h ?? 10);
+    api.highlightProxy({ poly: ensureCCW(ring.map(toWorld)), z0: 0, z1: h });
+  }
+
   // ---------- форма ----------
   function renderForm() {
     const card = $('card');
@@ -497,7 +669,7 @@ export function setupEditor(api) {
     const orig = origBuildings.get(s.id);
     const mdl = currentModel();
     const procedural = !mdl && (orig || e.box);
-    const pos = s.isBuilding ? getPos() : null;
+    const pos = s.movable ? getPos() : null;
     const typeVal = e.type || info.type || (e.box ? 'warehouse' : '');
     const hVal = e.height ?? (procedural ? (orig ? orig.h : 10) : '');
     const wallVal = e.wall || orig?.wall || '';
@@ -525,6 +697,7 @@ export function setupEditor(api) {
           <label class="ed-f">Кровля<select class="field" name="roof">${!ROOF_TYPES[roofVal] ? `<option value="" selected>${roofVal ? 'прежняя' : '—'}</option>` : ''}${Object.entries(ROOF_TYPES).map(([k, n]) => `<option value="${k}"${k === roofVal ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
           <label class="ed-f">Высота кровли, м<input class="field" name="roofH" type="number" min="0" max="60" step="any" placeholder="авто" value="${esc(e.roofH ?? '')}" /></label>
         </div>
+        <label class="ed-f">Покрытие кровли<select class="field" name="roofColor"><option value="">${esc(orig?.roof?.color ? `прежнее: ${roofColorName(orig.roof.color)}` : 'прежнее')}</option>${ROOF_COLORS.map((k) => `<option value="${k}"${k === e.roofColor ? ' selected' : ''}>${esc(roofColorName(k))}</option>`).join('')}</select></label>
         <p class="ed-hint" id="edRoofHint"${st.obj?.info.dims ? ' hidden' : ''}>Контур не прямоугольный: двускатная и вальмовая кровли пойдут скатами по контуру, остальные — плоской.</p>` : ''}` : ''}
         <label class="ed-f">Описание<textarea class="field" name="info" rows="3">${esc(e.info ?? info.info ?? '')}</textarea></label>
         <label class="ed-f">Уточнено по<input class="field" name="src" placeholder="фото, обмер, документ — откуда сведения" value="${esc(e.src ?? info.refined ?? '')}" /></label>
@@ -562,8 +735,22 @@ export function setupEditor(api) {
           <button type="button" class="btn" data-act="pick" aria-pressed="false">Указать центр на карте</button>
           <p class="ed-hint">Клавиатура: стрелки — сдвиг (Shift — шаг ×10), Q и E — поворот, Enter — сохранить, Esc — отмена.</p>
         </fieldset>` : ''}
-        ${s.isBuilding ? `
+        ${s.isBuilding && procedural && orig ? `
+        <fieldset class="ed-parts"><legend>Контур и части</legend>
+          ${!e.parts?.some((p) => p.poly) ? `<div class="ed-row">
+            <button type="button" class="btn" data-act="straighten">Выпрямить стены</button>
+            ${e.poly ? '<button type="button" class="btn" data-act="origpoly">Вернуть исходный контур</button>' : ''}
+          </div>` : ''}
+          <div id="edParts">${partsHtml()}</div>
+          <div class="ed-row">
+            <button type="button" class="btn" data-act="split" aria-pressed="${!!splitPts}">Разделить линией</button>
+            <button type="button" class="btn" data-act="tower">Добавить башню</button>
+          </div>
+          <p class="ed-hint">Если у здания части разной этажности, нажмите «Разделить линией» и щёлкните две точки на карте поперёк здания — по линии раздела. У каждой части — своя этажность, высота и кровля; × присоединяет часть обратно к соседней. «Выпрямить стены» убирает кривизну и мелкие уступы контура.</p>
+        </fieldset>` : ''}
+        ${s.movable ? `
         <fieldset class="ed-model"><legend>Модель</legend>
+          ${!orig && !origObjects.has(s.id) ? `<label class="ed-f">Слой<select class="field" name="layer"><option value="">по месту: здания верфи или город</option>${Object.entries(NEW_LAYERS).map(([k, v]) => `<option value="${k}"${k === e.layer ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select></label>` : ''}
           <p class="ed-now">Сейчас: ${modelLine}</p>
           <div class="ed-row">
             <label class="btn ed-file">Заменить моделью .glb<input type="file" accept=".glb,model/gltf-binary" hidden data-act="glb" /></label>
@@ -609,6 +796,7 @@ export function setupEditor(api) {
     f.addEventListener('input', (ev) => {
       const t = ev.target;
       if (t.dataset.u) return onUnit(t);
+      if (t.dataset.p) return t.tagName === 'SELECT' ? undefined : onPartInput(t);
       const k = t.name;
       if (!k) return;
       if (k === 'name' || k === 'info' || k === 'src') setField(k, t.value.trim());
@@ -635,10 +823,13 @@ export function setupEditor(api) {
     f.addEventListener('change', (ev) => {
       const t = ev.target;
       if (t.dataset.u) return onUnit(t);
+      if (t.dataset.p) return t.tagName === 'SELECT' ? onPartInput(t) : undefined;
       if (t.name === 'type') {
         setField('type', t.value);
         updatePreview();
-      } else if (t.name === 'wall' || t.name === 'roof') {
+      } else if (t.name === 'layer') {
+        setField('layer', t.value);
+      } else if (t.name === 'wall' || t.name === 'roof' || t.name === 'roofColor') {
         setField(t.name, t.value);
         updatePreview();
       } else if (t.dataset.act === 'glb') loadModelFile(t.files && t.files[0], t);
@@ -658,10 +849,42 @@ export function setupEditor(api) {
         e.units = e.units.filter((_, i) => i !== +b.dataset.i);
         renderUnits();
       } else if (b.dataset.act === 'pick') {
-        pickPoint = !pickPoint;
-        b.setAttribute('aria-pressed', String(pickPoint));
-        document.body.classList.toggle('ed-picking', pickPoint);
+        const on = !pickPoint;
+        setTool(on ? 'pick' : null);
+        pickPoint = on;
         msg(pickPoint ? 'Щёлкните по карте — туда встанет центр здания.' : '');
+      } else if (b.dataset.act === 'split') {
+        const on = !splitPts;
+        setTool(on ? 'split' : null);
+        msg(on ? 'Щёлкните первую точку линии раздела — по одну сторону здания.' : '');
+      } else if (b.dataset.act === 'tower') {
+        const c = centroid(baseRing());
+        const h = +(e.height ?? origBuildings.get(session.id)?.h ?? 10);
+        e.parts = [...(e.parts || []), { circle: { x: round(c[0], 2), y: round(c[1], 2), r: 3.5 }, height: round(h + 8), roof: 'flat' }];
+        updatePreview();
+        renderForm();
+        msg('Башня поставлена в центр здания: задайте место (координатами или «Указать на карте»), размер и высоту.');
+      } else if (b.dataset.act === 'pickpart') {
+        const i = +b.dataset.i;
+        setTool(pickPart === i ? null : i);
+        b.setAttribute('aria-pressed', String(pickPart === i));
+        msg(pickPart === i ? 'Щёлкните по карте — туда встанет башня.' : '');
+      } else if (b.dataset.act === 'delpart') {
+        dropPart(+b.dataset.i);
+      } else if (b.dataset.act === 'straighten') {
+        const ring = baseRing();
+        const r = straighten(ring);
+        if (!r) msg('Выпрямить автоматически не получилось: контур слишком сложный или сильно искажён. Его можно заменить моделью из Blender.');
+        else {
+          e.poly = r.map(r2);
+          updatePreview();
+          renderForm();
+          msg(`Стены выпрямлены: вершин было ${ring.length}, стало ${r.length}. Не понравится — «Вернуть исходный контур».`);
+        }
+      } else if (b.dataset.act === 'origpoly') {
+        delete e.poly;
+        updatePreview();
+        renderForm();
       } else if (b.dataset.act === 'dropmodel') {
         session.model = null;
         session.dropModel = true;
@@ -675,6 +898,16 @@ export function setupEditor(api) {
         if (armed(b, 'Точно вернуть как было?')) revert();
       }
     });
+    const partsBox = $('edParts');
+    if (partsBox) {
+      const over = (ev) => {
+        const row = ev.target.closest?.('.ed-part');
+        highlightPart(row ? +row.dataset.i : -1);
+      };
+      partsBox.addEventListener('mouseover', over);
+      partsBox.addEventListener('focusin', over);
+      partsBox.addEventListener('mouseleave', () => highlightPart(-1));
+    }
     card.querySelector('.card-tools [data-act="cancel"]').addEventListener('click', cancel);
     f.addEventListener('submit', (ev) => {
       ev.preventDefault();
@@ -694,7 +927,7 @@ export function setupEditor(api) {
       const B = data.meta.bounds;
       const outside = c[0] < B.minX || c[0] > B.maxX || c[1] < B.minY || c[1] > B.maxY;
       const cur = findObject(session.id);
-      const target = cur ? centroid(cur.o.proxy.poly) : session.draft.box ? [session.draft.box.x, session.draft.box.y] : null;
+      const target = cur ? objectPivot(cur.o.proxy) : session.draft.box ? [session.draft.box.x, session.draft.box.y] : null;
       delete session.draft.box;
       if (outside && target) session.draft.move = [round(target[0] - c[0], 2), round(target[1] - c[1], 2)];
       else delete session.draft.move;
@@ -926,7 +1159,7 @@ export function setupEditor(api) {
       cancel();
       return;
     }
-    if (typing || !session.isBuilding) return;
+    if (typing || !session.movable) return;
     const k = ev.shiftKey ? 10 : 1;
     const map = { ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
     if (map[ev.key]) {
@@ -983,6 +1216,28 @@ export function setupEditor(api) {
     // щелчок по карте во время правки: точка для центра здания
     onCanvasClick(point) {
       if (!session) return false;
+      if (splitPts && point) {
+        splitPts.push(point);
+        if (splitPts.length === 1) msg('Теперь вторая точка — по другую сторону здания.');
+        else {
+          const [a, b] = splitPts;
+          setTool(null);
+          doSplit(a, b);
+        }
+        return true;
+      }
+      if (pickPart >= 0 && point) {
+        const i = pickPart;
+        const p = { ...session.draft.parts[i] };
+        const c = r2(toBase(point));
+        if (p.circle) p.circle = { ...p.circle, x: c[0], y: c[1] };
+        else p.box = { ...p.box, x: c[0], y: c[1] };
+        session.draft.parts = session.draft.parts.map((q, j) => (j === i ? p : q));
+        setTool(null);
+        updatePreview();
+        renderForm();
+        return true;
+      }
       if (pickPoint && point) {
         const p = getPos();
         if (p) setPos(point[0], point[1], p.rot);

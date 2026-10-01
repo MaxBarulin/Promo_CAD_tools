@@ -297,6 +297,29 @@ export class Sink {
     }
   }
 
+  // Копия, повёрнутая на rotate° (против часовой стрелки на плане) вокруг точки pivot и сдвинутая на move.
+  transformed(pivot, move, rotate) {
+    const a = ((rotate || 0) * Math.PI) / 180;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const [dx, dy] = move || [0, 0];
+    const out = new Sink();
+    for (const [key, b] of this.bufs) {
+      const nb = out._get(key);
+      for (let i = 0; i < b.pos.length; i += 3) {
+        // в буфере: X = x, Y = высота, Z = −y
+        const u = b.pos[i] - pivot[0];
+        const v = -b.pos[i + 2] - pivot[1];
+        nb.pos.push(pivot[0] + u * c - v * s + dx, b.pos[i + 1], -(pivot[1] + u * s + v * c + dy));
+        const nx = b.nrm[i];
+        const ny = -b.nrm[i + 2];
+        nb.nrm.push(nx * c - ny * s, b.nrm[i + 1], -(nx * s + ny * c));
+      }
+      nb.idx.push(...b.idx);
+    }
+    return out;
+  }
+
   merge(other) {
     for (const [key, ob] of other.bufs) {
       const b = this._get(key);

@@ -79,6 +79,7 @@ export function registryItems(model, data) {
         zone: ZONE_NAMES[i.zone] || zoneByPoint(c, data) || '',
         floors: cat === 'building' ? i.floorsEst : null,
         floorsKnown: !!i.floorsKnown,
+        floorsText: cat === 'building' ? i.floorsText : null,
         height: i.height ?? (o.proxy.z1 ? Math.round(o.proxy.z1) : null),
         footprint,
         totalArea: cat === 'building' ? i.totalArea : null,

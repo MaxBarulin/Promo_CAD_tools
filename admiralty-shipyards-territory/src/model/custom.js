@@ -13,7 +13,7 @@
 // roof — форма кровли (ROOF_TYPES), roofH — её высота (м); src — откуда уточнено (по фото, по документам).
 // Эти же записи создаёт редактор на сайте.
 
-import { pointInRing, centroid, ensureCCW, rect } from '../geo.js';
+import { pointInRing, centroid, ensureCCW, rect, area } from '../geo.js';
 import { decorate, minRect } from '../data/decorate.js';
 
 // Код объекта по имени файла: «Z129.glb», «Z129 Корпусосборочный цех.glb» → Z129
@@ -142,7 +142,9 @@ export const DEFAULT_FINISH = {
   historic: { wall: 'yellow', roof: 'r_rust' },
 };
 // Формы кровли: двускатная, вальмовая, сводчатая и односкатная — для прямоугольного контура
-export const ROOF_TYPES = { flat: 'Плоская', gable: 'Двускатная', hip: 'Вальмовая', barrel: 'Сводчатая', shed: 'Односкатная', pyramid: 'Шатровая', multigable: 'Многопролётная' };
+export const ROOF_TYPES = { flat: 'Плоская', gable: 'Двускатная', hip: 'Вальмовая', barrel: 'Сводчатая', shed: 'Односкатная', pyramid: 'Шатровая', multigable: 'Многопролётная', dome: 'Купол' };
+// Покрытие кровли
+export const ROOF_COLORS = ['r_gray', 'r_light', 'r_dark', 'r_bitumen', 'r_blue', 'r_green', 'r_rust', 'r_copper'];
 // Отделка фасада, доступная в редакторе
 export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco'];
 
@@ -171,6 +173,62 @@ export function transformRing(ring, pivot, move, rotate) {
   });
 }
 
+const validRing = (r) => Array.isArray(r) && r.length >= 3 && r.every((p) => Array.isArray(p) && Number.isFinite(+p[0]) && Number.isFinite(+p[1]));
+
+// Контур части здания из записи: poly — многоугольник, box — прямоугольник { x, y, length, width, angle },
+// circle — круг { x, y, r } (башня). Координаты — в исходном положении здания (до move/rotate).
+export function partRing(p) {
+  if (!p) return null;
+  if (validRing(p.poly)) return ensureCCW(p.poly.map(([x, y]) => [+x, +y]));
+  if (p.box) return ensureCCW(rect(+p.box.x || 0, +p.box.y || 0, Math.max(1, +p.box.length || 6), Math.max(1, +p.box.width || 6), +p.box.angle || 0));
+  if (p.circle) {
+    const { x = 0, y = 0 } = p.circle;
+    const r = Math.max(0.5, +p.circle.r || 3);
+    return Array.from({ length: 20 }, (_, i) => [+x + r * Math.cos((i / 20) * 2 * Math.PI), +y + r * Math.sin((i / 20) * 2 * Math.PI)]);
+  }
+  return null;
+}
+
+// Разрезать контур прямой через точки a и b: режется отрезок прямой внутри контура, на котором
+// лежит середина ab. Возвращает два контура или null (середина вне контура, прямая не пересекает).
+export function splitRing(ring0, a, b) {
+  const ring = ensureCCW(ring0);
+  const d = [b[0] - a[0], b[1] - a[1]];
+  if (Math.hypot(d[0], d[1]) < 1e-6) return null;
+  const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  if (!pointInRing(m, ring)) return null;
+  const n = ring.length;
+  const hits = [];
+  for (let i = 0; i < n; i++) {
+    const p = ring[i];
+    const q = ring[(i + 1) % n];
+    const e = [q[0] - p[0], q[1] - p[1]];
+    const den = d[0] * e[1] - d[1] * e[0];
+    if (Math.abs(den) < 1e-12) continue;
+    // a + d·t = p + e·u
+    const t = ((p[0] - a[0]) * e[1] - (p[1] - a[1]) * e[0]) / den;
+    const u = ((p[0] - a[0]) * d[1] - (p[1] - a[1]) * d[0]) / den;
+    if (u >= 0 && u < 1) hits.push({ i, t, pt: [a[0] + d[0] * t, a[1] + d[1] * t] });
+  }
+  const lo = hits.filter((h) => h.t < 0.5).sort((x, y) => y.t - x.t)[0];
+  const hi = hits.filter((h) => h.t > 0.5).sort((x, y) => x.t - y.t)[0];
+  if (!lo || !hi) return null;
+  const walk = (from, to) => {
+    // от точки разреза from по контуру до точки to
+    const out = [from.pt];
+    for (let k = (from.i + 1) % n; ; k = (k + 1) % n) {
+      out.push(ring[k]);
+      if (k === to.i) break;
+    }
+    out.push(to.pt);
+    return out.filter((p, i, arr) => i === 0 || Math.hypot(p[0] - arr[i - 1][0], p[1] - arr[i - 1][1]) > 1e-6);
+  };
+  const A = walk(lo, hi);
+  const B = walk(hi, lo);
+  if (A.length < 3 || B.length < 3 || area(A) < 1 || area(B) < 1) return null;
+  return [ensureCCW(A), ensureCCW(B)];
+}
+
 // Здание из данных с правками записи e. Исходные данные не меняются.
 export function editBuilding(orig, e) {
   if (!e) return orig;
@@ -188,14 +246,46 @@ export function editBuilding(orig, e) {
     b.h = +e.height;
     b.approx = false;
   }
-  if (e.move || e.rotate) {
-    const pivot = centroid(orig.poly);
-    b.poly = transformRing(orig.poly, pivot, e.move, e.rotate);
-    if (orig.holes) b.holes = orig.holes.map((h) => transformRing(h, pivot, e.move, e.rotate));
-  }
-  // кровля и проёмы — заново под новый тип и высоту
-  if (retype || reheight) b = decorate({ ...b, roof: undefined, doors: undefined, roofColor: orig.roof?.color }, null);
+  // новый контур (выпрямленный, по обмеру) — в исходном положении, затем сдвиг и поворот
+  const reshape = validRing(e.poly);
+  const baseRing = reshape ? ensureCCW(e.poly.map(([x, y]) => [+x, +y])) : orig.poly;
+  const pivot = centroid(baseRing);
+  const tf = (ring) => (e.move || e.rotate ? transformRing(ring, pivot, e.move, e.rotate) : ring);
+  b.poly = tf(baseRing);
+  if (reshape) delete b.holes;
+  else if (orig.holes) b.holes = orig.holes.map(tf);
+  // кровля и проёмы — заново под новый тип, высоту и контур
+  if (retype || reheight || reshape) b = decorate({ ...b, roof: undefined, doors: undefined, roofColor: orig.roof?.color }, null);
   applyRoof(b, e);
+  if (ROOF_COLORS.includes(e.roofColor)) b.roof = { ...(b.roof || { type: 'flat' }), color: e.roofColor };
+  // части разной высоты (и башни): каждая — своим объёмом, основной объём не рисуется
+  if (Array.isArray(e.parts) && e.parts.length) {
+    const parts = [];
+    // только башни и надстройки — основной объём остаётся частью со своими параметрами
+    const list = e.parts.some((p) => validRing(p.poly)) ? e.parts : [{ poly: baseRing, height: b.h, floors: b.floors, roof: b.roof?.type, roofH: b.roof?.h }, ...e.parts];
+    for (const p of list) {
+      const ring = partRing(p);
+      if (!ring || area(ring) < 0.5) continue;
+      const ph = has(p.height) ? +p.height : b.h;
+      const part = decorate({ ...b, poly: tf(ring), holes: undefined, parts: undefined, h: ph, floors: has(p.floors) ? +p.floors : has(p.height) ? undefined : b.floors, roof: undefined, doors: undefined, roofColor: b.roof?.color }, null);
+      if (p.circle) part.doors = [];
+      applyRoof(part, { roof: p.roof || b.roof?.type || 'flat', roofH: p.roofH });
+      if (ROOF_COLORS.includes(p.roofColor)) part.roof.color = p.roofColor;
+      if (has(p.wall)) part.wall = p.wall;
+      part.minH = 0;
+      parts.push(part);
+    }
+    if (parts.length) {
+      b.parts = parts;
+      b.bodyH = 0;
+      b.partsCustom = true;
+      const top = (p) => p.h + (p.roof && p.roof.type !== 'flat' ? (p.roof.h ?? 3) : 0);
+      b.h = Math.max(...parts.map(top));
+      b.roof = { type: 'flat', color: b.roof?.color };
+      const fl = parts.map((p) => p.floors).filter(Boolean);
+      if (fl.length) b.floors = Math.max(...fl);
+    }
+  }
   b.edited = true;
   return b;
 }
@@ -300,6 +390,9 @@ export function prepareCustom(config = {}, files = []) {
   for (const [id, m] of Object.entries(meta)) {
     if (m.type && !BUILDING_TYPES.includes(m.type)) warnings.push(`custom.json, ${id}: неизвестный тип «${m.type}» (допустимы ${BUILDING_TYPES.join(', ')})`);
     if (m.wall && !WALLS.includes(m.wall)) warnings.push(`custom.json, ${id}: неизвестная отделка «${m.wall}» (допустимы ${WALLS.join(', ')})`);
+    if (m.poly !== undefined && !validRing(m.poly)) warnings.push(`custom.json, ${id}: poly должен быть списком точек [[x, y], …], не меньше трёх`);
+    if (m.parts !== undefined && (!Array.isArray(m.parts) || m.parts.some((p) => !partRing(p)))) warnings.push(`custom.json, ${id}: parts — список частей { "poly" | "box" | "circle", "floors", "height", "roof" }`);
+    if (m.roofColor && !ROOF_COLORS.includes(m.roofColor)) warnings.push(`custom.json, ${id}: неизвестное покрытие кровли «${m.roofColor}» (допустимы ${ROOF_COLORS.join(', ')})`);
     if (m.roof && !ROOF_TYPES[m.roof]) warnings.push(`custom.json, ${id}: неизвестная форма кровли «${m.roof}» (допустимы ${Object.keys(ROOF_TYPES).join(', ')})`);
     if (m.units !== undefined && !Array.isArray(m.units)) warnings.push(`custom.json, ${id}: units должен быть списком [{ "name": …, "role": "occupant" | "owner", "person": … }]`);
   }
@@ -368,6 +461,53 @@ export function patchInfo(o, e) {
   return out;
 }
 
+// Слои, куда можно поставить новый объект из Blender, и вид объекта в карточке
+export const NEW_LAYERS = { shipyard: 'Здания верфи', production: 'Стапели, краны, оборудование', vessels: 'Суда и плавдоки', bridges: 'Мосты', context: 'Окружающая застройка' };
+export const LAYER_KIND = { shipyard: 'building', production: 'misc', vessels: 'vessel', bridges: 'bridge', context: 'context' };
+
+// ---------- сдвиг и поворот прочих объектов (краны, трубы, суда, доки, мосты, заборы) ----------
+// Центр поворота — центр контура выбора объекта (как у зданий — центр контура).
+export function objectPivot(proxy) {
+  if (proxy?.poly) return centroid(proxy.poly);
+  if (proxy?.line?.length) {
+    const xs = proxy.line.map((p) => p[0]);
+    const ys = proxy.line.map((p) => p[1]);
+    return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  }
+  return null;
+}
+// Объект на новом месте: геометрия и контур выбора. Исходное положение хранится в o.unmoved,
+// поэтому повторная правка считается от него, а не от уже сдвинутого.
+export function moveObject(o, e) {
+  const src = o.unmoved || o;
+  if (!e?.move && !e?.rotate) return o.unmoved ? { ...o, sink: src.sink, proxy: src.proxy } : o;
+  const pivot = objectPivot(src.proxy);
+  if (!pivot) return o;
+  const tf = (ring) => transformRing(ring, pivot, e.move, e.rotate);
+  const proxy = { ...src.proxy, ...(src.proxy.poly ? { poly: tf(src.proxy.poly) } : {}), ...(src.proxy.line ? { line: tf(src.proxy.line) } : {}) };
+  return { ...o, sink: src.sink.transformed(pivot, e.move, e.rotate), proxy, unmoved: { sink: src.sink, proxy: src.proxy } };
+}
+// Те же сдвиг и поворот в данных (по ним строятся DXF и GeoJSON): точки, линии и углы.
+const POINT_KEYS = ['at', 'head', 'from', 'to'];
+const LINE_KEYS = ['line', 'poly', 'polygon'];
+const ANGLE_KEYS = ['angle', 'track', 'slew'];
+export function moveDataItem(item, pivot, e) {
+  if (!e?.move && !e?.rotate) return item;
+  const tf = (ring) => transformRing(ring, pivot, e.move, e.rotate);
+  const out = { ...item };
+  for (const k of POINT_KEYS) if (Array.isArray(item[k]) && item[k].length === 2) out[k] = tf([item[k]])[0];
+  for (const k of LINE_KEYS) if (Array.isArray(item[k]) && Array.isArray(item[k][0])) out[k] = tf(item[k]);
+  for (const k of ANGLE_KEYS) if (Number.isFinite(item[k])) out[k] = item[k] + (e.rotate || 0);
+  if (Array.isArray(item.gates)) out.gates = item.gates.map((g) => (Array.isArray(g.at) ? { ...g, at: tf([g.at])[0] } : g));
+  // судно, уведённое со стапеля или дока, — на плаву
+  if (item.onSlip || item.onDock) {
+    delete out.onSlip;
+    delete out.onDock;
+    out.afloat = true;
+  }
+  return out;
+}
+
 // После сборки: замена моделями, новые здания-модели, сведения прочих объектов, отчёт.
 // ctx: { layers, signs, data, removedFromData, pre: {edited, added}, inYard(p), zoneOf(p), summary(b), Sink }
 export function applyCustom(custom, ctx) {
@@ -403,7 +543,7 @@ export function applyCustom(custom, ctx) {
     } else {
       const b = modelBuilding(id, m, e, ctx);
       const layerId = e?.layer && layers[e.layer] ? e.layer : b.kind === 'shipyard' ? 'shipyard' : 'context';
-      const obj = { id, name: b.name, sink: new Sink(), custom: m.file, transform: m.transform, info: { ...summary(b), kind: layerId === 'shipyard' ? 'building' : 'context' }, proxy: { poly: m.hull, z0: m.z0, z1: m.z1 } };
+      const obj = { id, name: b.name, sink: new Sink(), custom: m.file, transform: m.transform, info: { ...summary(b), kind: LAYER_KIND[layerId] || 'context' }, proxy: { poly: m.hull, z0: m.z0, z1: m.z1 } };
       obj.scope = b.kind === 'shipyard' ? 'yard' : 'city';
       layers[layerId].objects.push(obj);
       all.set(id, { o: obj, layer: layers[layerId] });
@@ -420,13 +560,23 @@ export function applyCustom(custom, ctx) {
       if (!custom.remove.has(id)) report.warnings.push(`custom.json: объекта с кодом ${id} нет в модели, нет файла ${id}.glb и нет размеров box для нового здания`);
       continue;
     }
-    Object.assign(hit.o, patchInfo(hit.o, e));
+    Object.assign(hit.o, patchInfo(moveObject(hit.o, e), e));
+    if (e.move || e.rotate) moveInData(ctx.data, id, objectPivot(hit.o.unmoved.proxy), e);
     report.edited.push(id);
   }
 
   // вывески заменённых зданий (их рисует сама модель из Blender)
   ctx.signs.splice(0, ctx.signs.length, ...ctx.signs.filter((s) => !custom.models[s.id]));
   return report;
+}
+
+function moveInData(data, id, pivot, e) {
+  if (!data || !pivot) return;
+  for (const k of DATA_KEYS) {
+    if (k === 'buildings' || !Array.isArray(data[k])) continue;
+    // новый массив: исходные списки данных общие для всех сборок
+    if (data[k].some((x) => x.id === id)) data[k] = data[k].map((x) => (x.id === id ? moveDataItem(x, pivot, e) : x));
+  }
 }
 
 // Объект модели, у которого геометрия — модель из Blender (сведения прежние, высота — по модели).

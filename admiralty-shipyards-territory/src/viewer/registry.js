@@ -432,7 +432,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     const box = document.createElement('div');
     box.className = 'reg-card';
     const rows = [
-      ['Этажность', it.floors ? `${it.floors}${it.floorsKnown ? '' : ' (оценка)'}` : null],
+      ['Этажность', it.floors ? `${it.floorsText || it.floors}${it.floorsKnown ? '' : ' (оценка)'}` : null],
       ['Общая площадь', it.totalArea ? `${num(it.totalArea)} м² (оценка)` : null],
       ['Строительный объём', it.volume ? `${num(it.volume)} м³${it.estimated ? ' (оценка)' : ''}` : null],
       ...FIELDS.map((f) => [f.label, f.type === 'date' ? fmtDate(r[f.key]) : r[f.key]]),

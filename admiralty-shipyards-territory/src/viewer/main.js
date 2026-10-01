@@ -169,6 +169,9 @@ async function main() {
   controls.maxDistance = 4200;
   controls.screenSpacePanning = false;
   controls.zoomToCursor = true;
+  // как на карте: левая кнопка (один палец) — сдвиг, правая (Shift + левая, два пальца) — вращение
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
   let shift = 0; // текущий сдвиг центра проекции, px
   let shiftTo = 0;
@@ -459,7 +462,7 @@ async function main() {
     if (i.zone && ZONE_LABEL[i.zone]) rows.push(['Участок', ZONE_LABEL[i.zone]]);
     if (i.dims) rows.push(['Размеры', `${i.dims[0]} × ${i.dims[1]} м`]);
     if (i.height) rows.push(['Высота', `${i.height} м`]);
-    if (i.floors) rows.push(['Этажей', i.floors]);
+    if (i.floors) rows.push(['Этажей', i.floorsText || i.floors]);
     if (i.footprint) rows.push(['Площадь застройки', `${i.footprint.toLocaleString('ru-RU')} м²`]);
     if (i.roof && ROOF_NAMES[i.roof]) rows.push(['Кровля', ROOF_NAMES[i.roof].toLowerCase()]);
     if (i.refined) rows.push(['Уточнено', i.refined]);
