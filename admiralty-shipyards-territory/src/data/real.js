@@ -428,7 +428,7 @@ function areas() {
 }
 
 function gates() {
-  return REAL.gates.map((g) => {
+  return REAL.gates.filter((g) => !Y.NO_GATES.some((n) => dist(n.at, g.at) < 12)).map((g) => {
     const near = Y.GATES.slice().sort((a, b) => dist(a.at, g.at) - dist(b.at, g.at))[0];
     const name = g.name || (near && dist(near.at, g.at) < 60 ? near.name : g.kind === 'lift_gate' ? 'Шлагбаум' : 'Ворота');
     return { name, at: g.at, w: g.kind === 'lift_gate' ? 5 : 8 };
