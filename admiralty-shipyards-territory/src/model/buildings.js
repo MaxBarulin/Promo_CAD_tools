@@ -2,7 +2,7 @@
 // вальмовая, многопролётная), окна по этажам, двери и ворота, портики, вывески.
 
 import { ensureCCW, ensureCW, sub, add, mul, norm, len, dist, lerp, centroid, area } from '../geo.js';
-import { dedupe } from './geom.js';
+import { dedupe, Sink } from './geom.js';
 
 // Смещение замкнутого контура (CCW) наружу на d (d < 0 — внутрь).
 export function offsetRing(ring, d) {
@@ -185,6 +185,37 @@ function roofFlat(sink, ring, h, key) {
   for (let i = 0; i < ir.length; i++) sink.wall('panel', ir[i], ir[(i + 1) % ir.length], zr, h);
 }
 
+// Односкатная кровля: низ — вдоль длинной стороны q0→q1, верх — над противоположной.
+function roofShed(sink, q, h, rh, key, wallKey) {
+  let [q0, q1, q2, q3] = q;
+  if (dist(q0, q1) < dist(q1, q2)) [q0, q1, q2, q3] = [q1, q2, q3, q0];
+  const v = (p, z) => [p[0], p[1], z];
+  sink.quad(key, v(q0, h), v(q1, h), v(q2, h + rh), v(q3, h + rh));
+  sink.tri(wallKey, v(q1, h), v(q2, h), v(q2, h + rh));
+  sink.tri(wallKey, v(q3, h), v(q0, h), v(q3, h + rh));
+  sink.quad(wallKey, v(q2, h), v(q3, h), v(q3, h + rh), v(q2, h + rh));
+}
+
+// Шатровая (пирамидальная) кровля над любым выпуклым контуром.
+function roofPyramid(sink, ring, h, rh, key) {
+  const c = centroid(ring);
+  for (let i = 0; i < ring.length; i++) sink.tri(key, [ring[i][0], ring[i][1], h], [ring[(i + 1) % ring.length][0], ring[(i + 1) % ring.length][1], h], [c[0], c[1], h + rh]);
+}
+
+// Купол и луковичная глава над контуром (обычно круглым барабаном).
+function roofDome(sink, ring, h, rh, key, shape) {
+  const c = centroid(ring);
+  const r = Math.max(0.5, Math.min(...ring.map((p) => dist(p, c))) * 0.98);
+  sink.flat('trim', ring, h);
+  const H = rh || (shape === 'onion' ? r * 1.6 : r * 0.9);
+  const prof =
+    shape === 'onion'
+      ? [[0.85, 0], [1.12, 0.2], [1.18, 0.38], [0.95, 0.6], [0.5, 0.8], [0.14, 0.94], [0, 1]]
+      : Array.from({ length: 7 }, (_, i) => [Math.cos((i / 6) * (Math.PI / 2)), Math.sin((i / 6) * (Math.PI / 2))]);
+  sink.revolve(key, c, prof.map(([k, z]) => [k * r, h + z * H]), 18);
+  if (shape === 'onion') sink.cylinder('r_gold', c, h + H, h + H + r * 0.7, Math.max(0.06, r * 0.05), Math.max(0.04, r * 0.03), 6);
+}
+
 // q: [q0,q1,q2,q3], конёк вдоль q0→q1 (свесы над сторонами q0q1 и q2q3)
 function roofGable(sink, q, h, rh, key, wallKey, { overhang = 0.45, lantern = false } = {}) {
   const [q0, q1, q2, q3] = q;
@@ -325,6 +356,17 @@ function portico(sink, a, b, pspec, h, roofKey, angle) {
 // ---------- здание целиком ----------
 
 export function buildBuilding(sink, b, extras = {}) {
+  // части здания (OSM building:part) — каждая на своей отметке, со своей высотой и кровлей;
+  // основной объём рисуется, только если части закрывают контур не целиком
+  if (b.parts && b.parts.length) {
+    if (b.bodyH) buildBuilding(sink, { ...b, parts: undefined, h: b.bodyH }, extras);
+    for (const p of b.parts) {
+      const tmp = new Sink();
+      buildBuilding(tmp, { ...p, type: p.type || b.type, detail: b.detail, noPlinth: p.minH > 0.5, doors: p.minH > 0.5 ? [] : p.doors }, extras);
+      sink.mergeShifted(tmp, p.minH || 0);
+    }
+    return;
+  }
   if (b.holes && b.holes.length) return buildCourtyardBuilding(sink, b);
   const ring = ensureCCW(dedupe(b.poly));
   const h = b.h;
@@ -337,7 +379,7 @@ export function buildBuilding(sink, b, extras = {}) {
   const low = b.detail === 'low';
 
   // цоколь (у упрощённых домов окружения — без цоколя и карниза)
-  if (!low) ledge(sink, 'plinth', ring, 0.07, 0, plinthH);
+  if (!low && !b.noPlinth) ledge(sink, 'plinth', ring, 0.07, 0, plinthH);
 
   // стены
   for (let i = 0; i < ring.length; i++) sink.wall(wallKey, ring[i], ring[(i + 1) % ring.length], 0, h);
@@ -365,6 +407,12 @@ export function buildBuilding(sink, b, extras = {}) {
     roofHip(sink, ring, h, rh, roofKey);
   } else if (roof.type === 'multigable' && isQuad) {
     roofMulti(sink, ring, h, rh, roofKey, wallKey, roof.bays || 3, roof.along !== 'w', roof.lantern);
+  } else if (roof.type === 'shed' && isQuad) {
+    roofShed(sink, ring, h, rh, roofKey, wallKey);
+  } else if (roof.type === 'pyramid') {
+    roofPyramid(sink, ring, h, rh, roofKey);
+  } else if (roof.type === 'dome' || roof.type === 'onion') {
+    roofDome(sink, ring, h, roof.h, roofKey, roof.type);
   } else {
     roofFlat(sink, ring, h, roofKey);
   }

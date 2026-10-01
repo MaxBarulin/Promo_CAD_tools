@@ -28,6 +28,8 @@ export const PALETTE = {
   r_light: { name: 'Кровля_профлист_светлая', color: '#a3a8ab', roughness: 0.6, metalness: 0.2 },
   r_blue: { name: 'Кровля_профлист_синяя', color: '#58708a', roughness: 0.6, metalness: 0.2 },
   r_bitumen: { name: 'Кровля_рулонная', color: '#3d3f42', roughness: 0.95 },
+  r_gold: { name: 'Кровля_золочёная', color: '#c9a44c', roughness: 0.35, metalness: 0.7 },
+  r_copper: { name: 'Кровля_медная_патина', color: '#6f9f8a', roughness: 0.6, metalness: 0.25 },
   lantern: { name: 'Фонарь_световой', color: '#9fb4c2', roughness: 0.3, metalness: 0.3 },
 
   // --- фасадные элементы ---

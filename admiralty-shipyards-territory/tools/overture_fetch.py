@@ -218,12 +218,40 @@ def main():
     water = water.simplify(0.3)
 
     # здания
-    parts = load('building_part')
-    part_h = {}
-    for p in parts:
-        h = p['height'] or (p['num_floors'] * 3.4 + 0.6 if p['num_floors'] else None)
-        if h:
-            part_h.setdefault(p.get('building_id'), []).append(h)
+    # Части зданий (OSM building:part): своя высота, отметка основания, форма крыши — разновысотные
+    # корпуса, барабаны и купола храмов. Высоты — от земли: height — верх части, min_height — низ.
+    def osm_style(r):
+        out = {}
+        if r.get('roof_shape'):
+            out['roof'] = r['roof_shape']
+        if r.get('roof_height'):
+            out['roofH'] = round(r['roof_height'], 1)
+        for k, key in (('facade_material', 'fm'), ('facade_color', 'fc'), ('roof_material', 'rm'), ('roof_color', 'rc')):
+            if r.get(k):
+                out[key] = r[k]
+        return out
+
+    parts_by = {}
+    for p in load('building_part'):
+        if p.get('is_underground') or not p['geom'].intersects(B):
+            continue
+        top = p['height'] or (p['num_floors'] * 3.4 + 0.6 if p['num_floors'] else None)
+        if not top:
+            continue
+        base = p['min_height'] or ((p['min_floor'] or 0) * 3.4)
+        for g in polys(p['geom']):
+            g = g.simplify(0.2)
+            if g.area < 2 or top - base < 0.5:
+                continue
+            parts_by.setdefault(p.get('building_id'), []).append((g, {
+                'poly': poly_json(g)[0],
+                'holes': poly_json(g)[1:],
+                'h': round(top, 1),
+                'minH': round(base, 1),
+                'floors': p['num_floors'],
+                'hTop': bool(p['height']),  # высота из OSM — до верха кровли
+                **osm_style(p),
+            }))
     buildings = []
     for r in load('buildings'):
         g = r['geom']
@@ -234,11 +262,11 @@ def main():
             if p.area < 8:
                 continue
             in_yard = yard.buffer(1.5).contains(p.representative_point())
-            h = r['height'] or (r['num_floors'] * 3.4 + 0.6 if r['num_floors'] else None)
-            if not h and part_h.get(r['id']):
-                h = max(part_h[r['id']])
+            own = r['height'] or (r['num_floors'] * 3.4 + 0.6 if r['num_floors'] else None)
+            mine = [d for gp, d in parts_by.get(r['id'], []) if p.buffer(1.0).contains(gp.representative_point())]
+            h = own or (max(d['h'] for d in mine) if mine else None)
             src = (r.get('sources') or [{}])[0].get('dataset', '')
-            buildings.append({
+            b = {
                 'id': r['id'][:12],
                 'poly': poly_json(p)[0],
                 'holes': poly_json(p)[1:],
@@ -246,10 +274,18 @@ def main():
                 'floors': r['num_floors'],
                 'name': name_of(r),
                 'cls': r['class'],
-                'roof': r['roof_shape'],
                 'src': 'osm' if src == 'OpenStreetMap' else 'ml',
                 'yard': in_yard,
-            })
+                'hTop': bool(r['height']),
+                **osm_style(r),
+            }
+            if mine:
+                # доля контура, закрытая частями от земли: если меньше 0,7 — основной объём рисуется тоже
+                ground = unary_union([gp for gp, d in parts_by[r['id']] if d['minH'] < 1 and p.buffer(1.0).contains(gp.representative_point())])
+                b['parts'] = mine
+                b['cover'] = round(ground.intersection(p).area / p.area, 2) if not ground.is_empty else 0
+                b['hOwn'] = round(own, 1) if own else None
+            buildings.append(b)
 
     # улицы, внутризаводские проезды, ж/д
     roads, rails, crossings = [], [], []

@@ -10,6 +10,7 @@ import REAL from './real-data.js';
 import * as Y from './shipyard.js';
 import { MAP_BUILDINGS_RAW, MAP_PIECES, px } from './mapdata.js';
 import { minRect, hash, decorate } from './decorate.js';
+import { PALETTE } from '../model/materials.js';
 import { ensureCCW, area, centroid, dist, sub, norm, add, mul, pointInRing, bbox, angleOf, polylineLength, pointAt } from '../geo.js';
 
 // ---------- геометрические помощники ----------
@@ -266,6 +267,7 @@ function contextBuildings() {
     }
     const hs = hash(r.id);
     const dY = distYard(c);
+    const look = osmLook(r, type, hs);
     const b = {
       kind: 'context',
       id: `C${r.id.slice(0, 7)}`,
@@ -276,15 +278,92 @@ function contextBuildings() {
       h,
       floors: r.floors || undefined,
       type,
-      wall: type === 'hall' || type === 'warehouse' ? 'panel' : CITY_WALLS[hs % CITY_WALLS.length],
-      roofColor: CITY_ROOFS[(hs >> 4) % CITY_ROOFS.length],
+      wall: look.wall || (type === 'hall' || type === 'warehouse' ? 'panel' : CITY_WALLS[hs % CITY_WALLS.length]),
+      roofColor: look.roofColor || CITY_ROOFS[(hs >> 4) % CITY_ROOFS.length],
       detail: dY < 150 ? 'full' : 'low',
       approx: !r.h,
       generated: true,
     };
-    out.push(decorate(b, null));
+    decorate(b, null);
+    applyOsmRoof(b, r);
+    if (r.parts) withParts(b, r, type, look);
+    out.push(b);
   }
   return out;
+}
+
+// ---------- кровля, фасад и части зданий по тегам OSM (через Overture) ----------
+const OSM_ROOF = { flat: 'flat', gabled: 'gable', round: 'gable', gambrel: 'gable', saltbox: 'gable', hipped: 'hip', half_hipped: 'hip', mansard: 'hip', pyramidal: 'pyramid', skillion: 'shed', dome: 'dome', onion: 'onion' };
+const ROOF_KEYS = ['r_gray', 'r_dark', 'r_green', 'r_rust', 'r_light', 'r_blue', 'r_bitumen', 'r_gold', 'r_copper'];
+const hexRgb = (h) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim());
+  return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null;
+};
+// ближайший по цвету материал палитры
+function nearestKey(hex, keys) {
+  const c = hexRgb(hex);
+  if (!c) return null;
+  let best = null;
+  let bd = Infinity;
+  for (const k of keys) {
+    const p = hexRgb(PALETTE[k]?.color);
+    if (!p) continue;
+    const d = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = k;
+    }
+  }
+  return best;
+}
+// отделка по тегам: материал и цвет фасада, материал и цвет кровли
+function osmLook(r, type, hs) {
+  const out = {};
+  if (r.fc) out.wall = nearestKey(r.fc, CITY_WALL_KEYS);
+  else if (r.fm === 'brick') out.wall = hs % 3 ? 'brick' : 'brick_dark';
+  else if (r.fm === 'glass') out.wall = 'glass_light';
+  else if (r.fm === 'concrete') out.wall = 'panel';
+  if (r.rc) out.roofColor = nearestKey(r.rc, ROOF_KEYS);
+  else if (r.rm === 'tar_paper') out.roofColor = 'r_bitumen';
+  else if (r.rm === 'copper') out.roofColor = 'r_copper';
+  else if (r.rm === 'roof_tiles') out.roofColor = 'r_rust';
+  else if (r.rm === 'metal') out.roofColor = hs % 2 ? 'r_gray' : 'r_green';
+  return out;
+}
+const CITY_WALL_KEYS = ['light', 'white', 'gray', 'panel', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco'];
+// форма кровли из OSM вместо подобранной по типу здания; высота из OSM — до верха кровли
+function applyOsmRoof(b, r) {
+  const t = OSM_ROOF[r.roof];
+  if (!t) return;
+  const quad = b.poly.length === 4;
+  if ((t === 'gable' || t === 'hip' || t === 'shed') && !quad) {
+    b.roof = { type: 'flat', color: b.roof?.color };
+    return;
+  }
+  const mr = minRect(b.poly);
+  const span = Math.min(mr.w, mr.d);
+  const rh = r.roofH ?? (t === 'flat' ? 0 : t === 'dome' || t === 'onion' ? undefined : t === 'shed' ? Math.min(3, span * 0.15) : Math.max(2, Math.min(8, span * 0.2)));
+  b.roof = { type: t, h: rh, color: b.roof?.color || 'r_gray' };
+  if (t === 'dome' && !r.rc && !r.rm) b.roof.color = 'r_copper';
+  if (t === 'onion' && !r.rc && !r.rm) b.roof.color = 'r_gold';
+  if (r.hTop && rh) b.h = Math.max(2, b.h - rh);
+}
+// части здания: каждая на своей отметке; основной объём — если части закрывают контур не целиком
+function withParts(b, r, type, look) {
+  const parts = [];
+  for (const p of r.parts) {
+    const ring = ensureCCW(p.poly);
+    if (ring.length < 3) continue;
+    const part = decorate({ kind: 'context', id: `${b.id}p`, type: type === 'residential' ? 'residential' : type, poly: ring, holes: p.holes, h: Math.max(1, p.h - p.minH), wall: osmLook(p, type, hash(b.id)).wall || look.wall || b.wall, roofColor: osmLook(p, type, 0).roofColor || b.roof?.color || 'r_gray' }, null);
+    applyOsmRoof(part, { ...p, h: undefined });
+    if (p.hTop && part.roof?.h && part.roof.type !== 'flat') part.h = Math.max(1, part.h - part.roof.h);
+    parts.push({ ...part, minH: p.minH, doors: p.minH > 0.5 ? [] : part.doors });
+  }
+  if (!parts.length) return;
+  b.parts = parts;
+  const top = Math.max(...parts.map((p) => p.minH + p.h));
+  b.bodyH = r.cover < 0.7 ? r.hOwn || Math.min(...parts.map((p) => p.minH).filter((z) => z > 0.5), b.h) || b.h : 0;
+  b.h = Math.max(top, b.bodyH || 0);
 }
 
 // Ледокол «Красин» — по контуру из OSM

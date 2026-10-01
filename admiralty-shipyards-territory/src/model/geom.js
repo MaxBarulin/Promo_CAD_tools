@@ -253,6 +253,44 @@ export class Sink {
     }
   }
 
+  // Тело вращения вокруг вертикали через c (купола, главы): profile — [[радиус, z], …] снизу вверх.
+  revolve(key, c, profile, seg = 16) {
+    const ring = (r, z) =>
+      Array.from({ length: seg }, (_, i) => {
+        const a = (i / seg) * Math.PI * 2;
+        return { p: [c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, z], ca: Math.cos(a), sa: Math.sin(a) };
+      });
+    for (let k = 0; k < profile.length - 1; k++) {
+      const [r0, z0] = profile[k];
+      const [r1, z1] = profile[k + 1];
+      // нормаль к образующей наружу: (dz, −dr) в плоскости (радиус, высота)
+      const L = Math.hypot(z1 - z0, r1 - r0) || 1;
+      const nr = (z1 - z0) / L;
+      const nz = -(r1 - r0) / L;
+      const A = ring(r0, z0);
+      const B = ring(r1, z1);
+      for (let i = 0; i < seg; i++) {
+        const j = (i + 1) % seg;
+        const na = [A[i].ca * nr, A[i].sa * nr, nz];
+        const nb = [A[j].ca * nr, A[j].sa * nr, nz];
+        if (r0 > 1e-6) this.triSmooth(key, A[i].p, A[j].p, B[j].p, na, nb, nb);
+        if (r1 > 1e-6) this.triSmooth(key, A[i].p, B[j].p, B[i].p, na, nb, na);
+        else this.triSmooth(key, A[i].p, A[j].p, B[i].p, na, nb, na);
+      }
+    }
+  }
+
+  // Слить другой набор, подняв его на dz по высоте (части зданий на своей отметке).
+  mergeShifted(other, dz) {
+    for (const [key, ob] of other.bufs) {
+      const b = this._get(key);
+      const base = b.pos.length / 3;
+      for (let i = 0; i < ob.pos.length; i++) b.pos.push(i % 3 === 1 ? ob.pos[i] + dz : ob.pos[i]);
+      for (let i = 0; i < ob.nrm.length; i++) b.nrm.push(ob.nrm[i]);
+      for (let i = 0; i < ob.idx.length; i++) b.idx.push(ob.idx[i] + base);
+    }
+  }
+
   merge(other) {
     for (const [key, ob] of other.bufs) {
       const b = this._get(key);
