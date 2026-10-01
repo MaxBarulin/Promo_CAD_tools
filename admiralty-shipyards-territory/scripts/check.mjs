@@ -5,15 +5,19 @@ import * as THREE from 'three';
 import pc from 'polygon-clipping';
 import { getTerritory } from '../src/data/index.js';
 import { initModel, buildModel } from '../src/model/index.js';
+import { prepareCustom } from '../src/model/custom.js';
+import { readCustomDir } from './custom-files.mjs';
 import { mpArea } from '../src/model/planar.js';
 import { ensureCCW, area } from '../src/geo.js';
 
 initModel(THREE);
 const data = getTerritory();
-const model = buildModel(data);
+const customDir = await readCustomDir();
+const model = buildModel(data, { custom: prepareCustom(customDir.config, customDir.files) });
 const P = model.planar;
 
 let problems = 0;
+const notes = [];
 const warn = (msg) => {
   problems++;
   console.log('  ⚠ ' + msg);
@@ -51,10 +55,26 @@ for (let i = 0; i < polys.length; i++) {
     const ov = mpArea(pc.intersection(a.mp, b.mp));
     // пристройки на карте примыкают к корпусам общей стеной — небольшое касание допустимо
     const tol = /^[ZY]/.test(a.o.id) && /^[ZY]/.test(b.o.id) ? 30 : 1;
-    if (ov > tol) warn(`${a.o.id} «${a.o.name}» и ${b.o.id} «${b.o.name}» пересекаются (${ov.toFixed(0)} м²)`);
+    if (ov <= tol) continue;
+    const msg = `${a.o.id} «${a.o.name}» и ${b.o.id} «${b.o.name}» пересекаются (${ov.toFixed(0)} м²)`;
+    // у моделей из custom/ контур — выпуклая оболочка: пересечение — повод проверить, не ошибка
+    if (a.o.custom || b.o.custom) notes.push(msg);
+    else warn(msg);
   }
 }
 if (!problems) console.log('  ✓ замечаний нет');
+
+const cr = model.custom;
+if (cr && (cr.replaced.length || cr.added.length || cr.removed.length || cr.renamed.length || cr.warnings.length)) {
+  console.log('\nДоработки (папка custom/):');
+  const list = (title, ids) => ids.length && console.log(`  ${title.padEnd(16)} ${ids.join(', ')}`);
+  list('заменены:', cr.replaced);
+  list('добавлены:', cr.added);
+  list('удалены:', cr.removed);
+  list('переименованы:', cr.renamed);
+  for (const w of cr.warnings) warn(w);
+  for (const n of notes) console.log('  · ' + n);
+}
 
 console.log('\nСтатистика модели:');
 for (const l of model.layers) {

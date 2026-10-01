@@ -7,6 +7,7 @@
 //   по умолчанию рядовая городская застройка экспортируется упрощённо (объёмы без окон);
 //   --full       — вся застройка с окнами (файл ~30 МБ);
 //   --no-context — только верфь, мосты, вода и набережные.
+// Доработки из папки custom/ (модели из Blender, удаления, новые здания) учитываются во всех файлах.
 
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
@@ -14,7 +15,10 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { getTerritory } from '../src/data/index.js';
-import { initModel, buildModel, toObjectHierarchy } from '../src/model/index.js';
+import { initModel, buildModel, toObjectHierarchy, cleanUserData } from '../src/model/index.js';
+import { prepareCustom } from '../src/model/custom.js';
+import { mergeGlb } from '../src/export/glb-merge.js';
+import { readCustomDir } from './custom-files.mjs';
 import { createMaterialFactory } from '../src/model/materials.js';
 import { buildDXF } from '../src/export/dxf.js';
 import { buildGeoJSON } from '../src/export/geojson.js';
@@ -47,7 +51,10 @@ const full = process.argv.includes('--full');
 initModel(THREE);
 const data = getTerritory();
 if (noContext) data.buildings = data.buildings.filter((b) => b.kind !== 'context');
-const model = buildModel(data, { frontage: !noContext, contextDetail: full ? 'auto' : 'low' });
+const customDir = await readCustomDir();
+const custom = prepareCustom(customDir.config, customDir.files);
+const model = buildModel(data, { frontage: !noContext, contextDetail: full ? 'auto' : 'low', custom });
+reportCustom(model.custom);
 const getMaterial = createMaterialFactory(THREE, { forExport: true });
 await mkdir(dist, { recursive: true });
 
@@ -56,12 +63,26 @@ const scene = new THREE.Scene();
 scene.name = data.meta.title;
 const hier = toObjectHierarchy(THREE, model, getMaterial);
 scene.add(hier);
-const glb = await new Promise((resolve, reject) =>
+let glb = await new Promise((resolve, reject) =>
   new GLTFExporter().parse(scene, resolve, reject, {
     binary: true,
     includeCustomExtensions: false,
   }),
 );
+// модели из custom/ — в узел своего слоя, с материалами и текстурами из Blender
+const parts = [];
+for (const layer of model.layers) {
+  for (const o of layer.objects) {
+    if (!o.custom) continue;
+    const f = customDir.files.find((x) => x.file === o.custom);
+    parts.push({ bytes: f.bytes, nodeName: `${o.id} ${o.name}`.trim(), parentName: layer.name, extras: o.info ? cleanUserData(o.info) : undefined });
+  }
+}
+if (parts.length) {
+  const merged = mergeGlb(new Uint8Array(glb), parts);
+  for (const w of merged.warnings) console.log('  ⚠ ' + w);
+  glb = merged.bytes.buffer.slice(merged.bytes.byteOffset, merged.bytes.byteOffset + merged.bytes.byteLength);
+}
 const glbPath = path.join(dist, noContext ? 'admiralty-shipyards-no-context.glb' : full ? 'admiralty-shipyards-full.glb' : 'admiralty-shipyards.glb');
 await writeFile(glbPath, Buffer.from(glb));
 console.log(`GLB:     ${path.relative(root, glbPath)}  ${(glb.byteLength / 1048576).toFixed(1)} МБ, объектов ${hier.children.reduce((s, g) => s + g.children.length, 0)}, треугольников ${model.stats.triangles}`);
@@ -77,4 +98,11 @@ if (!noContext && !full) {
   const xlsx = registryXlsx(items, {}, { years: 2 });
   await writeFile(path.join(dist, 'admiralty-shipyards-registry.xlsx'), xlsx);
   console.log(`Реестр:  dist/admiralty-shipyards-registry.xlsx  ${items.length} объектов (шаблон для заполнения ЭПБ/ОПО)`);
+}
+
+function reportCustom(r) {
+  if (!r) return;
+  const n = r.replaced.length + r.added.length + r.removed.length + r.renamed.length;
+  if (n) console.log(`Доработки custom/: заменено ${r.replaced.length}, добавлено ${r.added.length}, удалено ${r.removed.length}, переименовано ${r.renamed.length}`);
+  for (const w of r.warnings) console.log('  ⚠ ' + w);
 }

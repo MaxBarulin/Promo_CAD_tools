@@ -410,7 +410,7 @@ export function buildBuilding(sink, b, extras = {}) {
       const p = add(pos, mul(dir, t * w));
       sink.box('steel_dark', [p[0] - nOut[0] * 0.5, p[1] - nOut[1] * 0.5, h + 0.3], [0.15, 1.2, 0.6], ang);
     }
-    extras.signs?.push({ text: b.sign.text, center: [pos[0] + nOut[0] * 0.17, pos[1] + nOut[1] * 0.17, h + 1.5], normal: nOut, w, h: 2.2 });
+    extras.signs?.push({ id: b.id, text: b.sign.text, center: [pos[0] + nOut[0] * 0.17, pos[1] + nOut[1] * 0.17, h + 1.5], normal: nOut, w, h: 2.2 });
   }
 }
 

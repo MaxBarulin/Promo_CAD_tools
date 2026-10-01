@@ -84,7 +84,7 @@ export function registryItems(model, data) {
         totalArea: cat === 'building' ? i.totalArea : null,
         volume: cat === 'building' ? i.volume : null,
         estimated: !!i.approx,
-        source: i.geomSrc === 'map' ? 'карта предприятия' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
+        source: i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'карта предприятия' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
         lat: +lat.toFixed(6),
         lon: +lon.toFixed(6),
         center: c,

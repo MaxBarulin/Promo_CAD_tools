@@ -6,6 +6,7 @@ import * as esbuild from 'esbuild';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { readCustomDir, CUSTOM_DIR } from './custom-files.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
@@ -58,6 +59,20 @@ ${safeArtifactJs}
   return full.length;
 }
 
+// Папка custom/ (модели из Blender и custom.json) встраивается в страницу как модуль 'custom:files'.
+const customPlugin = {
+  name: 'custom-files',
+  setup(build) {
+    build.onResolve({ filter: /^custom:files$/ }, () => ({ path: 'custom', namespace: 'custom-files' }));
+    build.onLoad({ filter: /.*/, namespace: 'custom-files' }, async () => {
+      const { config, files } = await readCustomDir();
+      const payload = { config, files: files.map((f) => ({ file: f.file, b64: Buffer.from(f.bytes).toString('base64') })) };
+      if (files.length) console.log(`custom/: ${files.map((f) => f.file).join(', ')} (${(files.reduce((s, f) => s + f.bytes.byteLength, 0) / 1024).toFixed(0)} КБ)`);
+      return { contents: `export default ${JSON.stringify(payload)};`, loader: 'js', watchDirs: [CUSTOM_DIR], watchFiles: [path.join(CUSTOM_DIR, 'custom.json'), ...files.map((f) => path.join(CUSTOM_DIR, f.file))] };
+    });
+  },
+};
+
 const options = {
   entryPoints: [path.join(root, 'src/viewer/main.js')],
   bundle: true,
@@ -68,12 +83,14 @@ const options = {
   legalComments: 'none',
   logLevel: 'warning',
   define: { __ARTIFACT_BUILD__: 'false' },
+  plugins: [customPlugin],
 };
 
 if (serve) {
   const ctx = await esbuild.context({
     ...options,
     plugins: [
+      customPlugin,
       {
         name: 'html',
         setup(build) {
