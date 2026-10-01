@@ -14,6 +14,8 @@ import { setupExports } from './exports.js';
 import { setupRegistry } from './registry.js';
 import { setupObjectList } from './objects.js';
 import { setupEditor } from './editor.js';
+import { setupTour } from './tour.js';
+import { sunPosition, sunTimes, lightingFor, hhmm } from './daytime.js';
 
 /* global __ARTIFACT_BUILD__ */
 // __ARTIFACT_BUILD__ подставляет esbuild: true — сборка для публикации в виде Artifact
@@ -53,7 +55,7 @@ const ZONE_LABEL = { galerny: 'Галерный остров', kolomna: 'Осн�
 // Короткие подписи-«булавки»: id объекта → [текст, дальность видимости, м]
 const PINS = {
   Z199: ['Центральная проходная', 2600],
-  Z182: ['СПбГМТУ', 1600],
+  Z182: ['Заводоуправление', 1600],
   Z129: ['Главная судостроительная мастерская', 1600],
   Z3: ['Главный корпус Галерного острова', 1800],
   S1: ['Стапель № 1', 2600],
@@ -287,7 +289,6 @@ async function main() {
   $('optShadows').addEventListener('change', (e) => {
     sun.castShadow = e.target.checked;
   });
-  $('optEvening').addEventListener('change', (e) => setEvening(e.target.checked));
 
   // ---------- левая панель: вкладки и сворачивание ----------
   const narrow = () => window.matchMedia('(max-width: 760px)').matches;
@@ -778,42 +779,69 @@ async function main() {
     selectedId: () => selected?.id || null,
   });
 
-  // ---------- освещение: день / вечер ----------
-  const sky = makeSky(false);
-  scene.background = sky.day;
+  // ---------- освещение: время суток ----------
+  // Солнце — над Петербургом в выбранный час сегодняшнего дня: высота и азимут по формулам NOAA,
+  // небо, туман, полусферный свет и окна — по высоте солнца (ночь, сумерки, низкое солнце, день).
+  const today = new Date();
+  const skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 2;
+  skyCanvas.height = 512;
+  const skyTex = new THREE.CanvasTexture(skyCanvas);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  scene.background = skyTex;
   scene.fog = new THREE.Fog(0xcfdbe5, 4200, 11000);
-  function setEvening(on) {
-    $('optEvening').checked = on;
-    scene.background = on ? sky.evening : sky.day;
-    scene.fog.color.set(on ? 0x2a3140 : 0xcfdbe5);
-    sun.color.set(on ? 0xffb37a : 0xfff3e0);
-    sun.intensity = on ? 1.35 : 2.6;
-    hemi.intensity = on ? 0.85 : 1.15;
-    hemi.color.set(on ? 0x9fb0d0 : 0xdfe9f3);
-    hemi.groundColor.set(on ? 0x5a4a44 : 0x6b6558);
-    scene.environment = on ? envEvening : envDay;
-    scene.environmentIntensity = on ? 0.6 : 0.8;
-    renderer.toneMappingExposure = on ? 1.15 : 1.0;
-    placeSun(on);
-    const lit = getMaterial('glass_lit');
-    lit.emissiveIntensity = on ? 1.6 : 0;
-    const water = getMaterial('water');
-    water.color.set(on ? 0x2e4a60 : 0x3e5d70);
+  function paintSky(stops) {
+    const ctx = skyCanvas.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, 512);
+    [0, 0.55, 0.82, 1].forEach((t, i) => g.addColorStop(t, stops[i]));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 2, 512);
+    skyTex.needsUpdate = true;
   }
-  function placeSun(evening) {
-    // день: солнце с юго-юго-запада, ~40°; вечер — низко с северо-запада (белые ночи)
-    const az = evening ? 300 : 210;
-    const el = evening ? 9 : 40;
+  const { rise, set } = sunTimes(today);
+  let dayHours = 13;
+  function setDayTime(h) {
+    dayHours = Math.max(0, Math.min(24, h));
+    const { el, az } = sunPosition(today, dayHours);
+    const L = lightingFor(THREE, el);
+    paintSky(L.sky);
+    scene.fog.color.set(L.sky[1]);
+    sun.color.copy(L.sunColor);
+    sun.intensity = L.sunIntensity;
+    hemi.color.copy(L.hemiSky);
+    hemi.groundColor.copy(L.hemiGround);
+    hemi.intensity = L.hemiIntensity;
+    scene.environment = L.evening ? envEvening : envDay;
+    scene.environmentIntensity = L.envIntensity;
+    renderer.toneMappingExposure = L.exposure;
+    getMaterial('glass_lit').emissiveIntensity = L.windows;
+    getMaterial('water').color.copy(L.water);
+    // тени — от солнца не ниже 4°, иначе они уходят за край карты теней
+    placeSun(az, Math.max(el, 4));
+    const r = $('optTime');
+    if (r && document.activeElement !== r) r.value = String(dayHours);
+    if ($('optTimeOut')) $('optTimeOut').textContent = hhmm(dayHours);
+    if ($('optSun')) $('optSun').textContent = `${el > 0 ? `солнце ${Math.round(el)}° над горизонтом` : el > -6 ? 'сумерки' : 'ночь'} · восход ${hhmm(rise)}, заход ${hhmm(set)}`;
+  }
+  // «вечер»: четверть часа после захода — у горизонта ещё заря, окна уже горят
+  const duskHours = () => Math.min(23.75, set + 0.25);
+  function setEvening(on) {
+    setDayTime(on ? duskHours() : 13);
+  }
+  function placeSun(az, el) {
     const d = 2600;
     const x = Math.sin((az * Math.PI) / 180) * Math.cos((el * Math.PI) / 180) * d;
     const y = Math.cos((az * Math.PI) / 180) * Math.cos((el * Math.PI) / 180) * d;
     const z = Math.sin((el * Math.PI) / 180) * d;
     sun.position.copy(center).add(V3(x, y, z));
   }
+  $('optTime').addEventListener('input', (e) => setDayTime(+e.target.value));
+  $('optTimeNow').addEventListener('click', () => {
+    const n = new Date();
+    setDayTime(n.getHours() + n.getMinutes() / 60);
+  });
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light';
-  const startEvening = prefersDark || document.documentElement.dataset.theme === 'dark';
-  $('optEvening').checked = startEvening;
-  setEvening(startEvening);
+  setEvening(prefersDark || document.documentElement.dataset.theme === 'dark');
 
   // ---------- размер и цикл отрисовки ----------
   // центр проекции смещён вправо на ширину левой панели, чтобы модель не пряталась под ней;
@@ -881,8 +909,27 @@ async function main() {
     setActiveView(null);
   });
 
+  // ---------- экскурсия ----------
+  const tour = setupTour({
+    $,
+    flyTo,
+    controls,
+    reduceMotion,
+    objects: () => pickMesh.userData.objects,
+    highlightProxy,
+    beforeStart: () => {
+      if (editor?.isEditing()) return false;
+      select(null);
+      registry?.toggle?.(false);
+      setActiveView(null);
+      if (narrow()) setPanelCollapsed(true);
+    },
+  });
+  $('tourStart').addEventListener('click', () => tour.start());
+  if (location.hash === '#tour') tour.start();
+
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
   window.__ready = true;
 
   // ---------- вспомогательные ----------
@@ -945,35 +992,6 @@ function mpArea(mp) {
 }
 
 // Небо: вертикальный градиент (день и вечер).
-function makeSky() {
-  const make = (stops) => {
-    const c = document.createElement('canvas');
-    c.width = 2;
-    c.height = 512;
-    const ctx = c.getContext('2d');
-    const g = ctx.createLinearGradient(0, 0, 0, 512);
-    for (const [t, col] of stops) g.addColorStop(t, col);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 2, 512);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  };
-  return {
-    day: make([
-      [0, '#8fb4d6'],
-      [0.55, '#c9dbe8'],
-      [1, '#e6edf2'],
-    ]),
-    evening: make([
-      [0, '#1b2a44'],
-      [0.5, '#3d4a6a'],
-      [0.82, '#b8826b'],
-      [1, '#e0a77d'],
-    ]),
-  };
-}
-
 main().catch((e) => {
   console.error(e);
   const l = document.getElementById('loading');

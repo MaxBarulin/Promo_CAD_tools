@@ -24,6 +24,7 @@
         <summary><h2>Виды</h2></summary>
         <div class="group-body">
           <div class="views" id="views"></div>
+          <button class="btn wide tour-btn" type="button" id="tourStart" title="Облёт верфи с подписями, около полутора минут; ссылка — index.html#tour">▶ Экскурсия по верфи</button>
         </div>
       </details>
       <details class="group" data-grp="layers" open>
@@ -37,7 +38,11 @@
         <div class="group-body">
           <label class="toggle"><input type="checkbox" id="optLabels" checked /><span class="box"></span>Подписи</label>
           <label class="toggle"><input type="checkbox" id="optShadows" checked /><span class="box"></span>Тени</label>
-          <label class="toggle"><input type="checkbox" id="optEvening" /><span class="box"></span>Вечернее освещение</label>
+          <div class="daytime">
+            <label class="daytime-head" for="optTime"><span>Время суток</span><output id="optTimeOut" for="optTime">13:00</output></label>
+            <input class="range" type="range" id="optTime" min="0" max="24" step="0.25" value="13" aria-describedby="optSun" />
+            <div class="daytime-foot"><span id="optSun"></span><button class="btn mini" type="button" id="optTimeNow">Сейчас</button></div>
+          </div>
         </div>
       </details>
       <details class="group" data-grp="registry" open>
@@ -96,6 +101,19 @@
   </button>
 
   <section class="card sheet" id="card" hidden aria-live="polite"></section>
+
+  <section class="tour sheet" id="tour" hidden aria-label="Экскурсия по верфи">
+    <div class="tour-bar"><span id="tourProgress"></span></div>
+    <div class="tour-head"><span class="tour-step" id="tourStep"></span><h2 class="tour-title" id="tourTitle"></h2></div>
+    <p class="tour-text" id="tourText" aria-live="polite"></p>
+    <div class="tour-ctl">
+      <button class="icon-btn" type="button" id="tourPrev" aria-label="Предыдущая остановка" title="Назад (←)">‹</button>
+      <button class="icon-btn play" type="button" id="tourPlay" aria-label="Пауза">❚❚</button>
+      <button class="icon-btn" type="button" id="tourNext" aria-label="Следующая остановка" title="Вперёд (→)">›</button>
+      <span class="ed-grow"></span>
+      <button class="icon-btn" type="button" id="tourClose" aria-label="Закончить экскурсию" title="Закончить (Esc)">×</button>
+    </div>
+  </section>
 
   <section class="registry sheet" id="registry" hidden aria-label="Реестр зданий и сооружений"></section>
 

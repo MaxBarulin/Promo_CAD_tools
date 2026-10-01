@@ -1575,3 +1575,149 @@ body.ed-picking #scene {
   height: 22px;
   margin-top: -2px;
 }
+
+/* ---------- время суток ---------- */
+.daytime {
+  display: grid;
+  gap: 4px;
+  padding: 4px 2px 2px;
+}
+.daytime-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+}
+.daytime-head output {
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.daytime-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.daytime-foot span {
+  flex: 1;
+  min-width: 0;
+}
+.btn.mini {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.range {
+  width: 100%;
+  margin: 2px 0;
+  accent-color: var(--accent);
+  /* на ползунке — сутки: ночь, рассвет, день, закат */
+  height: 22px;
+  cursor: pointer;
+}
+
+/* ---------- экскурсия ---------- */
+.tour-btn {
+  margin-top: 6px;
+  text-align: center;
+  font-weight: 600;
+}
+.tour {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 12px 14px 8px;
+  display: grid;
+  gap: 6px;
+  overflow: hidden;
+  border-top: 3px solid var(--signal);
+}
+.tour-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: transparent;
+}
+.tour-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.tour-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.tour-step {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--signal);
+  letter-spacing: 0.06em;
+  flex: none;
+}
+.tour-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.tour-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.tour-ctl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tour-ctl .icon-btn {
+  font-size: 18px;
+  color: var(--ink);
+}
+.tour-ctl .icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.tour-ctl .play {
+  font-size: 13px;
+  border: 1px solid var(--line);
+}
+body.touring .hint {
+  display: none;
+}
+@media (min-width: 761px) {
+  /* место под левую панель: плашка — по центру видимой части сцены */
+  body:not(.panel-collapsed) .tour {
+    left: calc(50% + 181px);
+    width: min(560px, calc(100% - 378px));
+  }
+}
+@media (max-width: 760px) {
+  .tour {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    transform: none;
+    bottom: 64px;
+    max-height: 42%;
+    overflow-y: auto;
+  }
+  .tour-title {
+    font-size: 16px;
+  }
+}
+body.touring .coords {
+  display: none;
+}
