@@ -554,6 +554,8 @@ async function main() {
     }
   }
   $('scopeBtn').addEventListener('click', () => setYardOnly(!yardOnly));
+  // страховка для браузеров без overflow: clip — панель и сцена сами не прокручиваются
+  for (const el of [$('panel'), $('app')]) el.addEventListener('scroll', () => el.scrollTop && (el.scrollTop = 0));
   // разделы левой панели сворачиваются; какие свёрнуты — запоминается (только удобство)
   {
     let closed = {};

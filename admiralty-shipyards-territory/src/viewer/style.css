@@ -74,6 +74,8 @@ body {
   height: 100%;
   width: 100%;
   overflow: hidden;
+  /* clip: фокус на поле не может «прокрутить» сцену с панелями */
+  overflow: clip;
 }
 #scene {
   position: absolute;
@@ -159,6 +161,9 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* clip, а не только hidden: иначе фокус на переключателе прокручивает саму панель
+     и её шапка с кнопкой «свернуть» уезжает за край (на телефоне — незакрываемая шторка) */
+  overflow: clip;
 }
 .panel-scroll {
   overflow-y: auto;
@@ -260,6 +265,7 @@ button {
 }
 .layer,
 .toggle {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -271,6 +277,12 @@ button {
 .layer input,
 .toggle input {
   position: absolute;
+  /* скрытый флажок — внутри своей строки: фокус на нём ничего не прокручивает */
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  margin: 0;
   opacity: 0;
   pointer-events: none;
 }
