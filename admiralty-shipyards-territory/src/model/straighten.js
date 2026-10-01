@@ -77,7 +77,7 @@ const lineX = (a, b) => {
   return [p[0] + d[0] * t, p[1] + d[1] * t];
 };
 
-function selfIntersects(ring) {
+export function selfIntersects(ring) {
   const n = ring.length;
   const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
   for (let i = 0; i < n; i++) {

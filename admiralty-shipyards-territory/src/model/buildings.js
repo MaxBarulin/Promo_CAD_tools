@@ -1,8 +1,10 @@
 // Генерация зданий: стены, цоколь, карнизы, кровли (плоская с парапетом, двускатная,
 // вальмовая, многопролётная), окна по этажам, двери и ворота, портики, вывески.
 
-import { ensureCCW, ensureCW, sub, add, mul, norm, len, dist, lerp, centroid, area } from '../geo.js';
+import { ensureCCW, ensureCW, sub, add, mul, norm, len, dist, lerp, centroid, area, pointInRing } from '../geo.js';
 import { dedupe, Sink, triangulate } from './geom.js';
+import { selfIntersects } from './straighten.js';
+import pc from 'polygon-clipping';
 
 // Смещение замкнутого контура (CCW) наружу на d (d < 0 — внутрь).
 export function offsetRing(ring, d) {
@@ -35,7 +37,17 @@ const hash3 = (p) => {
 
 // ---------- параметры окон по типам зданий ----------
 
+// Окна по типу здания; sill — высота низа окон первого этажа над землёй (по обмеру), м.
 function windowSpec(b) {
+  const spec = baseWindowSpec(b);
+  if (Number.isFinite(b.sill) && spec.rows.length) {
+    const [r0] = spec.rows;
+    spec.rows = [{ z0: b.sill, h: r0.h + Math.max(0, r0.z0 - b.sill) * 0.6 }, ...spec.rows.slice(1)];
+  }
+  return spec;
+}
+
+function baseWindowSpec(b) {
   const floors = b.floors || Math.max(1, Math.round(b.h / 3.4));
   const fh = b.h / floors;
   const perFloor = (sillFrac, hFrac, extra = {}) => ({
@@ -175,8 +187,27 @@ function rectFrame(r) {
   return { c0, ux: norm(sub(c1, c0)), uy: norm(sub(c3, c0)), w: dist(c0, c1), d: dist(c0, c3) };
 }
 
+// Отступ внутрь годится, если не перехлёстывается и не выходит за стены
+// (у сложных контуров с короткими рёбрами простой отступ ломается).
+function insetOk(ring, inner) {
+  if (selfIntersects(inner) || inner.some((p) => !pointInRing(p, ring))) return false;
+  const cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  for (let i = 0; i < inner.length; i++) {
+    const a = inner[i];
+    const b = inner[(i + 1) % inner.length];
+    for (let j = 0; j < ring.length; j++) {
+      const c = ring[j];
+      const d = ring[(j + 1) % ring.length];
+      if (cr(a, b, c) * cr(a, b, d) < 0 && cr(c, d, a) * cr(c, d, b) < 0) return false;
+    }
+  }
+  return true;
+}
+
 function roofFlat(sink, ring, h, key) {
-  const inner = offsetRing(ring, -0.35);
+  const inner = [0.35, 0.15].map((d) => offsetRing(ring, -d)).find((r) => insetOk(ring, r));
+  // без парапета: кровля по верху стен
+  if (!inner) return sink.flat(key, ring, h);
   const zr = h - 0.6;
   sink.flat(key, inner, zr);
   // парапет: верх и внутренние стенки
@@ -220,6 +251,18 @@ function roofBarrel(sink, q, h, rh, key, wallKey) {
   const end1 = prof.map((p) => v(at(q1, q2, p.u), p.z)).reverse();
   sink.face(wallKey, end0);
   sink.face(wallKey, end1);
+}
+
+// Самопересекающийся контур (распознавание космоснимков) — наибольший из простых кусков.
+export function cleanRing(ring) {
+  if (ring.length < 4 || !selfIntersects(ring)) return ring;
+  try {
+    const parts = pc.union([[...ring, ring[0]]]).map((poly) => poly[0].slice(0, -1));
+    const best = parts.sort((x, y) => area(y) - area(x))[0];
+    return best && best.length >= 3 ? ensureCCW(best) : ring;
+  } catch {
+    return ring;
+  }
 }
 
 // Скатная кровля над контуром любой формы (Г-образные, изломанные корпуса): высота точки —
@@ -469,13 +512,13 @@ export function buildBuilding(sink, b, extras = {}) {
     return;
   }
   if (b.holes && b.holes.length) return buildCourtyardBuilding(sink, b);
-  const ring = ensureCCW(dedupe(b.poly));
+  const ring = cleanRing(ensureCCW(dedupe(b.poly)));
   const h = b.h;
   const roof = b.roof || { type: 'flat' };
   const roofKey = roof.color || 'r_gray';
   const wallKey = b.wall || 'light';
   const spec = windowSpec(b);
-  const plinthH = b.type === 'hall' || b.type === 'warehouse' || b.type === 'elling' ? 0.5 : 0.75;
+  const plinthH = Math.min(b.type === 'hall' || b.type === 'warehouse' || b.type === 'elling' ? 0.5 : 0.75, Number.isFinite(b.sill) ? Math.max(0.15, b.sill - 0.1) : 1);
 
   const low = b.detail === 'low';
 

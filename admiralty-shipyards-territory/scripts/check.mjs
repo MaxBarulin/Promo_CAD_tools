@@ -62,6 +62,33 @@ for (let i = 0; i < polys.length; i++) {
     else warn(msg);
   }
 }
+// кровля не должна выходить за контур здания (ломаный отступ парапета, самопересечения контура)
+const segD = (p, a, c) => {
+  const dx = c[0] - a[0];
+  const dy = c[1] - a[1];
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t);
+};
+const inRing = (p, r) => {
+  let c = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > p[1] !== r[j][1] > p[1] && p[0] < ((r[j][0] - r[i][0]) * (p[1] - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+  return c;
+};
+for (const { o } of polys) {
+  // у зданий из частей (башни, пристройки) части могут выходить за основной контур
+  if (o.info?.kind !== 'building' || o.custom || o.info.parts) continue;
+  const r = o.proxy.poly;
+  let out = 0;
+  for (const [key, b] of o.sink.bufs) {
+    if (!key.startsWith('r_')) continue;
+    for (let i = 0; i < b.idx.length; i += 3) {
+      const P3 = [0, 1, 2].map((j) => b.idx[i + j] * 3).map((k) => [b.pos[k], -b.pos[k + 2]]);
+      const m = [(P3[0][0] + P3[1][0] + P3[2][0]) / 3, (P3[0][1] + P3[1][1] + P3[2][1]) / 3];
+      if (!inRing(m, r) && Math.min(...r.map((a, k) => segD(m, a, r[(k + 1) % r.length]))) > 1) out++;
+    }
+  }
+  if (out) warn(`${o.id} «${o.name}»: кровля выходит за контур (${out} треуг.)`);
+}
 if (!problems) console.log('  ✓ замечаний нет');
 
 const cr = model.custom;

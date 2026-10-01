@@ -239,6 +239,7 @@ export function editBuilding(orig, e) {
   if (has(e.wall)) b.wall = e.wall;
   if (Array.isArray(e.units)) b.units = cleanUnits(e.units);
   if (has(e.src)) b.refined = e.src;
+  if (has(e.sill)) b.sill = +e.sill;
   const retype = has(e.type) && e.type !== orig.type;
   const reheight = has(e.height) && +e.height !== orig.h;
   if (retype) b.type = e.type;
@@ -267,7 +268,7 @@ export function editBuilding(orig, e) {
       const ring = partRing(p);
       if (!ring || area(ring) < 0.5) continue;
       const ph = has(p.height) ? +p.height : b.h;
-      const part = decorate({ ...b, poly: tf(ring), holes: undefined, parts: undefined, h: ph, floors: has(p.floors) ? +p.floors : has(p.height) ? undefined : b.floors, roof: undefined, doors: undefined, roofColor: b.roof?.color }, null);
+      const part = decorate({ ...b, type: BUILDING_TYPES.includes(p.type) ? p.type : b.type, poly: tf(ring), holes: undefined, parts: undefined, h: ph, floors: has(p.floors) ? +p.floors : has(p.height) ? undefined : b.floors, roof: undefined, doors: undefined, roofColor: b.roof?.color }, null);
       if (p.circle) part.doors = [];
       applyRoof(part, { roof: p.roof || b.roof?.type || 'flat', roofH: p.roofH });
       if (ROOF_COLORS.includes(p.roofColor)) part.roof.color = p.roofColor;

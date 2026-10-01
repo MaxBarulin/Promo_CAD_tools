@@ -697,6 +697,7 @@ export function setupEditor(api) {
           <label class="ed-f">Кровля<select class="field" name="roof">${!ROOF_TYPES[roofVal] ? `<option value="" selected>${roofVal ? 'прежняя' : '—'}</option>` : ''}${Object.entries(ROOF_TYPES).map(([k, n]) => `<option value="${k}"${k === roofVal ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
           <label class="ed-f">Высота кровли, м<input class="field" name="roofH" type="number" min="0" max="60" step="any" placeholder="авто" value="${esc(e.roofH ?? '')}" /></label>
         </div>
+        <label class="ed-f">Низ окон 1-го этажа, м<input class="field" name="sill" type="number" min="0" max="6" step="any" placeholder="по типу здания" value="${esc(e.sill ?? '')}" /></label>
         <label class="ed-f">Покрытие кровли<select class="field" name="roofColor"><option value="">${esc(orig?.roof?.color ? `прежнее: ${roofColorName(orig.roof.color)}` : 'прежнее')}</option>${ROOF_COLORS.map((k) => `<option value="${k}"${k === e.roofColor ? ' selected' : ''}>${esc(roofColorName(k))}</option>`).join('')}</select></label>
         <p class="ed-hint" id="edRoofHint"${st.obj?.info.dims ? ' hidden' : ''}>Контур не прямоугольный: двускатная и вальмовая кровли пойдут скатами по контуру, остальные — плоской.</p>` : ''}` : ''}
         <label class="ed-f">Описание<textarea class="field" name="info" rows="3">${esc(e.info ?? info.info ?? '')}</textarea></label>
@@ -800,8 +801,8 @@ export function setupEditor(api) {
       const k = t.name;
       if (!k) return;
       if (k === 'name' || k === 'info' || k === 'src') setField(k, t.value.trim());
-      else if (k === 'roofH') {
-        if (t.value === '') delete e.roofH;
+      else if (k === 'roofH' || k === 'sill') {
+        if (t.value === '') delete e[k];
         else if (+t.value >= 0) setField(k, +t.value);
       }
       else if (k === 'floors') setField(k, t.value ? Math.max(1, Math.round(+t.value)) : '');

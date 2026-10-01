@@ -10,11 +10,17 @@
 
 | Файл | Источник | Что на нём | В git |
 |---|---|---|---|
+| `pastvu_1029450.jpg` | [PastVu](https://pastvu.com/p/1029450) | Бердов мост, 1958 | нет |
+| `pastvu_1052025.jpg` | [PastVu](https://pastvu.com/p/1052025) | Механико-литейный завод К. Берда, 1917 | нет |
+| `pastvu_1052040.jpg` | [PastVu](https://pastvu.com/p/1052040) | Эллинг механико-литейного завода К. Берда, 1917 | нет |
 | `pastvu_1224266.jpg` | [PastVu](https://pastvu.com/p/1224266) | Аппарат «Тетис-Н», 1990 | нет |
 | `pastvu_130316.jpg` | [PastVu](https://pastvu.com/p/130316) | Адмиралтейские верфи, 1996 | нет |
 | `pastvu_130377.jpg` | [PastVu](https://pastvu.com/p/130377) | Танкер на стапеле, 1995 | нет |
 | `pastvu_130378.jpg` | [PastVu](https://pastvu.com/p/130378) | Спуск танкера «Виктор Дубровский», 1996 | нет |
 | `pastvu_130382.jpg` | [PastVu](https://pastvu.com/p/130382) | Подводная лодка у достройки, 1994 | нет |
+| `pastvu_130383.jpg` | [PastVu](https://pastvu.com/p/130383) | Общий вид зданий и сооружений на Матисовом острове, 1996 (с наб. Пряжки на северо-запад) | нет |
+| `pastvu_1342368.jpg` | [PastVu](https://pastvu.com/p/1342368) | Бердов мост, 1965 | нет |
+| `pastvu_1420642.jpg` | [PastVu](https://pastvu.com/p/1420642) | Бердов мост, 1998: корпус на северном берегу Пряжки | нет |
 | `pastvu_450807.jpg` | [PastVu](https://pastvu.com/p/450807) | За центральной проходной, 1998 | нет |
 | `commons_0243cb-admiralty-shipyards.jpg` | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:0243Cb._Admiralty_Shipyards_in_St._Petersburg.jpg) — Александровы АГ, CC BY-SA 4.0, 2023 | общий вид верфи | да |
 | `commons_neva-schmidt-emb-2019.jpg` | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Spb_Vasilievsky_Island_Neva_at_SchmidtEmb_asv2019-09.jpg) — A.Savin, FAL (Free Art License), 2019 | общий вид Невы и верфей сверху | да |
@@ -112,6 +118,12 @@
 | `citywalls_26154_фото_218-223527.jpg` | [citywalls.ru](https://www.citywalls.ru/house26154.html) | Новое Адмиралтейство. Токарная и слесарная мастерские - Адмиралтейские верфи. Цех — Фото - Влада , 05.2015. | нет |
 | `citywalls_26154_фото_392-402071.jpg` | [citywalls.ru](https://www.citywalls.ru/house26154.html) | Новое Адмиралтейство. Токарная и слесарная мастерские - Адмиралтейские верфи. Цех — Фото - Влада , 04.2019. | нет |
 
+## Z76 — Цех Нового Адмиралтейства
+
+| Файл | Источник | Что на нём | В git |
+|---|---|---|---|
+| `commons_admiraltejskie-verfi-panoramio.jpg` | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:%D0%90%D0%B4%D0%BC%D0%B8%D1%80%D0%B0%D0%BB%D1%82%D0%B5%D0%B9%D1%81%D0%BA%D0%B8%D0%B5_%D0%B2%D0%B5%D1%80%D1%84%D0%B8_-_panoramio.jpg) — Игорь Волков, CC BY 3.0, 2009 | съёмка от x −124, y 1260 на юго-запад: слева — Z76 (серый силикатный кирпич, красные пилястры, 3 ряда окон), справа — Z47 (корпус № 29) | да |
+
 ## Z129 — Главная судостроительная мастерская с кузницей (лит. АЦ)
 
 | Файл | Источник | Что на нём | В git |
@@ -183,7 +195,6 @@
 | Файл | Источник | Что на нём | В git |
 |---|---|---|---|
 | `pastvu_130401.jpg` | [PastVu](https://pastvu.com/p/130401) | Здание-ветеран, 1995 | нет |
-| `commons_admiraltejskie-verfi-panoramio.jpg` | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:%D0%90%D0%B4%D0%BC%D0%B8%D1%80%D0%B0%D0%BB%D1%82%D0%B5%D0%B9%D1%81%D0%BA%D0%B8%D0%B5_%D0%B2%D0%B5%D1%80%D1%84%D0%B8_-_panoramio.jpg) — Игорь Волков, CC BY 3.0, 2009 | корпус № 29 изнутри территории | да |
 | `citywalls_1455_титул_8-8492.jpg` | [citywalls.ru](https://www.citywalls.ru/house1455.html) | Съезжий дом 4-й Адмиралтейской (Коломенской) части | нет |
 | `citywalls_1455_фото_191-196037.jpg` | [citywalls.ru](https://www.citywalls.ru/house1455.html) | Съезжий дом 4-й Адмиралтейской (Коломенской) части — Фото - СергейЦ , 05.2014. | нет |
 | `citywalls_1455_фото_47-48517.jpg` | [citywalls.ru](https://www.citywalls.ru/house1455.html) | Съезжий дом 4-й Адмиралтейской (Коломенской) части — Фото - Anna Zinchenko, 2010. | нет |
