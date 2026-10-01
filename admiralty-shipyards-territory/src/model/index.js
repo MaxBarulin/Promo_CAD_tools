@@ -48,10 +48,15 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
   const t0 = Date.now();
   const P = buildPlanar(data);
   const layers = Object.fromEntries(LAYERS.map((l) => [l.id, { ...l, objects: [] }]));
+  // scope: 'yard' — относится к верфи, 'city' — окружение (скрывается кнопкой «Только верфь»),
+  // 'base' — земля и вода (видны всегда)
+  const DEFAULT_SCOPE = { terrain: 'base', roads: 'city', fence: 'yard', shipyard: 'yard', production: 'yard', vessels: 'yard', bridges: 'city', context: 'city', greenery: 'city' };
   const add_ = (layer, obj) => {
+    obj.scope ??= DEFAULT_SCOPE[layer] || 'city';
     layers[layer].objects.push(obj);
     return obj;
   };
+  const inYardMP = (p) => P.shipyardMP.some((poly) => pointInRing(p, poly[0]) && !poly.slice(1).some((h) => pointInRing(p, h)));
   const signs = [];
 
   // ---------- рельеф ----------
@@ -62,23 +67,29 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
     const sp = new Sink();
     const sb = new Sink();
     buildQuayEdges(sp, sb, data, P);
-    add_('terrain', { id: 'parapets', name: 'Гранитные парапеты набережных', sink: sp });
-    add_('terrain', { id: 'bollards', name: 'Кнехты и отбойный брус причалов', sink: sb });
+    add_('terrain', { id: 'parapets', name: 'Гранитные парапеты набережных', sink: sp, scope: 'city' });
+    add_('terrain', { id: 'bollards', name: 'Кнехты и отбойный брус причалов', sink: sb, scope: 'yard' });
   }
 
   // ---------- дороги и площадки ----------
   {
     const s = new Sink();
     const m = new Sink();
-    buildRoads(s, m, data, P);
-    add_('roads', { id: 'roads', name: 'Улицы, тротуары, внутризаводские проезды', sink: s });
-    add_('roads', { id: 'markings', name: 'Дорожная разметка', sink: m });
+    const yr = new Sink();
+    buildRoads(s, m, data, P, yr);
+    add_('roads', { id: 'roads', name: 'Улицы и тротуары', sink: s, scope: 'city' });
+    add_('roads', { id: 'yard-roads', name: 'Внутризаводские проезды', sink: yr, scope: 'yard' });
+    add_('roads', { id: 'markings', name: 'Дорожная разметка', sink: m, scope: 'city' });
+    const yardArea = (a) => /^A\d/.test(a.id);
     const a = new Sink();
-    buildAreas(a, data, P);
-    add_('roads', { id: 'areas', name: 'Площади, скверы, площадки', sink: a });
+    buildAreas(a, data, P, (x) => !yardArea(x));
+    add_('roads', { id: 'areas', name: 'Площади и скверы', sink: a, scope: 'city' });
+    const ya = new Sink();
+    buildAreas(ya, data, P, yardArea);
+    add_('roads', { id: 'yard-areas', name: 'Площадки верфи', sink: ya, scope: 'yard' });
     const r = new Sink();
     buildRails(r, data);
-    add_('roads', { id: 'rails', name: 'Подкрановые и железнодорожные пути', sink: r });
+    add_('roads', { id: 'rails', name: 'Подкрановые и железнодорожные пути', sink: r, scope: 'yard' });
   }
 
   // ---------- ограждение ----------
@@ -238,7 +249,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
   for (const br of data.bridges) {
     const s = new Sink();
     buildBridge(s, br);
-    add_('bridges', { id: br.id, name: br.name, sink: s, info: { name: br.name, info: br.info, kind: 'bridge' }, proxy: prismProxy(bufferPolyline([br.from, br.to], br.w / 2, { capExtend: 3 }), -1, br.type === 'kalinkin' ? 10 : 2.5) });
+    add_('bridges', { id: br.id, name: br.name, sink: s, scope: br.type === 'industrial' ? 'yard' : 'city', info: { name: br.name, info: br.info, kind: 'bridge' }, proxy: prismProxy(bufferPolyline([br.from, br.to], br.w / 2, { capExtend: 3 }), -1, br.type === 'kalinkin' ? 10 : 2.5) });
   }
   for (const a of data.arches) {
     const s = new Sink();
@@ -249,6 +260,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
   // ---------- озеленение и автомобили ----------
   {
     const s = new Sink();
+    const sY = new Sink();
     const R = rng(77);
     const keys = ['foliage', 'foliage2', 'foliage3'];
     const B = data.meta.bounds;
@@ -260,7 +272,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
       for (const p of pts) {
         if (!onLand(p)) continue;
         const h = hMin + R() * (hMax - hMin);
-        buildTree(s, p, h, 2.4 + R() * 1.6, keys[Math.floor(R() * 3)]);
+        buildTree(inYardMP(p) ? sY : s, p, h, 2.4 + R() * 1.6, keys[Math.floor(R() * 3)]);
       }
     };
     // деревья в скверах и на газонах (с ограничением общего числа — модель смотрят и с телефона)
@@ -273,45 +285,12 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
       if (a.kind === 'garden') plant(sel);
       else plant(sel, 6, 10);
     }
-    // аллеи вдоль улиц
-    for (const id of ['rizhsky', 'peterhofsky', 'fontanka-s', 'sadovaya']) {
-      const st = data.streets.find((x) => x.id === id);
-      if (!st) continue;
-      const L = polylineLength(st.line);
-      for (let d = 8; d < L - 8; d += 13) {
-        const { p, dir } = pointAt(st.line, d);
-        for (const side of id === 'fontanka-s' ? [-1] : [1, -1]) {
-          const q = add(p, mul(perp(dir), side * (st.w / 2 + 1.2)));
-          if (P.carriageways.length && R() < 0.85) plant([q], 8, 13);
-        }
-      }
-    }
-    // деревья во дворах Коломны и на Матисовом острове
-    plant(
-      [
-        [205, 120], [230, 150], [260, 260], [310, 300], [380, 330], [140, 470], [180, 520], [330, 610],
-        [360, 660], [250, 980], [300, 1020], [210, 1100], [470, 1040], [520, 990], [560, 620], [520, 560],
-        [-90, 520], [-110, 600], [-170, 520], [-45, 690],
-      ],
-      8,
-      12,
-    );
-    add_('greenery', { id: 'trees', name: 'Деревья', sink: s });
+    add_('greenery', { id: 'trees', name: 'Деревья', sink: s, scope: 'city' });
+    add_('greenery', { id: 'trees-yard', name: 'Деревья на территории верфи', sink: sY, scope: 'yard' });
 
     const c = new Sink();
+    const cY = new Sink();
     const carKeys = ['car', 'car2', 'car3', 'car', 'car3'];
-    const park = data.areas.find((a) => a.id === 'parking-lots');
-    if (park) {
-      const [p0, p1, p2, p3] = park.polygon;
-      const L = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]);
-      const dir = [(p3[0] - p0[0]) / L, (p3[1] - p0[1]) / L];
-      const ang = (Math.atan2(dir[1], dir[0]) * 180) / Math.PI + 90;
-      for (let d = 3; d < L - 2; d += 2.6) {
-        if (R() < 0.25) continue;
-        const p = add(add(p0, mul(dir, d)), [(p1[0] - p0[0]) / 2, (p1[1] - p0[1]) / 2]);
-        buildCar(c, p, ang, carKeys[Math.floor(R() * carKeys.length)]);
-      }
-    }
     // автомобили у обочин внутризаводских проездов
     for (const r of data.internalRoads) {
       const L = polylineLength(r.line);
@@ -320,23 +299,26 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
         const side = R() < 0.5 ? -1 : 1;
         const q = add(p, mul(perp(dir), side * (r.w / 2 - 1.2)));
         if (!onLand(q)) continue;
-        buildCar(c, q, Math.atan2(dir[1], dir[0]) / DEG, carKeys[Math.floor(R() * carKeys.length)]);
+        buildCar(cY, q, Math.atan2(dir[1], dir[0]) / DEG, carKeys[Math.floor(R() * carKeys.length)]);
       }
     }
-    // движение на городских улицах
-    for (const id of ['sadovaya', 'dekabristov', 'rimskogo', 'peterhofsky', 'english-emb', 'lotsmanskaya', 'rizhsky']) {
-      const st = data.streets.find((x) => x.id === id);
-      if (!st) continue;
+    // движение на основных улицах города
+    let cars = 0;
+    for (const st of data.streets) {
+      if (!['primary', 'secondary', 'tertiary'].includes(st.cls) || cars > 220) continue;
       const L = polylineLength(st.line);
-      for (let d = 20 + R() * 30; d < L - 10; d += 35 + R() * 50) {
+      for (let d = 15 + R() * 30; d < L - 10; d += 45 + R() * 60) {
         const { p, dir } = pointAt(st.line, d);
         const lane = R() < 0.5 ? -1 : 1;
         const q = add(p, mul(perp(dir), (lane * st.w) / 4));
+        if (!P.carriageways.some((poly) => pointInRing(q, poly[0]))) continue;
         const ang = (Math.atan2(dir[1], dir[0]) * 180) / Math.PI + (lane > 0 ? 180 : 0);
         buildCar(c, q, ang, carKeys[Math.floor(R() * carKeys.length)]);
+        cars++;
       }
     }
-    add_('greenery', { id: 'cars', name: 'Автомобили', sink: c });
+    add_('greenery', { id: 'cars', name: 'Автомобили на улицах', sink: c, scope: 'city' });
+    add_('greenery', { id: 'cars-yard', name: 'Автомобили на территории верфи', sink: cY, scope: 'yard' });
   }
 
   // статистика
@@ -357,19 +339,29 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto' } = {
 export function toMergedGroups(THREE, model, getMaterial) {
   const groups = [];
   for (const layer of model.layers) {
-    const merged = new Sink();
-    for (const o of layer.objects) merged.merge(o.sink);
     const g = new THREE.Group();
     g.name = layer.name;
     g.userData.layer = layer.id;
-    for (const { key, geometry } of merged.toGeometries(THREE)) {
-      const mesh = new THREE.Mesh(geometry, getMaterial(key));
-      mesh.name = `${layer.id}:${key}`;
-      const tr = PALETTE[key]?.opacity != null;
-      mesh.castShadow = !tr && layer.id !== 'terrain' && layer.id !== 'roads';
-      mesh.receiveShadow = true;
-      if (key === 'water') mesh.userData.water = true;
-      g.add(mesh);
+    // внутри слоя — подгруппы по принадлежности (верфь / город / основа), чтобы город
+    // можно было скрыть одним переключателем
+    for (const scope of ['base', 'yard', 'city']) {
+      const objs = layer.objects.filter((o) => (o.scope || 'city') === scope);
+      if (!objs.length) continue;
+      const merged = new Sink();
+      for (const o of objs) merged.merge(o.sink);
+      const sg = new THREE.Group();
+      sg.name = `${layer.id}:${scope}`;
+      sg.userData.scope = scope;
+      for (const { key, geometry } of merged.toGeometries(THREE)) {
+        const mesh = new THREE.Mesh(geometry, getMaterial(key));
+        mesh.name = `${layer.id}:${scope}:${key}`;
+        const tr = PALETTE[key]?.opacity != null;
+        mesh.castShadow = !tr && layer.id !== 'terrain' && layer.id !== 'roads';
+        mesh.receiveShadow = true;
+        if (key === 'water') mesh.userData.water = true;
+        sg.add(mesh);
+      }
+      g.add(sg);
     }
     groups.push(g);
   }
@@ -448,7 +440,7 @@ export function buildPickMesh(THREE, model) {
     for (const o of layer.objects) {
       if (!o.proxy || !o.info) continue;
       const k = objs.length;
-      objs.push({ id: o.id, name: o.name, layer: layer.id, info: o.info, proxy: o.proxy, generated: o.generated });
+      objs.push({ id: o.id, name: o.name, layer: layer.id, scope: o.scope, info: o.info, proxy: o.proxy, generated: o.generated });
       if (o.proxy.line) {
         const line = o.proxy.line;
         for (let i = 0; i < line.length - 1; i++) {

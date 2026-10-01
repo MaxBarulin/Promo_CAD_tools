@@ -166,22 +166,22 @@ async function main() {
 
   // ---------- подписи ----------
   const labelObjs = [];
-  function addLabel(text, at, z, cls, minDist = 0, maxDist = Infinity) {
+  function addLabel(text, at, z, cls, minDist = 0, maxDist = Infinity, scope = 'base') {
     const el = document.createElement('div');
     el.className = 'lbl ' + cls;
     el.textContent = text;
     const o = new CSS2DObject(el);
     o.position.copy(V3(at[0], at[1], z));
-    o.userData = { minDist, maxDist };
+    o.userData = { minDist, maxDist, scope };
     scene.add(o);
     labelObjs.push(o);
     return o;
   }
   for (const l of data.labels) {
     if (l.kind === 'island') addLabel(l.text, l.at, 60, 'island', 0, 3600);
-    else if (l.kind === 'district') addLabel(l.text, l.at, 40, 'district', 0, 3600);
-    else if (l.kind === 'street') addLabel(l.text, l.at, 3, 'street', 0, 1300);
-    else addLabel(l.text, l.at, 14, 'street', 0, 1300);
+    else if (l.kind === 'district') addLabel(l.text, l.at, 40, 'district', 0, 3600, 'city');
+    else if (l.kind === 'street') addLabel(l.text, l.at, 3, 'street', 0, 1300, 'city');
+    else addLabel(l.text, l.at, 14, 'street', 0, 1300, 'city');
   }
   for (const l of data.water.labels) addLabel(l.text, l.at, 1, 'water' + (l.size === 'xl' ? ' xl' : ''), 0, l.size === 'xl' || l.size === 'l' ? 4000 : 1800);
   for (const o of pickMesh.userData.objects) {
@@ -189,7 +189,7 @@ async function main() {
     if (!pin) continue;
     const p = o.proxy;
     const c = centroid(p.poly);
-    addLabel(pin[0], c, p.z1 + 4, 'pin', 0, pin[1]);
+    addLabel(pin[0], c, p.z1 + 4, 'pin', 0, pin[1], o.scope === 'city' ? 'city' : 'yard');
   }
 
   // ---------- интерфейс ----------
@@ -281,7 +281,10 @@ async function main() {
     const hits = raycaster.intersectObject(pickMesh, false);
     const objs = pickMesh.userData.objects;
     const fo = pickMesh.userData.faceObj;
-    const hit = hits.find((h) => !hiddenLayers[objs[fo[h.faceIndex]].layer]);
+    const hit = hits.find((h) => {
+      const ob = objs[fo[h.faceIndex]];
+      return !hiddenLayers[ob.layer] && !(yardOnly && ob.scope === 'city');
+    });
     select(hit ? objs[fo[hit.faceIndex]] : null);
   });
   function setMouse(e) {
@@ -377,6 +380,33 @@ async function main() {
     return g;
   }
 
+  // ---------- «Только верфь»: скрыть всё, что за территорией ----------
+  let yardOnly = false;
+  const cityGround = getMaterial('ground_city');
+  const cityGroundColor = cityGround.color.clone();
+  function setYardOnly(on) {
+    yardOnly = on;
+    for (const g of groups) for (const sg of g.children) if (sg.userData.scope === 'city') sg.visible = !on;
+    // городская подложка — приглушённая, чтобы территория читалась отдельно
+    cityGround.color.copy(cityGroundColor);
+    if (on) cityGround.color.lerp(new THREE.Color(0xd9dde1), 0.6);
+    $('scopeBtn').setAttribute('aria-pressed', String(on));
+    $('optYardOnly').checked = on;
+    if (on && selected && selected.scope === 'city') select(null);
+    try {
+      localStorage.setItem('admiralty-yard-only', on ? '1' : '0');
+    } catch {
+      /* хранилище недоступно */
+    }
+  }
+  $('scopeBtn').addEventListener('click', () => setYardOnly(!yardOnly));
+  $('optYardOnly').addEventListener('change', (e) => setYardOnly(e.target.checked));
+  try {
+    if (localStorage.getItem('admiralty-yard-only') === '1' || location.hash.includes('yard')) setYardOnly(true);
+  } catch {
+    /* хранилище недоступно */
+  }
+
   // ---------- реестр зданий и сооружений ----------
   // при открытии реестра — ракурс, в котором территория видна над панелью
   const REGISTRY_VIEW = { eye: [1750, 600, 1650], target: [120, 600, 0] };
@@ -464,7 +494,7 @@ async function main() {
     const az = controls.getAzimuthalAngle();
     compassSvg.style.transform = `rotate(${(az * 180) / Math.PI}deg)`;
     for (const o of labelObjs) {
-      const show = camera.position.distanceTo(o.position) <= o.userData.maxDist;
+      const show = camera.position.distanceTo(o.position) <= o.userData.maxDist && !(yardOnly && o.userData.scope === 'city');
       if (o.userData.shown !== show) {
         o.userData.shown = show;
         o.element.style.opacity = show ? '1' : '0';
@@ -481,7 +511,7 @@ async function main() {
   });
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, pickMesh, registry };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, pickMesh, registry, setYardOnly };
   window.__ready = true;
 
   // ---------- вспомогательные ----------

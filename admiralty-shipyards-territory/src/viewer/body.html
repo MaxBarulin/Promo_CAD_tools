@@ -22,6 +22,7 @@
       </section>
       <section class="group">
         <h2>Отображение</h2>
+        <label class="toggle"><input type="checkbox" id="optYardOnly" /><span class="box"></span>Только территория верфи</label>
         <label class="toggle"><input type="checkbox" id="optLabels" checked /><span class="box"></span>Подписи</label>
         <label class="toggle"><input type="checkbox" id="optShadows" checked /><span class="box"></span>Тени</label>
         <label class="toggle"><input type="checkbox" id="optEvening" /><span class="box"></span>Вечернее освещение</label>
@@ -42,6 +43,11 @@
       <p class="note" id="note"></p>
     </div>
   </aside>
+
+  <button class="scope-toggle sheet" type="button" id="scopeBtn" aria-pressed="false" title="Скрыть всё, что за территорией верфи и к ней не относится">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6.5 10 3l7 3.5v7L10 17l-7-3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" /><path d="M10 3v14M3 6.5l7 3.5 7-3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.6" /></svg>
+    <span>Только верфь</span>
+  </button>
 
   <section class="card sheet" id="card" hidden aria-live="polite"></section>
 

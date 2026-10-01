@@ -118,10 +118,11 @@ export function buildQuayEdges(sinkParapet, sinkBollards, data, P) {
   }
 }
 
-export function buildRoads(sinkRoads, sinkMarks, data, P) {
+// sinkYard — отдельный приёмник для внутризаводских проездов (иначе — в sinkRoads)
+export function buildRoads(sinkRoads, sinkMarks, data, P, sinkYard = sinkRoads) {
   slab(sinkRoads, 'asphalt', P.carriageways, 0, Z.carriageway);
   slab(sinkRoads, 'sidewalk', P.sidewalks, 0, Z.sidewalk, 'trim');
-  slab(sinkRoads, 'asphalt_yard', P.internal, 0, Z.internalRoad);
+  slab(sinkYard, 'asphalt_yard', P.internal, 0, Z.internalRoad);
 
   // осевая разметка городских улиц шириной от 12 м
   for (const s of data.streets) {
@@ -159,11 +160,12 @@ export function buildRoads(sinkRoads, sinkMarks, data, P) {
   }
 }
 
-export function buildAreas(sink, data, P) {
+// filter — отбор площадок (например, только площадки верфи)
+export function buildAreas(sink, data, P, filter = () => true) {
   const H = { square: Z.square, garden: Z.garden, lawn: Z.garden, parking: 0.08, storage: 0.04, apron: 0.04, pond: 0.06, industrial: 0.02 };
   const KEY = { square: 'square', garden: 'grass', lawn: 'grass', parking: 'parking', storage: 'storage', apron: 'apron', pond: 'water_pond', industrial: 'industrial' };
   const order = ['industrial', 'square', 'garden', 'lawn', 'parking', 'storage', 'apron', 'pond'];
-  const sorted = [...P.areas].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  const sorted = P.areas.filter(filter).sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
   for (const a of sorted) {
     const z = H[a.kind] ?? 0.05;
     slab(sink, KEY[a.kind] || 'apron', a.mp, 0, z, a.kind === 'garden' || a.kind === 'lawn' ? 'trim' : null);
