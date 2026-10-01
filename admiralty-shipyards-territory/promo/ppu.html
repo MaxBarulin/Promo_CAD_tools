@@ -285,52 +285,7 @@ table.facts td.v { font-weight: 600; }
 table.facts td.v .mono { font-weight: 500; }
 .h3 { font-size: 11.4pt; font-weight: 700; margin: 0 0 2mm; }
 
-/* ---------- подразделения и внедрение ---------- */
-table.dep { width: 100%; border-collapse: collapse; font-size: 8.6pt; line-height: 1.38; margin-bottom: 7mm; }
-table.dep th {
-  text-align: left;
-  font-size: 7.4pt;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-  color: var(--muted);
-  padding: 0 2.5mm 1.6mm 0;
-  border-bottom: 0.4mm solid var(--ink);
-}
-table.dep td { padding: 2mm 2.5mm 2mm 0; border-bottom: 0.25mm solid var(--line); vertical-align: top; }
-table.dep td:first-child { font-weight: 600; width: 52mm; }
-table.dep td:last-child { width: 21mm; padding-right: 0; }
-.st { display: inline-block; font-size: 7.4pt; font-weight: 600; padding: 0.4mm 1.8mm; border-radius: 1mm; white-space: nowrap; }
-.st.yes { background: var(--ok-tint); color: var(--ok); }
-.st.next { background: var(--tint); color: var(--muted); border: 0.25mm solid var(--line); }
-ol.steps { margin: 0 0 6mm; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 2.2mm; }
-ol.steps li { position: relative; padding-left: 9mm; font-size: 9.1pt; }
-ol.steps li::before {
-  counter-increment: s;
-  content: counter(s);
-  position: absolute;
-  left: 0;
-  top: -0.2mm;
-  width: 5.6mm;
-  height: 5.6mm;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 7.6pt;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-}
-ol.steps b { font-weight: 600; }
-.note {
-  font-size: 8pt;
-  line-height: 1.45;
-  color: var(--muted);
-  border: 0.25mm solid var(--line);
-  border-radius: 1.5mm;
-  padding: 3mm 3.5mm;
-}
-.note b { color: var(--ink-2); font-weight: 600; }
+.src { margin-top: 5mm; font-size: 7.8pt; line-height: 1.45; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -359,7 +314,7 @@ ol.steps b { font-weight: 600; }
       <div class="f"><label>Рег. № (заполняет комиссия)</label><div class="line"></div></div>
     </div>
   </div>
-  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">1 / 6</span></div>
+  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">1 / 5</span></div>
 </section>
 
 <!-- ============ 2. Было / Стало ============ -->
@@ -387,7 +342,7 @@ ol.steps b { font-weight: 600; }
       <tr><td>Передать проектировщикам</td><td class="was">—</td><td class="now">Выгрузка генплана в DXF, 3D-модели в GLB, слоёв в GeoJSON</td></tr>
     </tbody>
   </table>
-  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">2 / 6</span></div>
+  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">2 / 5</span></div>
 </section>
 
 <!-- ============ 3. Как это выглядит ============ -->
@@ -413,7 +368,7 @@ ol.steps b { font-weight: 600; }
       </ul>
     </div>
   </div>
-  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">3 / 6</span></div>
+  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">3 / 5</span></div>
 </section>
 
 <!-- ============ 4. Реестр, план, телефон ============ -->
@@ -427,7 +382,7 @@ ol.steps b { font-weight: 600; }
     <figure class="shot"><img src="img/mobile-list.jpg" alt="Список объектов на телефоне" /><figcaption><b>На телефоне:</b> список объектов в нижней шторке.</figcaption></figure>
     <figure class="shot"><img src="img/mobile-card.jpg" alt="Карточка здания на телефоне" /><figcaption>Двойное касание или выбор в списке — подлёт к зданию.</figcaption></figure>
   </div>
-  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">4 / 6</span></div>
+  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">4 / 5</span></div>
 </section>
 
 <!-- ============ 5. Результат ============ -->
@@ -452,37 +407,10 @@ ol.steps b { font-weight: 600; }
     <tr><td>Размещение</td><td class="v">один файл <span class="mono">1,9&nbsp;МБ</span>, работает без интернета и сервера</td></tr>
     <tr><td>Выгрузки</td><td class="v">GLB · DXF · GeoJSON · Excel</td></tr>
   </table>
-  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">5 / 6</span></div>
+  <p class="src">Источники: контуры зданий, улиц и воды — OpenStreetMap и Microsoft ML Buildings через Overture Maps (лицензия ODbL); назначение цехов, стапели и краны — карта предприятия. Высоты цехов верфи в открытых данных отсутствуют и оценены.</p>
+  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">5 / 5</span></div>
 </section>
 
-<!-- ============ 6. Подразделения и внедрение ============ -->
-<section class="page">
-  <div class="sec"><span class="n">4</span><h2>Под задачи подразделений</h2></div>
-  <p class="lead">Модель задумана как общая основа: каждое подразделение может получить свой слой данных, свои отборы и выгрузки. Часть уже работает, остальное — направления доработки после внедрения.</p>
-  <table class="dep">
-    <thead><tr><th>Подразделение</th><th>Задачи на карте</th><th>Статус</th></tr></thead>
-    <tbody>
-      <tr><td>Эксплуатация зданий и сооружений, техническое управление</td><td>Реестр зданий и сооружений: сроки ЭПБ, класс ОПО, техническое состояние, исполнительная документация; отбор и выгрузка в Excel</td><td><span class="st yes">Есть</span></td></tr>
-      <tr><td>Капитальное строительство, проектные подразделения</td><td>Генплан в DXF, 3D-модель в GLB, слои в GeoJSON для проектирования и согласований</td><td><span class="st yes">Есть</span></td></tr>
-      <tr><td>Связи с общественностью</td><td>Презентации, экскурсии, виртуальный облёт верфи; готовые виды и вечернее освещение</td><td><span class="st yes">Есть</span></td></tr>
-      <tr><td>Промышленная безопасность и охрана труда</td><td>Опасные производственные объекты на карте, опасные зоны, пути эвакуации и места сбора</td><td><span class="st next">Доработка</span></td></tr>
-      <tr><td>Главный механик и энергетик</td><td>Краны и другие подъёмные сооружения со сроками освидетельствования; подстанции и инженерные сети</td><td><span class="st next">Доработка</span></td></tr>
-      <tr><td>Производство, диспетчерская служба</td><td>Загрузка стапелей и достроечных причалов, площадки складирования, расстановка заказов</td><td><span class="st next">Доработка</span></td></tr>
-      <tr><td>Управление персоналом</td><td>Навигация для новых сотрудников: проходные, административно-бытовые корпуса, столовые, медпункт</td><td><span class="st next">Доработка</span></td></tr>
-    </tbody>
-  </table>
-
-  <div class="sec"><span class="n">5</span><h2>Что нужно для внедрения</h2></div>
-  <ol class="steps">
-    <li><b>Согласовать размещение</b> с ИТ-службой и службой информационной безопасности: модель размещается во внутренней сети предприятия.</li>
-    <li><b>Разместить страницу на портале</b> вместо текущей карты. Это статический HTML-файл, отдельный сервер не нужен.</li>
-    <li><b>Уточнить данные по документам предприятия:</b> высоты цехов (в открытых данных их нет, сейчас они оценены), названия и номера зданий по генплану.</li>
-    <li><b>Подключить общее хранение реестра</b> на сервере портала, чтобы правки служб сразу видели все. Сейчас данные хранятся в браузере, обмен — через Excel.</li>
-    <li><b>Назначить ответственных</b> за актуализацию данных и собрать заявки подразделений на новые слои.</li>
-  </ol>
-  <div class="note"><b>Источники и ограничения.</b> Контуры зданий, улиц и воды — OpenStreetMap и Microsoft ML Buildings через Overture Maps (лицензия ODbL, требуется указание авторства); назначение цехов, стапели и краны — карта предприятия. Высоты цехов верфи и часть этажности — оценка, в карточках и выгрузках она отмечена. Поля ОПО и ЭПБ не заполнены: их вносит служба эксплуатации.</div>
-  <div class="foot"><span>ППУ · Цифровая 3D-карта территории</span><span class="mono">6 / 6</span></div>
-</section>
 
 </body>
 </html>
