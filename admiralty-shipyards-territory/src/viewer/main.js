@@ -8,6 +8,7 @@ import { initModel, buildModel, toMergedGroups, buildPickMesh } from '../model/i
 import { createMaterialFactory } from '../model/materials.js';
 import { toLatLon, centroid, area } from '../geo.js';
 import { setupExports } from './exports.js';
+import { setupRegistry } from './registry.js';
 
 /* global __ARTIFACT_BUILD__ */
 // __ARTIFACT_BUILD__ подставляет esbuild: true — сборка для публикации в виде Artifact
@@ -300,6 +301,17 @@ async function main() {
     }
   });
 
+  let registry = null;
+  function focusObject(o) {
+    const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
+    const h = o.proxy.z1 ?? o.proxy.h ?? 10;
+    const r = Math.max(60, Math.sqrt(o.proxy.poly ? area(o.proxy.poly) : 400) * 1.6 + h * 1.5);
+    const dir = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0).normalize();
+    const eye = [c[0] + dir.x * r, c[1] - dir.z * r, h + r * 0.55];
+    flyTo(eye, [c[0], c[1], h * 0.4], 900);
+    setActiveView(null);
+  }
+
   function select(o) {
     selected = o;
     if (highlight) {
@@ -310,6 +322,7 @@ async function main() {
     const card = $('card');
     if (!o) {
       card.hidden = true;
+      registry?.decorateCard(card, null);
       return;
     }
     highlight = makeHighlight(o.proxy);
@@ -334,14 +347,8 @@ async function main() {
       <div class="row"><button class="btn" type="button" id="cardFly">Приблизить</button></div>`;
     card.hidden = false;
     card.querySelector('.x').addEventListener('click', () => select(null));
-    card.querySelector('#cardFly').addEventListener('click', () => {
-      const h = o.proxy.z1 ?? o.proxy.h ?? 10;
-      const r = Math.max(60, Math.sqrt(o.proxy.poly ? area(o.proxy.poly) : 400) * 1.6 + h * 1.5);
-      const dir = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0).normalize();
-      const eye = [c[0] + dir.x * r, c[1] - dir.z * r, h + r * 0.55];
-      flyTo(eye, [c[0], c[1], h * 0.4], 900);
-      setActiveView(null);
-    });
+    card.querySelector('#cardFly').addEventListener('click', () => focusObject(o));
+    registry?.decorateCard(card, o);
   }
 
   function makeHighlight(p) {
@@ -369,6 +376,19 @@ async function main() {
     g.add(lines);
     return g;
   }
+
+  // ---------- реестр зданий и сооружений ----------
+  // при открытии реестра — ракурс, в котором территория видна над панелью
+  const REGISTRY_VIEW = { eye: [1750, 600, 1650], target: [120, 600, 0] };
+  registry = setupRegistry({
+    $, THREE, V3, data, model, pickMesh, scene, select, focusObject, artifactBuild: __ARTIFACT_BUILD__,
+    onOpen: () => {
+      if (!selected) {
+        setActiveView(null);
+        flyTo(REGISTRY_VIEW.eye, REGISTRY_VIEW.target);
+      }
+    },
+  });
 
   // ---------- освещение: день / вечер ----------
   const sky = makeSky(false);
@@ -461,7 +481,7 @@ async function main() {
   });
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, pickMesh };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, select, pickMesh, registry };
   window.__ready = true;
 
   // ---------- вспомогательные ----------

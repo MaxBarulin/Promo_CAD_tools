@@ -26,6 +26,11 @@
         <label class="toggle"><input type="checkbox" id="optShadows" checked /><span class="box"></span>Тени</label>
         <label class="toggle"><input type="checkbox" id="optEvening" /><span class="box"></span>Вечернее освещение</label>
       </section>
+      <section class="group">
+        <h2>Технический учёт</h2>
+        <button class="btn wide reg-open-btn" type="button" id="regOpen" aria-expanded="false" aria-controls="registry">Реестр зданий и сооружений</button>
+        <p class="reg-summary" id="regSummary"></p>
+      </section>
       <section class="group" id="exportGroup">
         <h2>Экспорт</h2>
         <div class="exports">
@@ -39,6 +44,8 @@
   </aside>
 
   <section class="card sheet" id="card" hidden aria-live="polite"></section>
+
+  <section class="registry sheet" id="registry" hidden aria-label="Реестр зданий и сооружений"></section>
 
   <div class="hint sheet" id="hint">Вращение — левая кнопка, сдвиг — правая, масштаб — колесо. Щелчок по объекту — сведения о нём.</div>
 

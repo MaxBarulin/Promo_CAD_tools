@@ -438,10 +438,16 @@ function buildCourtyardBuilding(sink, b) {
   sink.flat((b.roof && b.roof.color) || 'r_gray', outer, h, { holes });
 }
 
+const SINGLE_STOREY = new Set(['hall', 'elling', 'elling_historic', 'warehouse']);
+
 export function buildingSummary(b) {
   const ring = ensureCCW(dedupe(b.poly));
   const c = centroid(ring);
   const roofH = b.roof && b.roof.type !== 'flat' ? (b.roof.h ?? 3) : 0;
+  // площадь застройки за вычетом дворов; строительный объём — до средней отметки кровли
+  const net = area(ring) - (b.holes || []).reduce((s, h) => s + area(h), 0);
+  const avgRoof = !roofH ? 0 : b.roof.type === 'hip' ? roofH / 3 : roofH / 2;
+  const floorsEst = b.floors || (SINGLE_STOREY.has(b.type) ? 1 : Math.max(1, Math.round(b.h / 3.4)));
   return {
     id: b.id,
     name: b.name,
@@ -451,7 +457,11 @@ export function buildingSummary(b) {
     zone: b.zone,
     floors: b.floors,
     height: +(b.h + roofH).toFixed(1),
-    footprint: Math.round(area(ring)),
+    footprint: Math.round(net),
+    floorsEst,
+    floorsKnown: !!b.floors,
+    totalArea: Math.round(net * floorsEst),
+    volume: Math.round(net * (b.h + avgRoof)),
     dims: ring.length === 4 ? [+dist(ring[0], ring[1]).toFixed(1), +dist(ring[1], ring[2]).toFixed(1)] : null,
     center: c,
     approx: !!b.approx,

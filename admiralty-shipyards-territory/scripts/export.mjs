@@ -2,6 +2,7 @@
 //   dist/admiralty-shipyards.glb           — 3D (glTF 2.0, бинарный): слои → объекты, материалы по палитре
 //   dist/admiralty-shipyards-plan.dxf      — генплан DXF R12 (м, локальные координаты)
 //   dist/admiralty-shipyards.geojson       — слои в WGS84
+//   dist/admiralty-shipyards-registry.xlsx — реестр зданий и сооружений (шаблон для заполнения ЭПБ/ОПО)
 // Запуск: npm run export [-- --full | --no-context]
 //   по умолчанию рядовая городская застройка экспортируется упрощённо (объёмы без окон);
 //   --full       — вся застройка с окнами (файл ~30 МБ);
@@ -17,6 +18,8 @@ import { initModel, buildModel, toObjectHierarchy } from '../src/model/index.js'
 import { createMaterialFactory } from '../src/model/materials.js';
 import { buildDXF } from '../src/export/dxf.js';
 import { buildGeoJSON } from '../src/export/geojson.js';
+import { registryItems } from '../src/registry/core.js';
+import { registryXlsx } from '../src/registry/workbook.js';
 
 // GLTFExporter в Node: минимальная замена FileReader на основе Blob.arrayBuffer().
 if (typeof globalThis.FileReader === 'undefined') {
@@ -70,4 +73,8 @@ if (!noContext && !full) {
   const geo = JSON.stringify(buildGeoJSON(data, model));
   await writeFile(path.join(dist, 'admiralty-shipyards.geojson'), geo);
   console.log(`GeoJSON: dist/admiralty-shipyards.geojson  ${(geo.length / 1048576).toFixed(1)} МБ`);
+  const items = registryItems(model, data);
+  const xlsx = registryXlsx(items, {}, { years: 2 });
+  await writeFile(path.join(dist, 'admiralty-shipyards-registry.xlsx'), xlsx);
+  console.log(`Реестр:  dist/admiralty-shipyards-registry.xlsx  ${items.length} объектов (шаблон для заполнения ЭПБ/ОПО)`);
 }
