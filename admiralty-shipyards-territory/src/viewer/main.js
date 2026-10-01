@@ -230,7 +230,7 @@ async function main() {
   makePins();
 
   // ---------- интерфейс ----------
-  const shipyardArea = (data.zones.filter((z) => z.kind === 'shipyard').reduce((s, z) => s + mpArea(model.planar.zones[z.id]), 0) / 1e4).toFixed(0);
+  const shipyardArea = (mpArea(model.planar.shipyardMP) / 1e4).toFixed(0);
   const plural = (n, one, few, many) => {
     const m10 = n % 10;
     const m100 = n % 100;
@@ -604,6 +604,7 @@ async function main() {
     if (!t) {
       holder.position.set(0, 0, 0);
       holder.rotation.set(0, 0, 0);
+      holder.scale.setScalar(1);
       if (inner) inner.position.set(0, 0, 0);
       return;
     }
@@ -611,6 +612,7 @@ async function main() {
     const [dx, dy] = t.move || [0, 0];
     holder.position.set(cx + dx, t.lift || 0, -(cy + dy));
     holder.rotation.set(0, ((t.rotate || 0) * Math.PI) / 180, 0);
+    holder.scale.setScalar(t.scale || 1);
     if (inner) inner.position.set(-cx, 0, cy);
   }
   function makeModelHolder(bytes, label = '') {

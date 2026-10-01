@@ -299,7 +299,7 @@ export class Sink {
 
   // Копия, повёрнутая на rotate° (против часовой стрелки на плане) вокруг точки pivot, сдвинутая
   // на move и поднятая на lift метров.
-  transformed(pivot, move, rotate, lift = 0) {
+  transformed(pivot, move, rotate, lift = 0, scale = 1) {
     const a = ((rotate || 0) * Math.PI) / 180;
     const c = Math.cos(a);
     const s = Math.sin(a);
@@ -309,9 +309,9 @@ export class Sink {
       const nb = out._get(key);
       for (let i = 0; i < b.pos.length; i += 3) {
         // в буфере: X = x, Y = высота, Z = −y
-        const u = b.pos[i] - pivot[0];
-        const v = -b.pos[i + 2] - pivot[1];
-        nb.pos.push(pivot[0] + u * c - v * s + dx, b.pos[i + 1] + lift, -(pivot[1] + u * s + v * c + dy));
+        const u = (b.pos[i] - pivot[0]) * scale;
+        const v = (-b.pos[i + 2] - pivot[1]) * scale;
+        nb.pos.push(pivot[0] + u * c - v * s + dx, b.pos[i + 1] * scale + lift, -(pivot[1] + u * s + v * c + dy));
         const nx = b.nrm[i];
         const ny = -b.nrm[i + 2];
         nb.nrm.push(nx * c - ny * s, b.nrm[i + 1], -(nx * s + ny * c));

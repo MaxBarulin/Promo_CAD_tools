@@ -505,6 +505,16 @@ export function setupEditor(api) {
     const ry = -ax;
     setPos(p.x + (ax * fy + rx * fx) * step, p.y + (ay * fy + ry * fx) * step, p.rot);
   }
+  // масштаб: 1 — как есть, шаг 0,05
+  function setScale(v) {
+    const sc = Math.min(20, Math.max(0.05, Math.round(v * 100) / 100));
+    if (Math.abs(sc - 1) < 1e-9) delete session.draft.scale;
+    else session.draft.scale = sc;
+    updatePreview();
+    const f = $('edForm');
+    if (f?.elements.scale && document.activeElement !== f.elements.scale) f.elements.scale.value = session.draft.scale ?? 1;
+    syncPosFields();
+  }
   function lift(sign, k = 1) {
     const p = getPos();
     if (!p) return;
@@ -531,7 +541,7 @@ export function setupEditor(api) {
           <summary><span>${title}</span><span class="ed-sum" data-sum="${k}">${esc(sum)}</span></summary>
           <div class="ed-sec-body">${body}</div>
         </details>`;
-  const posSummary = (p) => (p ? `${Math.round(p.x)}, ${Math.round(p.y)}${Math.round(p.rot) ? ` · ${Math.round(p.rot)}°` : ''}${p.z ? ` · ${p.z > 0 ? '+' : '−'}${String(Math.abs(round(p.z))).replace('.', ',')} м` : ''}` : '');
+  const posSummary = (p) => (p ? `${Math.round(p.x)}, ${Math.round(p.y)}${Math.round(p.rot) ? ` · ${Math.round(p.rot)}°` : ''}${p.z ? ` · ${p.z > 0 ? '+' : '−'}${String(Math.abs(round(p.z))).replace('.', ',')} м` : ''}${session?.draft.scale && session.draft.scale !== 1 ? ` · ×${String(session.draft.scale).replace('.', ',')}` : ''}` : '');
   function renderForm() {
     const card = $('card');
     const s = session;
@@ -583,6 +593,7 @@ export function setupEditor(api) {
             <label class="ed-f">Y (север), м<input class="field" name="y" type="number" step="any" value="${round(pos.y)}" /></label>
             <label class="ed-f">Поворот, °<input class="field" name="rot" type="number" step="any" value="${round(pos.rot)}" /></label>
             <label class="ed-f">Выше / ниже, м<input class="field" name="z" type="number" step="any" value="${round(pos.z)}" title="Подъём (+) или опускание (−) над исходным положением" /></label>
+            <label class="ed-f">Масштаб<input class="field" name="scale" type="number" min="0.05" max="20" step="0.05" value="${e.scale ?? 1}" title="1 — как есть; меняется с шагом 0,05 (клавиши [ и ])" /></label>
           </div>
           ${e.box && !orig && !mdl ? `<div class="ed-2">
             <label class="ed-f">Длина, м<input class="field" name="length" type="number" min="2" max="600" step="any" value="${esc(e.box.length ?? 30)}" /></label>
@@ -605,7 +616,7 @@ export function setupEditor(api) {
             </div>
           </div>
           <button type="button" class="btn" data-act="pick" aria-pressed="false">Указать центр на карте</button>
-          <p class="ed-hint">Стрелки — сдвиг, Q / E — поворот, Page Up / Page Down — выше / ниже; с Shift — крупнее.</p>`, !s.isBuilding) : ''}
+          <p class="ed-hint">Стрелки — сдвиг, Q / E — поворот, Page Up / Page Down — выше / ниже, [ и ] — масштаб; с Shift — крупнее.</p>`, !s.isBuilding) : ''}
         ${section('about', 'Описание и источник', e.src ?? info.refined ? 'уточнено' : '', `
           <label class="ed-f">Описание<textarea class="field" name="info" rows="3">${esc(e.info ?? info.info ?? '')}</textarea></label>
           <label class="ed-f">Уточнено по<input class="field" name="src" placeholder="фото, обмер, документ" value="${esc(e.src ?? info.refined ?? '')}" /></label>`)}
@@ -687,6 +698,9 @@ export function setupEditor(api) {
         const v = +t.value;
         if (!p || !Number.isFinite(v) || t.value === '') return;
         setPos(k === 'x' ? v : p.x, k === 'y' ? v : p.y, k === 'rot' ? v : p.rot, k === 'z' ? v : p.z);
+        return;
+      } else if (k === 'scale') {
+        if (+t.value > 0) setScale(+t.value);
         return;
       } else if (k === 'length' || k === 'width') {
         if (+t.value >= 2) e.box = { ...e.box, [k]: +t.value };
@@ -1000,6 +1014,9 @@ export function setupEditor(api) {
     if (map[ev.key]) {
       ev.preventDefault();
       nudge(map[ev.key][0], map[ev.key][1], k);
+    } else if (ev.key === '[' || ev.key === ']' || ev.key === 'х' || ev.key === 'ъ' || ev.key === 'Х' || ev.key === 'Ъ') {
+      ev.preventDefault();
+      setScale((session.draft.scale ?? 1) + (ev.key === ']' || ev.key.toLowerCase() === 'ъ' ? 1 : -1) * 0.05 * (ev.shiftKey ? 4 : 1));
     } else if (ev.key === 'PageUp' || ev.key === 'PageDown') {
       ev.preventDefault();
       lift(ev.key === 'PageUp' ? 1 : -1, k);

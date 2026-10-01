@@ -163,14 +163,14 @@ export function cleanUnits(list) {
 }
 
 // Поворот вокруг pivot на rotate° против часовой стрелки, затем сдвиг на move.
-export function transformRing(ring, pivot, move, rotate) {
+export function transformRing(ring, pivot, move, rotate, scale = 1) {
   const a = (rotate || 0) * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
   const [dx, dy] = move || [0, 0];
   return ring.map(([x, y]) => {
-    const u = x - pivot[0];
-    const v = y - pivot[1];
+    const u = (x - pivot[0]) * scale;
+    const v = (y - pivot[1]) * scale;
     return [pivot[0] + u * c - v * s + dx, pivot[1] + u * s + v * c + dy];
   });
 }
@@ -250,24 +250,33 @@ export function editBuilding(orig, e) {
   else if (e.windows === true) delete b.windows;
   const retype = has(e.type) && e.type !== orig.type;
   const reheight = has(e.height) && +e.height !== orig.h;
+  // масштаб: контур, высоты и кровля — пропорционально, вокруг центра здания
+  const sc = scaleOf(e);
   if (retype) b.type = e.type;
   if (reheight) {
     b.h = +e.height;
     b.approx = false;
   }
+  if (sc !== 1) b.h *= sc;
   // новый контур (выпрямленный, по обмеру) — в исходном положении, затем сдвиг и поворот
   const reshape = validRing(e.poly);
   const baseRing = reshape ? ensureCCW(e.poly.map(([x, y]) => [+x, +y])) : orig.poly;
   const pivot = centroid(baseRing);
-  const tf = (ring) => (e.move || e.rotate ? transformRing(ring, pivot, e.move, e.rotate) : ring);
+  const tf = (ring) => (e.move || e.rotate || sc !== 1 ? transformRing(ring, pivot, e.move, e.rotate, sc) : ring);
   b.poly = tf(baseRing);
   if (reshape) delete b.holes;
   else if (orig.holes) b.holes = orig.holes.map(tf);
   // стены двора с аркой — тоже в исходном положении здания
-  if (Array.isArray(e.walls)) b.walls = e.walls.filter(validWall).map((w) => ({ ...w, line: tf(w.line.map(([x, y]) => [+x, +y])) }));
+  if (Array.isArray(e.walls))
+    b.walls = e.walls.filter(validWall).map((w) => ({
+      ...w,
+      line: tf(w.line.map(([x, y]) => [+x, +y])),
+      ...(sc !== 1 ? { h: (w.h ?? 3.5) * sc, t: (w.t ?? 0.6) * sc, ...(w.arch ? { arch: { ...w.arch, w: (w.arch.w ?? 3.6) * sc, h: (w.arch.h ?? 4) * sc } } : {}) } : {}),
+    }));
   // кровля и проёмы — заново под новый тип, высоту и контур
-  if (retype || reheight || reshape) b = decorate({ ...b, roof: undefined, doors: undefined, roofColor: orig.roof?.color }, null);
-  applyRoof(b, e);
+  if (retype || reheight || reshape || sc !== 1) b = decorate({ ...b, roof: undefined, doors: undefined, roofColor: orig.roof?.color }, null);
+  const scaleRoof = (r) => (sc !== 1 && has(r.roofH) ? { ...r, roofH: +r.roofH * sc } : r);
+  applyRoof(b, scaleRoof(e));
   if (ROOF_COLORS.includes(e.roofColor)) b.roof = { ...(b.roof || { type: 'flat' }), color: e.roofColor };
   // части разной высоты (и башни): каждая — своим объёмом, основной объём не рисуется
   if (Array.isArray(e.parts) && e.parts.length) {
@@ -277,10 +286,10 @@ export function editBuilding(orig, e) {
     for (const p of list) {
       const ring = partRing(p);
       if (!ring || area(ring) < 0.5) continue;
-      const ph = has(p.height) ? +p.height : b.h;
+      const ph = has(p.height) ? +p.height * sc : b.h;
       const part = decorate({ ...b, type: BUILDING_TYPES.includes(p.type) ? p.type : b.type, poly: tf(ring), holes: undefined, parts: undefined, h: ph, floors: has(p.floors) ? +p.floors : has(p.height) ? undefined : b.floors, roof: undefined, doors: undefined, roofColor: b.roof?.color }, null);
       if (p.circle) part.doors = [];
-      applyRoof(part, { roof: p.roof || b.roof?.type || 'flat', roofH: p.roofH });
+      applyRoof(part, scaleRoof({ roof: p.roof || b.roof?.type || 'flat', roofH: p.roofH }));
       if (ROOF_COLORS.includes(p.roofColor)) part.roof.color = p.roofColor;
       if (has(p.wall)) part.wall = p.wall;
       if (GLAZING[p.glazing]) part.glazing = p.glazing;
@@ -334,11 +343,11 @@ export function boxBuilding(id, e, { inYard, zoneOf }) {
       info: e.info || '',
       type,
       floors: has(e.floors) ? +e.floors : undefined,
-      h: has(e.height) ? +e.height : 10,
+      h: (has(e.height) ? +e.height : 10) * scaleOf(e),
       wall: e.wall || fin.wall,
       roofColor: fin.roof,
       units: cleanUnits(e.units),
-      poly: ring || ensureCCW(rect(x, y, Math.max(2, +bx.length || 30), Math.max(2, +bx.width || 18), +bx.angle || 0)),
+      poly: ring ? transformRing(ring, [x, y], null, 0, scaleOf(e)) : ensureCCW(rect(x, y, Math.max(2, +bx.length || 30) * scaleOf(e), Math.max(2, +bx.width || 18) * scaleOf(e), +bx.angle || 0)),
       geomSrc: 'editor',
       approx: false,
     },
@@ -353,16 +362,19 @@ export function boxBuilding(id, e, { inYard, zoneOf }) {
 // Модель из Blender на месте: контур и отметки после сдвига и поворота из записи e.
 export function placeModel(a, e) {
   const lift = liftOf(e);
-  const out = { hull: a.hull, z0: a.z0 + lift, z1: a.z1 + lift, transform: null };
-  if (e && (e.move || e.rotate || lift)) {
+  const sc = scaleOf(e);
+  const out = { hull: a.hull, z0: a.z0 * sc + lift, z1: a.z1 * sc + lift, transform: null };
+  if (e && (e.move || e.rotate || lift || sc !== 1)) {
     const pivot = centroid(a.hull);
-    out.transform = { pivot, move: e.move || [0, 0], rotate: e.rotate || 0, ...(lift ? { lift } : {}) };
-    out.hull = ensureCCW(transformRing(a.hull, pivot, e.move, e.rotate));
+    out.transform = { pivot, move: e.move || [0, 0], rotate: e.rotate || 0, ...(lift ? { lift } : {}), ...(sc !== 1 ? { scale: sc } : {}) };
+    out.hull = ensureCCW(transformRing(a.hull, pivot, e.move, e.rotate, sc));
   }
   return out;
 }
 // Подъём (+) или опускание (−) объекта по высоте, м.
 export const liftOf = (e) => (Number.isFinite(+e?.lift) ? +e.lift : 0);
+// Масштаб объекта (1 — как есть).
+export const scaleOf = (e) => (Number.isFinite(+e?.scale) && +e.scale > 0 ? +e.scale : 1);
 
 // Сведения о новом здании-модели (без своих данных) — для карточки и реестра.
 export function modelBuilding(id, m, e, { inYard, zoneOf }) {
@@ -412,6 +424,7 @@ export function prepareCustom(config = {}, files = []) {
     if (m.poly !== undefined && !validRing(m.poly)) warnings.push(`custom.json, ${id}: poly должен быть списком точек [[x, y], …], не меньше трёх`);
     if (m.parts !== undefined && (!Array.isArray(m.parts) || m.parts.some((p) => !partRing(p)))) warnings.push(`custom.json, ${id}: parts — список частей { "poly" | "box" | "circle", "floors", "height", "roof" }`);
     if (m.glazing !== undefined && !GLAZING[m.glazing]) warnings.push(`custom.json, ${id}: glazing — ${Object.keys(GLAZING).join(' или ')}`);
+    if (m.scale !== undefined && !(+m.scale > 0)) warnings.push(`custom.json, ${id}: scale — масштаб, число больше нуля (1 — как есть)`);
     if (m.lift !== undefined && !Number.isFinite(+m.lift)) warnings.push(`custom.json, ${id}: lift — подъём (+) или опускание (−) в метрах, число`);
     if (m.walls !== undefined && (!Array.isArray(m.walls) || !m.walls.every(validWall))) warnings.push(`custom.json, ${id}: walls — список стен { "line": [[x, y], [x, y]], "h", "t", "arch": { "w", "h", "at" } }`);
     if (m.roofColor && !ROOF_COLORS.includes(m.roofColor)) warnings.push(`custom.json, ${id}: неизвестное покрытие кровли «${m.roofColor}» (допустимы ${ROOF_COLORS.join(', ')})`);
@@ -503,13 +516,18 @@ export function objectPivot(proxy) {
 export function moveObject(o, e) {
   const src = o.unmoved || o;
   const lift = liftOf(e);
-  if (!e?.move && !e?.rotate && !lift) return o.unmoved ? { ...o, sink: src.sink, proxy: src.proxy } : o;
+  const sc = scaleOf(e);
+  if (!e?.move && !e?.rotate && !lift && sc === 1) return o.unmoved ? { ...o, sink: src.sink, proxy: src.proxy } : o;
   const pivot = objectPivot(src.proxy);
   if (!pivot) return o;
-  const tf = (ring) => transformRing(ring, pivot, e.move, e.rotate);
+  const tf = (ring) => transformRing(ring, pivot, e.move, e.rotate, sc);
   const p0 = src.proxy;
-  const proxy = { ...p0, ...(p0.poly ? { poly: tf(p0.poly), z0: p0.z0 + lift, z1: p0.z1 + lift } : {}), ...(p0.line ? { line: tf(p0.line), z0: (p0.z0 || 0) + lift } : {}) };
-  return { ...o, sink: src.sink.transformed(pivot, e.move, e.rotate, lift), proxy, unmoved: { sink: src.sink, proxy: src.proxy } };
+  const proxy = {
+    ...p0,
+    ...(p0.poly ? { poly: tf(p0.poly), z0: p0.z0 * sc + lift, z1: p0.z1 * sc + lift } : {}),
+    ...(p0.line ? { line: tf(p0.line), z0: (p0.z0 || 0) * sc + lift, h: p0.h * sc } : {}),
+  };
+  return { ...o, sink: src.sink.transformed(pivot, e.move, e.rotate, lift, sc), proxy, unmoved: { sink: src.sink, proxy: src.proxy } };
 }
 // Те же сдвиг и поворот в данных (по ним строятся DXF и GeoJSON): точки, линии и углы.
 const POINT_KEYS = ['at', 'head', 'from', 'to'];

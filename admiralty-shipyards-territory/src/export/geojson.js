@@ -19,7 +19,7 @@ export function buildGeoJSON(data, model) {
   const P = model.planar;
 
   add({ type: 'MultiPolygon', coordinates: P.water.map((pl) => pl.map(ring)) }, { layer: 'water', name: 'Акватория (Большая Нева, Фонтанка, Мойка, Пряжка, каналы)' });
-  for (const z of data.zones) add({ type: 'MultiPolygon', coordinates: P.zones[z.id].map((pl) => pl.map(ring)) }, { layer: 'zone', id: z.id, name: z.name, kind: z.kind });
+  for (const z of new Map(data.zones.map((zz) => [zz.id, zz])).values()) add({ type: 'MultiPolygon', coordinates: P.zones[z.id].map((pl) => pl.map(ring)) }, { layer: 'zone', id: z.id, name: z.name, kind: z.kind });
 
   for (const layer of model.layers) {
     for (const o of layer.objects) {

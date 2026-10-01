@@ -172,6 +172,30 @@ assert.deepEqual(moved.custom.warnings, []);
   assert.ok(Math.abs(placeModel({ hull: [[0, 0], [1, 0], [1, 1]], z0: 0, z1: 5 }, { lift: 2 }).transform.lift - 2) < 1e-9);
 }
 
+// масштаб (scale): здание — контур и высота, кран — геометрия и контур выбора, модель — преобразование
+{
+  const base0 = getTerritory().buildings.find((b) => b.id === 'Z195');
+  const big = editBuilding(base0, { scale: 1.5 });
+  assert.ok(Math.abs(area(big.poly) / area(base0.poly) - 2.25) < 0.05, 'площадь ×1,5²');
+  assert.ok(Math.abs(big.h / base0.h - 1.5) < 1e-9, 'высота ×1,5');
+  const [bx0, by0] = centroid(base0.poly);
+  const [bx1, by1] = centroid(big.poly);
+  assert.ok(Math.hypot(bx1 - bx0, by1 - by0) < 0.5, 'центр на месте');
+  const sc = buildModel(getTerritory(), { contextDetail: 'low', custom: prepareCustom({ buildings: { C10: { scale: 2 } } }, []) });
+  const c0 = find(buildModel(getTerritory(), { contextDetail: 'low' }), 'C10').o;
+  assert.ok(Math.abs(find(sc, 'C10').o.proxy.z1 - c0.proxy.z1 * 2) < 1e-9);
+  const pm = placeModel({ hull: [[0, 0], [2, 0], [2, 2], [0, 2]], z0: 0, z1: 5 }, { scale: 2 });
+  assert.equal(pm.transform.scale, 2);
+  assert.ok(Math.abs(area(pm.hull) - 16) < 1e-9 && pm.z1 === 10);
+  // GLB: узел T·R·S оставляет центр модели на месте
+  const t = placementTRS({ pivot: [1, 1], move: [0, 0], rotate: 30, scale: 2 });
+  const a = (30 * Math.PI) / 180;
+  const P = [1, 0, -1];
+  const rx = (x, z) => [x * Math.cos(a) + z * Math.sin(a), -x * Math.sin(a) + z * Math.cos(a)];
+  const [px, pz] = rx(P[0] * 2, P[2] * 2);
+  assert.ok(Math.hypot(px + t.translation[0] - 1, pz + t.translation[2] + 1) < 1e-9, 'центр модели не уходит при масштабе');
+}
+
 // поворот вокруг центра: точка (1, 0) от центра на 90° → (0, 1)
 const t = transformRing([[11, 5]], [10, 5], [2, 3], 90)[0];
 assert.ok(Math.hypot(t[0] - 12, t[1] - 9) < 1e-9);

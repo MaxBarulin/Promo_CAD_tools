@@ -136,7 +136,8 @@ export function buildDXF(data, model) {
   const P = model.planar;
   for (const mp of [P.water]) for (const pl of mp) for (const ring of pl) poly('WATER', ring);
   for (const pl of P.land) for (const ring of pl) poly('LAND_EDGE', ring);
-  for (const z of data.zones) for (const pl of P.zones[z.id]) poly(z.kind === 'shipyard' ? 'ZONE_SHIPYARD' : 'ZONE_CIVIL', pl[0]);
+  // участок может состоять из нескольких частей с одним кодом — контур у них общий
+  for (const z of new Map(data.zones.map((zz) => [zz.id, zz])).values()) for (const pl of P.zones[z.id]) poly(z.kind === 'shipyard' ? 'ZONE_SHIPYARD' : 'ZONE_CIVIL', pl[0]);
   for (const pl of P.carriageways) for (const ring of pl) poly('ROADS_CITY', ring);
   for (const pl of P.sidewalks) for (const ring of pl) poly('SIDEWALKS', ring);
   for (const pl of P.internal) for (const ring of pl) poly('ROADS_INTERNAL', ring);
