@@ -53,7 +53,7 @@
 
 | Файл | Формат | Чем открыть |
 |---|---|---|
-| `admiralty-shipyards.glb` | glTF 2.0, ≈31 МБ, 2364 объектов в 10 слоях, материалы с русскими названиями, у объектов есть свойства (`extras`: id, назначение, высота, размеры) | Blender, 3ds Max, SketchUp (через плагин), Unreal/Unity, Windows 3D Viewer, онлайн-просмотрщики glTF |
+| `admiralty-shipyards.glb` | glTF 2.0, ≈30 МБ, 2364 объекта в 10 слоях, материалы с русскими названиями, у объектов есть свойства (`extras`: id, назначение, высота, размеры) | Blender, 3ds Max, SketchUp (через плагин), Unreal/Unity, Windows 3D Viewer, онлайн-просмотрщики glTF |
 | `admiralty-shipyards-plan.dxf` | DXF R12, метры, 19 слоёв (`BUILDINGS_SHIPYARD`, `FENCE`, `ROADS_CITY`, `SLIPWAYS`…). Контуры зданий — замкнутые полилинии с высотой (thickness), в 3D-виде это объёмы | AutoCAD, nanoCAD, КОМПАС-3D, BricsCAD, LibreCAD |
 | `admiralty-shipyards.geojson` | GeoJSON, WGS84 | QGIS, geojson.io, JOSM, Яндекс/Google-карты (импорт слоя) |
 | `admiralty-shipyards-registry.xlsx` | Excel: реестр 304 объектов с расчётными показателями и пустыми полями технического учёта — шаблон для заполнения | Excel, LibreOffice, «МойОфис» |
