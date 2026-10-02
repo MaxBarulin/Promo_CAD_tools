@@ -2,7 +2,8 @@
 //
 // Маршрут проходит через опорные точки (по какой дороге ехать) и остановки; между ними —
 // кратчайший путь по внутризаводским проездам и заводским мостам, автобус едет по правой
-// полосе. Автобусов два, оба стоят у Северной проходной и по очереди выходят на круг.
+// полосе. Автобусов два, оба стоят у Северной проходной; второй ходит тем же кругом на 15 минут
+// позже первого, и они встречаются у остановки «ОТЗ».
 // Положение автобусов в любой момент — busStates(route, день недели, секунды) по расписанию.
 
 import { add, sub, mul, dot, dist, norm, perp, lerp, smooth, centroid } from '../geo.js';
@@ -362,6 +363,9 @@ const ACC = 0.8; // разгон и торможение, м/с²
 const DWELL = 60; // стоянка на остановке, с — для наглядности
 const DWELL_MIN = 20;
 export const BUS_COUNT = 2; // автобусов на маршруте
+// Второй автобус идёт тем же кругом на полкруга (15 минут) позже первого: автобусы всё время едут
+// навстречу друг другу и встречаются у остановки «ОТЗ» в :06, :21, :36 и :51.
+export const BUS_SHIFT = 15;
 const GAP = 14; // автобус в очереди стоит за передним с таким шагом, м
 
 const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
@@ -403,19 +407,32 @@ export function busDeparts(weekday) {
   return { s, n };
 }
 
-// Время отправления от остановки stop в направлении dir (минуты от полуночи)
-export function stopTimes(stop, dir, weekday) {
-  const d = busDeparts(weekday);
+// Круговые рейсы автобуса bus (0 или 1) в день недели: [{ s — отправление к цеху № 12 от цеха № 33,
+// n — обратно от цеха № 12 }], минуты от полуночи. Первый ходит по расписанию; второй — тем же
+// кругом на BUS_SHIFT минут позже; в пятницу у обоих последний рейс к цеху № 12 — не позже 15:00.
+export function busTrips(bus, weekday) {
+  if (bus === 0) {
+    const d = busDeparts(weekday);
+    return d ? d.s.map((s, k) => ({ s, n: d.n[k] })) : [];
+  }
+  const d = busDeparts(weekday === 5 ? 1 : weekday);
   if (!d) return [];
-  const tt = BUS_TIMETABLE[dir];
-  const k = tt.stops.indexOf(stop);
-  return k < 0 ? [] : d[dir].map((t) => t + tt.offsets[k]);
+  const trips = d.s.map((s, k) => ({ s: s + BUS_SHIFT, n: d.n[k] + BUS_SHIFT }));
+  return weekday === 5 ? trips.filter((t) => t.s <= BUS_TIMETABLE.friday.lastS) : trips;
 }
 
-// Рейсы дня по автобусам. Круговой рейс — отправление к цеху № 12 и следующее за ним обратное
-// (15:00 → 15:20 в пятницу — тот же автобус); круговые рейсы по очереди делают автобус 1 и
-// автобус 2, поэтому первый выходит в 7:30, второй — в 8:00. События: { node — индекс в круге
-// маршрута, t — отправление, секунды от полуночи }.
+// Время отправления от остановки stop в направлении dir обоими автобусами (минуты от полуночи)
+export function stopTimes(stop, dir, weekday) {
+  const tt = BUS_TIMETABLE[dir];
+  const k = tt.stops.indexOf(stop);
+  if (k < 0) return [];
+  const out = [];
+  for (let b = 0; b < BUS_COUNT; b++) for (const t of busTrips(b, weekday)) out.push(t[dir] + tt.offsets[k]);
+  return out.sort((x, y) => x - y);
+}
+
+// События дня автобуса: отправления от остановок по его круговым рейсам.
+// { node — индекс в круге маршрута, t — отправление, секунды от полуночи }.
 const eventsCache = new Map();
 function busEvents(bus, weekday) {
   const key = `${bus}:${weekday}`;
@@ -423,18 +440,12 @@ function busEvents(bus, weekday) {
   return eventsCache.get(key);
 }
 function buildEvents(bus, weekday) {
-  const d = busDeparts(weekday);
-  if (!d) return [];
   const ev = [];
-  d.s.forEach((tS, k) => {
-    if (k % BUS_COUNT !== bus) return;
-    const trips = [['s', tS], ['n', d.n[k]]];
-    for (const [dir, t0] of trips) {
-      if (t0 == null) continue;
+  for (const trip of busTrips(bus, weekday))
+    for (const dir of ['s', 'n']) {
       const tt = BUS_TIMETABLE[dir];
-      tt.stops.forEach((st, i) => ev.push({ node: cycleIndex(st, dir), t: (t0 + tt.offsets[i]) * 60, stop: st, dir }));
+      tt.stops.forEach((st, i) => ev.push({ node: cycleIndex(st, dir), t: (trip[dir] + tt.offsets[i]) * 60, stop: st, dir }));
     }
-  });
   return ev.sort((a, b) => a.t - b.t);
 }
 

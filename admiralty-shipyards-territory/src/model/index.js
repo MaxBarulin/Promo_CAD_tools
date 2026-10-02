@@ -269,11 +269,11 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     buildBusStop(s, st);
     const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     let info;
-    if (st.ring) info = 'Конечная внутризаводских автобусов у Северной проходной: отсюда оба автобуса по очереди выходят на круг (первый — в 7:30, второй — в 8:00) и здесь же стоят между рейсами.';
+    if (st.ring) info = 'Конечная внутризаводских автобусов у Северной проходной. Первый автобус выходит на круг в 7:30, второй тем же кругом в 7:45; между рейсами и в обед они стоят здесь.';
     else {
       const all = stopTimes(st.stop, st.dir, 1).map(fmt);
       const fri = stopTimes(st.stop, st.dir, 5);
-      info = `Внутризаводской автобус, направление «${BUS_DIRS[st.dir].name}». Отправление пн–чт: ${all.join(', ')}. В пятницу последний рейс — в ${fmt(fri[fri.length - 1])}.`;
+      info = `Внутризаводские автобусы, направление «${BUS_DIRS[st.dir].name}». Отправление с понедельника по четверг: ${all.join(', ')}. В пятницу последнее отправление в ${fmt(fri[fri.length - 1])}.`;
     }
     const right = [Math.sin(st.zone.angle * DEG), -Math.cos(st.zone.angle * DEG)];
     add_('transport', {
