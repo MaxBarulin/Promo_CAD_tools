@@ -124,6 +124,12 @@ export const PALETTE = {
   car: { name: 'Автомобили', color: '#7b8590', metalness: 0.5, roughness: 0.35 },
   car2: { name: 'Автомобили_2', color: '#a2342b', metalness: 0.5, roughness: 0.35 },
   car3: { name: 'Автомобили_3', color: '#e9e9e6', metalness: 0.5, roughness: 0.35 },
+  // внутризаводской автобус (цвет «морской волны», как у городских автобусов Петербурга) и остановки
+  bus: { name: 'Автобус_кузов', color: '#14aea6', roughness: 0.4, metalness: 0.3 },
+  bus_dark: { name: 'Автобус_низ', color: '#2d3236', roughness: 0.6 },
+  tyre: { name: 'Шины', color: '#1d1f21', roughness: 0.9 },
+  marking_yellow: { name: 'Разметка_жёлтая', color: '#e2b51d', roughness: 0.6 },
+  sign_bus: { name: 'Знак_остановки', color: '#1f5fae', roughness: 0.5 },
   container: { name: 'Контейнеры', color: '#2f6fa0', roughness: 0.7, metalness: 0.3 },
   container2: { name: 'Контейнеры_2', color: '#b8552e', roughness: 0.7, metalness: 0.3 },
   pick: { name: 'Служебный_выбор', color: '#ffffff' },

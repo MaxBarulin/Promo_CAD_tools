@@ -16,6 +16,9 @@ import { setupObjectList } from './objects.js';
 import { setupEditor } from './editor.js';
 import { setupTour } from './tour.js';
 import { sunPosition, sunTimes, lightingFor, hhmm } from './daytime.js';
+import { busState, pointOnRoute } from '../data/bus.js';
+import { buildBus } from '../model/structures.js';
+import { Sink } from '../model/geom.js';
 
 /* global __ARTIFACT_BUILD__ */
 // __ARTIFACT_BUILD__ подставляет esbuild: true — сборка для публикации в виде Artifact
@@ -45,6 +48,7 @@ const KIND_LABEL = {
   dock: 'Плавучий док',
   bridge: 'Мост',
   fence: 'Ограждение',
+  bus_stop: 'Остановка автобуса',
   chimney: 'Дымовая труба',
   landmark: 'Достопримечательность',
   misc: 'Оборудование',
@@ -180,8 +184,10 @@ async function main() {
   const panelShift = () => (!narrow() && !$('panel').classList.contains('collapsed') ? $('panel').getBoundingClientRect().right : 0);
 
   let tween = null;
+  let follow = null; // слежение камерой за автобусом: прошлое положение автобуса
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function flyTo(eye, target, ms = 1100) {
+    follow = null;
     const e1 = V3(...eye);
     const t1 = V3(...target);
     if (reduceMotion || ms === 0) {
@@ -779,10 +785,25 @@ async function main() {
     selectedId: () => selected?.id || null,
   });
 
-  // ---------- освещение: время суток ----------
-  // Солнце — над Петербургом в выбранный час сегодняшнего дня: высота и азимут по формулам NOAA,
-  // небо, туман, полусферный свет и окна — по высоте солнца (ночь, сумерки, низкое солнце, день).
-  const today = new Date();
+  // ---------- освещение: дата и время суток ----------
+  // Часы модели — дата и время по Москве. Они идут сами: в реальном времени, быстрее (×10, ×60)
+  // или стоят на паузе. Солнце — над Петербургом в выбранный день и час (формулы NOAA),
+  // небо, туман, полусферный свет и окна — по высоте солнца; автобус — по расписанию.
+  const MSK = 3 * 3600e3;
+  const DAY = 864e5;
+  // время модели в мс: поля UTC = московские дата и время
+  const clock = { base: Date.now() + MSK, wall: Date.now(), speed: 1 };
+  const simMs = () => clock.base + (Date.now() - clock.wall) * clock.speed;
+  const setSim = (ms) => {
+    clock.base = ms;
+    clock.wall = Date.now();
+  };
+  // календарный день для формул солнца (локальная дата с теми же числами)
+  const dayOf = (ms) => {
+    const d = new Date(ms);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12);
+  };
+  const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
   const skyCanvas = document.createElement('canvas');
   skyCanvas.width = 2;
   skyCanvas.height = 512;
@@ -798,11 +819,26 @@ async function main() {
     ctx.fillRect(0, 0, 2, 512);
     skyTex.needsUpdate = true;
   }
-  const { rise, set } = sunTimes(today);
-  let dayHours = 13;
-  function setDayTime(h) {
-    dayHours = Math.max(0, Math.min(24, h));
-    const { el, az } = sunPosition(today, dayHours);
+  let sunDay = '';
+  let rise = 7;
+  let set = 18;
+  let litMinute = -1;
+  // освещение по часам модели; обновляется раз в минуту модельного времени
+  function applyDayTime(force = false) {
+    const ms = simMs();
+    const minute = Math.floor(ms / 60000);
+    if (!force && minute === litMinute) return;
+    litMinute = minute;
+    const day = isoDay(ms);
+    const date = dayOf(ms);
+    if (day !== sunDay) {
+      sunDay = day;
+      ({ rise, set } = sunTimes(date));
+      const inp = $('optDate');
+      if (inp && document.activeElement !== inp) inp.value = day;
+    }
+    const hours = (ms % DAY) / 3600e3;
+    const { el, az } = sunPosition(date, hours);
     const L = lightingFor(THREE, el);
     paintSky(L.sky);
     scene.fog.color.set(L.sky[1]);
@@ -819,14 +855,33 @@ async function main() {
     // тени — от солнца не ниже 4°, иначе они уходят за край карты теней
     placeSun(az, Math.max(el, 4));
     const r = $('optTime');
-    if (r && document.activeElement !== r) r.value = String(dayHours);
-    if ($('optTimeOut')) $('optTimeOut').textContent = hhmm(dayHours);
+    if (r && document.activeElement !== r) r.value = String(hours);
+    // часы показывают прошедшую минуту (как обычные часы), без округления вверх
+    if ($('optTimeOut')) $('optTimeOut').textContent = hhmm(Math.floor(hours * 60 + 1e-6) / 60);
     if ($('optSun')) $('optSun').textContent = `${el > 0 ? `солнце ${Math.round(el)}° над горизонтом` : el > -6 ? 'сумерки' : 'ночь'} · восход ${hhmm(rise)}, заход ${hhmm(set)}`;
   }
+  // время суток (часы) в текущий день модели
+  function setDayTime(h) {
+    const day = Math.floor(simMs() / DAY) * DAY;
+    setSim(day + Math.max(0, Math.min(24 * 3600e3 - 1000, h * 3600e3)));
+    applyDayTime(true);
+  }
   // «вечер»: четверть часа после захода — у горизонта ещё заря, окна уже горят
-  const duskHours = () => Math.min(23.75, set + 0.25);
+  const duskHours = () => Math.min(23.75, sunTimes(dayOf(simMs())).set + 0.25);
   function setEvening(on) {
     setDayTime(on ? duskHours() : 13);
+  }
+  function setSpeed(v) {
+    setSim(simMs());
+    clock.speed = v;
+    if ($('optSpeed')) $('optSpeed').value = String(v);
+  }
+  // дата и время модели: y-m-d по календарю, h — часы по Москве; speed — ход часов (0 — пауза)
+  function setDateTime(iso, h, speed) {
+    const [y, m, d] = iso.split('-').map(Number);
+    setSim(Date.UTC(y, m - 1, d) + h * 3600e3);
+    if (speed != null) setSpeed(speed);
+    applyDayTime(true);
   }
   function placeSun(az, el) {
     const d = 2600;
@@ -836,12 +891,85 @@ async function main() {
     sun.position.copy(center).add(V3(x, y, z));
   }
   $('optTime').addEventListener('input', (e) => setDayTime(+e.target.value));
+  $('optDate').addEventListener('change', (e) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) return;
+    setDateTime(e.target.value, (simMs() % DAY) / 3600e3);
+  });
+  $('optSpeed').addEventListener('change', (e) => setSpeed(+e.target.value));
+  // «Сейчас»: сегодняшняя дата и время по Москве, часы идут в реальном времени
   $('optTimeNow').addEventListener('click', () => {
-    const n = new Date();
-    setDayTime(n.getHours() + n.getMinutes() / 60);
+    setSim(Date.now() + MSK);
+    setSpeed(1);
+    applyDayTime(true);
   });
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light';
   setEvening(prefersDark || document.documentElement.dataset.theme === 'dark');
+
+  // ---------- внутризаводской автобус ----------
+  // Едет по кругу маршрута (data.bus) туда, где он должен быть по расписанию в момент часов модели.
+  const busRouteData = data.bus;
+  const bus = new THREE.Group();
+  bus.name = 'Внутризаводской автобус';
+  bus.userData.keep = true;
+  {
+    const s = new Sink();
+    buildBus(s);
+    for (const { key, geometry } of s.toGeometries(THREE)) {
+      const mesh = new THREE.Mesh(geometry, getMaterial(key));
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      bus.add(mesh);
+    }
+  }
+  bus.visible = false;
+  groups.find((g) => g.userData.layer === 'transport')?.add(bus);
+  const busLabel = addLabel('Автобус', [0, 0], 0, 'pin bus', 0, 1500, 'yard');
+  busLabel.visible = false;
+  let busText = '';
+  const busWorld = new THREE.Vector3();
+  function updateBus() {
+    if (!busRouteData) return;
+    const ms = simMs();
+    const st = busState(busRouteData, new Date(ms).getUTCDay(), (ms % DAY) / 1000);
+    bus.visible = st.visible;
+    busLabel.visible = st.visible && bus.parent?.visible !== false;
+    if (st.visible) {
+      const { p, dir, z } = pointOnRoute(busRouteData, st.s);
+      bus.position.copy(V3(p[0], p[1], z));
+      bus.rotation.y = Math.atan2(dir[1], dir[0]);
+      busLabel.position.copy(V3(p[0], p[1], 7));
+    }
+    const text = st.visible ? `Автобус ${st.text}` : st.text;
+    if (text !== busText) {
+      busText = text;
+      $('busStatus').textContent = text;
+      $('busFind').disabled = !st.visible;
+    }
+    // слежение камерой: сдвигаем камеру вместе с автобусом
+    if (follow && st.visible) {
+      bus.getWorldPosition(busWorld);
+      const d = busWorld.clone().sub(follow);
+      if (tween) {
+        tween.e1.add(d);
+        tween.t1.add(d);
+      } else {
+        camera.position.add(d);
+        controls.target.add(d);
+      }
+      follow.copy(busWorld);
+    }
+  }
+  $('busFind').addEventListener('click', () => {
+    if (!bus.visible) return;
+    const ms = simMs();
+    const st = busState(busRouteData, new Date(ms).getUTCDay(), (ms % DAY) / 1000);
+    const { p, dir } = pointOnRoute(busRouteData, st.s);
+    const side = [-dir[1], dir[0]];
+    setActiveView(null);
+    // крутой вид сверху-сзади: соседние корпуса не закрывают автобус
+    flyTo([p[0] - dir[0] * 34 + side[0] * 26, p[1] - dir[1] * 34 + side[1] * 26, 95], [p[0] + dir[0] * 4, p[1] + dir[1] * 4, 1]);
+    follow = V3(p[0], p[1], 0.05);
+  });
 
   // ---------- размер и цикл отрисовки ----------
   // центр проекции смещён вправо на ширину левой панели, чтобы модель не пряталась под ней;
@@ -888,6 +1016,8 @@ async function main() {
       shift = reduceMotion || Math.abs(shiftTo - shift) < 1 ? shiftTo : shift + (shiftTo - shift) * (1 - Math.exp(-dt / 70));
       applyView();
     }
+    applyDayTime();
+    updateBus();
     controls.update();
     // компас: азимут камеры
     const az = controls.getAzimuthalAngle();
@@ -906,6 +1036,7 @@ async function main() {
   requestAnimationFrame(loop);
   controls.addEventListener('start', () => {
     tween = null;
+    follow = null;
     setActiveView(null);
   });
 
@@ -929,7 +1060,7 @@ async function main() {
   if (location.hash === '#tour') tour.start();
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, setDateTime, setSpeed, bus, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
   window.__ready = true;
 
   // ---------- вспомогательные ----------

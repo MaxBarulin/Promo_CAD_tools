@@ -41,7 +41,13 @@
           <div class="daytime">
             <label class="daytime-head" for="optTime"><span>Время суток</span><output id="optTimeOut" for="optTime">13:00</output></label>
             <input class="range" type="range" id="optTime" min="0" max="24" step="0.25" value="13" aria-describedby="optSun" />
-            <div class="daytime-foot"><span id="optSun"></span><button class="btn mini" type="button" id="optTimeNow">Сейчас</button></div>
+            <div class="daytime-row">
+              <input class="field" type="date" id="optDate" aria-label="Дата" />
+              <select class="field" id="optSpeed" aria-label="Ход часов" title="Ход часов модели"><option value="0">Пауза</option><option value="1" selected>Реальное время</option><option value="10">× 10</option><option value="60">× 60</option></select>
+              <button class="btn mini" type="button" id="optTimeNow" title="Сегодняшняя дата и время по Москве">Сейчас</button>
+            </div>
+            <div class="daytime-foot"><span id="optSun"></span></div>
+            <div class="bus-status"><span class="bus-dot" aria-hidden="true"></span><span id="busStatus"></span><button class="btn mini" type="button" id="busFind" disabled title="Подлететь к автобусу и следить за ним">Где автобус</button></div>
           </div>
         </div>
       </details>

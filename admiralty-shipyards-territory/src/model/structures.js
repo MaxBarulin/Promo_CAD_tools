@@ -220,6 +220,69 @@ export function buildCar(sink, p, angle, key) {
   sink.box(key, [c[0], c[1], 1.68], [2.1, 1.5, 0.06], angle);
 }
 
+// ---------- внутризаводской автобус и остановки ----------
+
+// Автобус длиной 12 м (низкопольный, не сочленённый) в начале координат, нос — по +x.
+// Двери — по правому борту (−y).
+export function buildBus(sink) {
+  sink.box('bus_dark', [0, 0, 0.5], [11.9, 2.5, 0.4]);
+  sink.box('bus', [0, 0, 1.85], [12, 2.55, 2.3]);
+  // окна по бортам, лобовое и заднее стекло
+  sink.box('glass', [-0.2, 0, 2.05], [10.9, 2.57, 1.05]);
+  sink.box('glass', [5.98, 0, 1.75], [0.08, 2.3, 1.85]);
+  sink.box('glass', [-5.98, 0, 2.15], [0.08, 2.1, 0.85]);
+  // маршрутный указатель
+  sink.box('frame_dark', [5.99, 0, 2.83], [0.08, 1.7, 0.24]);
+  // двери (правый борт)
+  for (const x of [4.6, 0.4, -3.6]) sink.box('glass', [x, -1.28, 1.5], [1.25, 0.04, 2.25]);
+  // крыша: светлый верх и блок кондиционера
+  sink.box('white', [0, 0, 3.02], [11.8, 2.4, 0.04]);
+  sink.box('white', [-1.2, 0, 3.18], [4.2, 1.7, 0.3]);
+  // фары (вечером светятся вместе с окнами)
+  for (const y of [-0.9, 0.9]) sink.box('glass_lit', [6.01, y, 0.82], [0.04, 0.4, 0.16]);
+  // колёса
+  for (const x of [3.4, -2.6])
+    for (const y of [-1, 1]) sink.tube('tyre', [x, y * 1.0, 0.5], [x, y * 1.3, 0.5], 0.5, 14);
+}
+
+// Остановка: зона на проезжей части у края (жёлтая разметка с зигзагом) и знак
+// «Место остановки автобуса» на стойке. st — { zone: { at, angle, L, W }, sign }.
+export function buildBusStop(sink, st) {
+  const { at, angle, L, W } = st.zone;
+  const c = Math.cos(angle * DEG);
+  const s = Math.sin(angle * DEG);
+  const P = (u, v) => [at[0] + c * u - s * v, at[1] + s * u + c * v];
+  const z = 0.07;
+  const line = (p, q, w = 0.15) => {
+    const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    const ang = (Math.atan2(q[1] - p[1], q[0] - p[0]) * 180) / Math.PI;
+    sink.box('marking_yellow', [m[0], m[1], z], [Math.hypot(q[0] - p[0], q[1] - p[1]) + w, w, 0.02], ang);
+  };
+  const hu = L / 2;
+  const hv = W / 2;
+  line(P(-hu, -hv), P(hu, -hv));
+  line(P(-hu, hv), P(hu, hv));
+  line(P(-hu, -hv), P(-hu, hv));
+  line(P(hu, -hv), P(hu, hv));
+  // зигзаг 1.17
+  const n = 6;
+  for (let k = 0; k < n; k++) {
+    const u0 = -hu + (k * L) / n;
+    const u1 = -hu + ((k + 1) * L) / n;
+    line(P(u0, k % 2 ? hv : -hv), P(u1, k % 2 ? -hv : hv), 0.12);
+  }
+  // стойка и знак 5.16 (синий квадрат, белое поле, автобус)
+  const p = st.sign;
+  sink.cylinder('steel', p, 0.05, 2.9, 0.045, 0.045, 8);
+  sink.box('sign_bus', [p[0], p[1], 2.5], [0.05, 0.62, 0.62], angle);
+  for (const k of [-1, 1]) {
+    const q = [p[0] + c * 0.03 * k, p[1] + s * 0.03 * k];
+    sink.box('white', [q[0], q[1], 2.5], [0.012, 0.44, 0.44], angle);
+    const r = [p[0] + c * 0.04 * k, p[1] + s * 0.04 * k];
+    sink.box('bus_dark', [r[0], r[1], 2.49], [0.012, 0.32, 0.14], angle);
+  }
+}
+
 // ---------- секции корпуса, контейнеры ----------
 
 export function buildBlocks(sink, at, angle, list) {

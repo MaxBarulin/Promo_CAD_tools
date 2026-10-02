@@ -10,11 +10,15 @@ import { GEOREF } from './mapdata.js';
 import { ORIGIN, pointInRing, area, centroid } from '../geo.js';
 import OSM_OVERLAY from './osm-overlay.js';
 import { applyOverlay } from './overlay.js';
+import { busRoute } from './bus.js';
 
 // useOSM: подмешать свежую выгрузку OpenStreetMap, если она загружена (npm run osm:fetch).
 export function getTerritory({ useOSM = true } = {}) {
   const base = baseTerritory();
-  return useOSM && OSM_OVERLAY ? applyOverlay(base, OSM_OVERLAY) : base;
+  const t = useOSM && OSM_OVERLAY ? applyOverlay(base, OSM_OVERLAY) : base;
+  // маршрут внутризаводского автобуса — по проездам и заводским мостам
+  t.bus = busRoute(t);
+  return t;
 }
 
 export const hasOSM = () => !!OSM_OVERLAY;

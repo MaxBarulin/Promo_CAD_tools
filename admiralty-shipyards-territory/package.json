@@ -12,7 +12,7 @@
     "osm:fetch": "node scripts/osm-fetch.mjs",
     "osm:convert": "node scripts/osm-convert.mjs",
     "all": "npm run check && npm run build && npm run export",
-    "test": "node test/osm-pipeline.test.mjs && node test/custom.test.mjs && node scripts/check.mjs",
+    "test": "node test/osm-pipeline.test.mjs && node test/custom.test.mjs && node test/bus.test.mjs && node scripts/check.mjs",
     "screenshots": "node scripts/screenshots.mjs docs/img"
   },
   "dependencies": {

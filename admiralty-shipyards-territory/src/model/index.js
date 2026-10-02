@@ -8,7 +8,8 @@ import { buildBuilding, buildingSummary, archWallProxy } from './buildings.js';
 import { buildFence, autoFences } from './fences.js';
 import { buildCrane } from './cranes.js';
 import { buildShip, buildDock, buildSlipway, slipProfile, slipPitch } from './ships.js';
-import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildCar, buildBlocks, buildContainers } from './structures.js';
+import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildCar, buildBlocks, buildContainers, buildBusStop } from './structures.js';
+import { BUS_DIRS, stopTimes } from '../data/bus.js';
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, DEG } from '../geo.js';
 import { PALETTE } from './materials.js';
@@ -21,6 +22,7 @@ export const LAYERS = [
   { id: 'shipyard', name: 'Здания верфи' },
   { id: 'production', name: 'Стапели, краны, оборудование' },
   { id: 'vessels', name: 'Суда и плавдоки' },
+  { id: 'transport', name: 'Автобус и остановки' },
   { id: 'bridges', name: 'Мосты' },
   { id: 'context', name: 'Окружающая застройка' },
   { id: 'greenery', name: 'Деревья и автомобили' },
@@ -57,7 +59,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   const layers = Object.fromEntries(LAYERS.map((l) => [l.id, { ...l, objects: [] }]));
   // scope: 'yard' — относится к верфи, 'city' — окружение (скрывается кнопкой «Только верфь»),
   // 'base' — земля и вода (видны всегда)
-  const DEFAULT_SCOPE = { terrain: 'base', roads: 'city', fence: 'yard', shipyard: 'yard', production: 'yard', vessels: 'yard', bridges: 'city', context: 'city', greenery: 'city' };
+  const DEFAULT_SCOPE = { terrain: 'base', roads: 'city', fence: 'yard', shipyard: 'yard', production: 'yard', vessels: 'yard', transport: 'yard', bridges: 'city', context: 'city', greenery: 'city' };
   const add_ = (layer, obj) => {
     obj.scope ??= DEFAULT_SCOPE[layer] || 'city';
     layers[layer].objects.push(obj);
@@ -260,6 +262,29 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     });
   }
 
+  // ---------- внутризаводской автобус: остановки ----------
+  // сам автобус движется по расписанию — его рисует просмотрщик (main.js)
+  for (const st of data.bus?.stops || []) {
+    const s = new Sink();
+    buildBusStop(s, st);
+    const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+    let info;
+    if (st.ring) info = 'Разворотное кольцо внутризаводского автобуса у Северной проходной. Между рейсами автобус стоит здесь.';
+    else {
+      const all = stopTimes(st.stop, st.dir, 1).map(fmt);
+      const fri = stopTimes(st.stop, st.dir, 5);
+      info = `Внутризаводской автобус, направление «${BUS_DIRS[st.dir].name}». Отправление пн–чт: ${all.join(', ')}. В пятницу последний рейс — в ${fmt(fri[fri.length - 1])}.`;
+    }
+    const right = [Math.sin(st.zone.angle * DEG), -Math.cos(st.zone.angle * DEG)];
+    add_('transport', {
+      id: st.id,
+      name: st.ring ? 'Кольцо автобуса' : `Остановка «${st.name}»`,
+      sink: s,
+      info: { name: st.ring ? 'Кольцо автобуса' : `Остановка «${st.name}»`, info, kind: 'bus_stop' },
+      proxy: boxProxy(add(st.zone.at, mul(right, 1.2)), st.zone.angle, st.zone.L, st.zone.W + 2.6, 0, 3),
+    });
+  }
+
   // ---------- мосты и арка ----------
   for (const br of data.bridges) {
     const s = new Sink();
@@ -306,14 +331,27 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     const c = new Sink();
     const cY = new Sink();
     const carKeys = ['car', 'car2', 'car3', 'car', 'car3'];
-    // автомобили у обочин внутризаводских проездов
+    // автомобили у обочин внутризаводских проездов — кроме полосы автобуса
+    const busPath = data.bus?.path || [];
+    const onBusLane = (q) => {
+      for (let i = 0; i < busPath.length - 1; i += 1) {
+        const a = busPath[i];
+        const b = busPath[i + 1];
+        if (Math.abs(q[0] - a[0]) > 30 || Math.abs(q[1] - a[1]) > 30) continue;
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const t = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+        if (Math.hypot(q[0] - a[0] - dx * t, q[1] - a[1] - dy * t) < 4.2) return true;
+      }
+      return false;
+    };
     for (const r of data.internalRoads) {
       const L = polylineLength(r.line);
       for (let d = 15 + R() * 20; d < L - 10; d += 40 + R() * 60) {
         const { p, dir } = pointAt(r.line, d);
         const side = R() < 0.5 ? -1 : 1;
         const q = add(p, mul(perp(dir), side * (r.w / 2 - 1.2)));
-        if (!onLand(q)) continue;
+        if (!onLand(q) || onBusLane(q)) continue;
         buildCar(cY, q, Math.atan2(dir[1], dir[0]) / DEG, carKeys[Math.floor(R() * carKeys.length)]);
       }
     }
@@ -396,10 +434,10 @@ export function toMergedGroups(THREE, model, getMaterial) {
 }
 
 // (Пере)заполнить группу слоя; exclude — коды объектов, которые не рисовать (их правят в редакторе).
-// Подгруппы с моделями из custom/ (userData.custom) не трогаются.
+// Подгруппы с моделями из custom/ (userData.custom) и подвижные объекты (userData.keep) не трогаются.
 export function fillLayerGroup(THREE, g, layer, getMaterial, exclude = null) {
   for (const c of [...g.children]) {
-    if (c.userData.custom) continue;
+    if (c.userData.custom || c.userData.keep) continue;
     g.remove(c);
     c.traverse((m) => m.geometry && m.geometry.dispose());
   }
