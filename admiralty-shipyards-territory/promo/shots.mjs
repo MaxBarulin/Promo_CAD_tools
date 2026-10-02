@@ -1,11 +1,12 @@
 // Снимки модели для документа ППУ (promo/img). Запуск после `npm run build`:
-//   node promo/shots.mjs [hero,objects,registry,plan,city,evening,mobile,editor,details]
+//   node promo/shots.mjs [cover,objects,registry,plan,city,evening,mobile,editor,details]
 // Затем пересоберите PDF: node promo/build-pdf.mjs
 // Нужен Playwright (npm i -D playwright или глобальная установка).
 
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { sunPosition } from '../src/viewer/daytime.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = (name) => path.join(here, 'img', name);
@@ -57,14 +58,27 @@ async function shot(p, name, wait = 5000) {
 const hideUi = (p, keepScope = false) =>
   p.addStyleTag({ content: `.brand,.panel,.hint,.hud,.card${keepScope ? '' : ',.scope-toggle'}{display:none!important}` });
 
-if (want('hero')) {
-  const p = await open({ width: 1800, height: 1000 });
+if (want('cover')) {
+  // обложка: портрет A4 во всю страницу, без подписей; утреннее солнце сбоку (с юго-востока)
+  // даёт тени и объём. Час — первый, когда солнце поднялось на 18° (зимой — ближе к полудню).
+  const today = new Date();
+  let hour = 11.5;
+  for (let m = 6 * 60; m <= 11.5 * 60; m += 5) {
+    if (sunPosition(today, m / 60).el >= 18) {
+      hour = m / 60;
+      break;
+    }
+  }
+  const p = await open({ width: 1240, height: 1754 });
   await hideUi(p);
-  await p.evaluate(() => {
-    window.__viewer.setPanelCollapsed(true);
-    window.__viewer.flyTo([-1500, -350, 650], [-420, 480, 0], 0);
-  });
-  await shot(p, 'hero.jpg');
+  await p.addStyleTag({ content: '#labels,.coords{display:none!important}' });
+  await p.evaluate((h) => {
+    const v = window.__viewer;
+    v.setPanelCollapsed(true);
+    v.setDayTime(h);
+    v.flyTo([-1450, -950, 780], [-330, 760, 0], 0);
+  }, hour);
+  await shot(p, 'cover.jpg');
   await p.close();
 }
 if (want('objects')) {
