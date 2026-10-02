@@ -363,7 +363,7 @@ function pointRaw(R, s) {
 // автобус стоит на том кольце, где оказался. Рейс на юг берёт автобус, стоящий на северном кольце,
 // рейс на север — тот, кто дольше ждёт на кольце у цеха № 12. Утром и после обеда один автобус
 // выходит на линию на полчаса раньше другого, чтобы к первому рейсу от цеха № 12 уже стоять там.
-const V = 5; // скорость хода, м/с (18 км/ч)
+const V = 4.3; // скорость хода, м/с (15,5 км/ч): ровно и не быстро
 const ACC = 0.6; // разгон и торможение, м/с²
 const DWELL = 30; // посадка на промежуточной остановке, с
 export const BUS_COUNT = 2; // автобусов на маршруте
@@ -421,7 +421,8 @@ export function stopTimes(stop, dir, weekday) {
 }
 
 // Проход по кругу от узла a до узла b с отправлением в t0: куски хода и стоянок на остановках.
-function runPieces(R, a, b, t0) {
+// holds — { узел: до какого времени стоять } (ожидание на кольце-развороте, пока занята конечная).
+function runPieces(R, a, b, t0, holds = {}) {
   const N = CYCLE.length;
   const S = (i) => R.nodes[i].s;
   const pieces = [];
@@ -430,13 +431,17 @@ function runPieces(R, a, b, t0) {
   let i = a;
   do {
     i = (i + 1) % N;
-    if (!CYCLE[i].stop && i !== b) continue;
+    if (!CYCLE[i].stop && i !== b && holds[i] == null) continue;
     const L = (((S(i) - s) % R.total) + R.total) % R.total;
     const T = travelTime(L);
     pieces.push({ kind: 'move', s0: s, L, t0: t, t1: t + T, to: i });
     t += T;
     s = S(i);
-    if (i !== b) {
+    if (holds[i] != null && holds[i] > t) {
+      pieces.push({ kind: 'hold', s0: s, t0: t, t1: holds[i], at: i });
+      t = holds[i];
+    }
+    if (CYCLE[i].stop && i !== b) {
       pieces.push({ kind: 'dwell', s0: s, t0: t, t1: t + DWELL, at: i });
       t += DWELL;
     }
@@ -455,9 +460,10 @@ function dayPlan(R, weekday) {
   const lead = travelTime(R.nodes[c33].s - R.nodes[ring].s) + DWELL; // от кольца до отправления от цеха № 33
   const buses = Array.from({ length: BUS_COUNT }, () => ({ at: 'N', free: -Infinity, runs: [] }));
   const d = busDeparts(weekday);
-  const go = (bus, kind, t0, T) => {
+  const uturn = CYCLE.findIndex((c) => c.uturn);
+  const go = (bus, kind, t0, T, holds) => {
     const south = kind === 's' || kind === 'out';
-    const run = { kind, T, ...runPieces(R, south ? ring : c12, south ? c12 : ring, t0) };
+    const run = { kind, T, ...runPieces(R, south ? ring : c12, south ? c12 : ring, t0, holds) };
     bus.runs.push(run);
     bus.at = south ? 'S' : 'N';
     bus.free = run.t1;
@@ -481,11 +487,15 @@ function dayPlan(R, weekday) {
         const bus = pick('N');
         go(bus, 'out', Math.max(bus.free, firstN.t - OUT_BEFORE * 60), null);
       }
-      for (const e of block) {
+      block.forEach((e, j) => {
         const bus = pick(e.dir === 's' ? 'N' : 'S');
-        if (!bus) continue;
-        go(bus, e.dir, e.dir === 's' ? Math.max(bus.free, e.t - lead) : Math.max(bus.free, e.t), e.t);
-      }
+        if (!bus) return;
+        if (e.dir === 'n') return go(bus, 'n', Math.max(bus.free, e.t), e.t);
+        // у цеха № 12 ещё стоит другой автобус — ждать на кольце-развороте, пока он не уйдёт
+        const nextN = block.slice(j + 1).find((x) => x.dir === 'n');
+        const busy = buses.some((b) => b !== bus && b.at === 'S');
+        go(bus, 's', Math.max(bus.free, e.t - lead), e.t, busy && nextN ? { [uturn]: nextN.t + 30 } : {});
+      });
       // после последнего рейса от цеха № 12 — на северное кольцо
       const lastN = [...block].reverse().find((e) => e.dir === 'n');
       for (const bus of buses) if (bus.at === 'S') go(bus, 'home', Math.max(bus.free, (lastN ? lastN.t : 0) + HOME_AFTER * 60), null);
@@ -533,6 +543,7 @@ export function busState(R, bus, weekday, sec) {
   const run = runs[k];
   if (sec < run.t0) return waiting(runs[k - 1], run);
   const p = run.pieces.find((x) => sec < x.t1) || run.pieces[run.pieces.length - 1];
+  if (p.kind === 'hold') return { s: p.s0 % R.total, state: 'park', text: `стоит ${south}, ждёт, пока уйдёт другой автобус`, next: p.t1, since: p.t0 };
   if (p.kind === 'dwell') {
     const T = scheduled(run, p.at);
     return { s: p.s0 % R.total, state: 'stop', text: `на остановке ${name(p.at)}, ${DIR[run.kind]}${T != null ? `, по расписанию ${hm(T)}` : ''}`, next: p.t1, since: p.t0 };
@@ -542,6 +553,7 @@ export function busState(R, bus, weekday, sec) {
   if (run.kind === 'out') text = `выходит на линию: едет ${south.replace('на кольце', 'на кольцо')}`;
   else if (run.kind === 'home') text = `возвращается ${north.replace('на кольце', 'на кольцо')}`;
   else if (p.to === run.b) text = run.kind === 's' ? `${DIR.s}, едет на конечную «Цех № 12»` : `${DIR.n}, едет на кольцо у Северной проходной`;
+  else if (!CYCLE[p.to].stop) text = `${DIR[run.kind]}, едет ${south.replace('на кольце', 'на кольцо')}`;
   else {
     const T = scheduled(run, p.to);
     text = `${DIR[run.kind]}, следующая остановка ${name(p.to)}${T != null ? `, по расписанию ${hm(T)}` : ''}`;
@@ -572,3 +584,6 @@ export function busStates(R, weekday, sec) {
 export function busRuns(R, bus, weekday) {
   return dayPlan(R, weekday)[bus].map(({ kind, T, t0, t1 }) => ({ kind, T, t0, t1 }));
 }
+
+// План дня целиком, с кусками хода и стоянок (для проверки)
+export const busPlan = (R, weekday) => dayPlan(R, weekday);

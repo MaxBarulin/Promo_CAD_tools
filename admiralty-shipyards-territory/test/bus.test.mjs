@@ -103,7 +103,16 @@ for (let t = 6 * 3600; t < 17.5 * 3600; t += 1) {
     assert.ok(ds < 12, `автобус ${k + 1}: скачок ${ds.toFixed(1)} м в ${t} с`);
   }
   const gap = (((a[0].s - a[1].s) % R.total) + R.total) % R.total;
-  assert.ok(Math.min(gap, R.total - gap) > 13.5, `автобусы ближе 14 м в ${t} с`);
+  const g = Math.min(gap, R.total - gap);
+  assert.ok(g > 13.5, `автобусы ближе 14 м в ${t} с`);
+  // на одной остановке вдвоём не стоят: рядом друг с другом — только на северном кольце в перерыв
+  const atRing = (x) => Math.min(x.s, R.total - x.s) < 60; // на кольце у Северной проходной (стоянка, отдых)
+  assert.ok(g > 40 || (atRing(a[0]) && atRing(a[1])), `в ${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')} автобусы стоят рядом: ${a[0].text} / ${a[1].text}`);
+}
+// в 14:43 у цеха № 12 один автобус: второй ждёт на кольце-развороте, пока первый уйдёт в 14:45
+{
+  const [x, y] = [at(3, '14:43', 0), at(3, '14:43', 1)];
+  assert.equal([x, y].filter((z) => near(z, 'BS-c12-n')).length, 1);
 }
 // на мосту — по настилу
 const b3 = R.bridges[0];
