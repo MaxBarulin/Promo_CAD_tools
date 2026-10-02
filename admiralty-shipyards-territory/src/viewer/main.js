@@ -16,7 +16,7 @@ import { setupObjectList } from './objects.js';
 import { setupEditor } from './editor.js';
 import { setupTour } from './tour.js';
 import { sunPosition, sunTimes, lightingFor, hhmm } from './daytime.js';
-import { busState, pointOnRoute } from '../data/bus.js';
+import { busStates, pointOnRoute, BUS_COUNT } from '../data/bus.js';
 import { buildBus } from '../model/structures.js';
 import { Sink } from '../model/geom.js';
 
@@ -905,49 +905,52 @@ async function main() {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light';
   setEvening(prefersDark || document.documentElement.dataset.theme === 'dark');
 
-  // ---------- внутризаводской автобус ----------
-  // Едет по кругу маршрута (data.bus) туда, где он должен быть по расписанию в момент часов модели.
+  // ---------- внутризаводские автобусы ----------
+  // Оба едут по кругу маршрута (data.bus) туда, где должны быть по расписанию в момент часов модели.
   const busRouteData = data.bus;
-  const bus = new THREE.Group();
-  bus.name = 'Внутризаводской автобус';
-  bus.userData.keep = true;
-  {
-    const s = new Sink();
-    buildBus(s);
-    for (const { key, geometry } of s.toGeometries(THREE)) {
+  const transportGroup = groups.find((g) => g.userData.layer === 'transport');
+  const busTemplate = new Sink();
+  buildBus(busTemplate);
+  const busGeoms = busTemplate.toGeometries(THREE);
+  const buses = [];
+  for (let k = 0; k < BUS_COUNT; k++) {
+    const g = new THREE.Group();
+    g.name = `Внутризаводской автобус ${k + 1}`;
+    g.userData.keep = true;
+    for (const { key, geometry } of busGeoms) {
       const mesh = new THREE.Mesh(geometry, getMaterial(key));
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      bus.add(mesh);
+      g.add(mesh);
     }
+    transportGroup?.add(g);
+    const label = addLabel(`Автобус ${k + 1}`, [0, 0], 0, 'pin bus', 0, 1500, 'yard');
+    buses.push({ g, label, st: null });
   }
-  bus.visible = false;
-  groups.find((g) => g.userData.layer === 'transport')?.add(bus);
-  const busLabel = addLabel('Автобус', [0, 0], 0, 'pin bus', 0, 1500, 'yard');
-  busLabel.visible = false;
   let busText = '';
+  let busTarget = -1; // за каким автобусом следит камера
   const busWorld = new THREE.Vector3();
   function updateBus() {
     if (!busRouteData) return;
     const ms = simMs();
-    const st = busState(busRouteData, new Date(ms).getUTCDay(), (ms % DAY) / 1000);
-    bus.visible = st.visible;
-    busLabel.visible = st.visible && bus.parent?.visible !== false;
-    if (st.visible) {
+    const states = busStates(busRouteData, new Date(ms).getUTCDay(), (ms % DAY) / 1000);
+    states.forEach((st, k) => {
+      const b = buses[k];
+      b.st = st;
       const { p, dir, z } = pointOnRoute(busRouteData, st.s);
-      bus.position.copy(V3(p[0], p[1], z));
-      bus.rotation.y = Math.atan2(dir[1], dir[0]);
-      busLabel.position.copy(V3(p[0], p[1], 7));
-    }
-    const text = st.visible ? `Автобус ${st.text}` : st.text;
+      b.g.position.copy(V3(p[0], p[1], z));
+      b.g.rotation.y = Math.atan2(dir[1], dir[0]);
+      b.label.position.copy(V3(p[0], p[1], 7));
+      b.label.visible = transportGroup?.visible !== false;
+    });
+    const text = states.map((st, k) => `<div><b>${k + 1}</b> ${st.text}</div>`).join('');
     if (text !== busText) {
       busText = text;
-      $('busStatus').textContent = text;
-      $('busFind').disabled = !st.visible;
+      $('busStatus').innerHTML = text;
     }
     // слежение камерой: сдвигаем камеру вместе с автобусом
-    if (follow && st.visible) {
-      bus.getWorldPosition(busWorld);
+    if (follow && busTarget >= 0) {
+      buses[busTarget].g.getWorldPosition(busWorld);
       const d = busWorld.clone().sub(follow);
       if (tween) {
         tween.e1.add(d);
@@ -959,15 +962,17 @@ async function main() {
       follow.copy(busWorld);
     }
   }
+  // «Где автобус»: к автобусу в рейсе (если в рейсе оба или ни один — по очереди)
   $('busFind').addEventListener('click', () => {
-    if (!bus.visible) return;
-    const ms = simMs();
-    const st = busState(busRouteData, new Date(ms).getUTCDay(), (ms % DAY) / 1000);
-    const { p, dir } = pointOnRoute(busRouteData, st.s);
+    const active = buses.map((b, k) => (b.st && b.st.state !== 'park' ? k : -1)).filter((k) => k >= 0);
+    const pool = active.length === 1 ? active : buses.map((_, k) => k);
+    const k = pool[(pool.indexOf(busTarget) + 1) % pool.length] ?? pool[0];
+    const { p, dir } = pointOnRoute(busRouteData, buses[k].st.s);
     const side = [-dir[1], dir[0]];
     setActiveView(null);
     // крутой вид сверху-сзади: соседние корпуса не закрывают автобус
     flyTo([p[0] - dir[0] * 34 + side[0] * 26, p[1] - dir[1] * 34 + side[1] * 26, 95], [p[0] + dir[0] * 4, p[1] + dir[1] * 4, 1]);
+    busTarget = k;
     follow = V3(p[0], p[1], 0.05);
   });
 
@@ -1060,7 +1065,7 @@ async function main() {
   if (location.hash === '#tour') tour.start();
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, setDateTime, setSpeed, bus, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, setDateTime, setSpeed, buses, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
   window.__ready = true;
 
   // ---------- вспомогательные ----------

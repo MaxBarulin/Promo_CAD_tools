@@ -1,15 +1,16 @@
-// Внутризаводской автобус: остановки, маршрут по проездам верфи и расписание.
+// Внутризаводские автобусы: остановки, маршрут по проездам верфи и расписание.
 //
-// Маршрут — кратчайший путь по внутризаводским проездам и заводским мостам между
-// остановками (точки остановок притягиваются к ближайшему проезду); автобус едет по правой
-// полосе. Положение автобуса в любой момент — busState(route, дата, часы) по расписанию.
+// Маршрут проходит через опорные точки (по какой дороге ехать) и остановки; между ними —
+// кратчайший путь по внутризаводским проездам и заводским мостам, автобус едет по правой
+// полосе. Автобусов два, оба стоят у Северной проходной и по очереди выходят на круг.
+// Положение автобусов в любой момент — busStates(route, день недели, секунды) по расписанию.
 
 import { add, sub, mul, dot, dist, norm, perp, lerp, smooth, centroid } from '../geo.js';
 
 // Остановки. at — примерная точка у дороги; near — здание, у которого стоит остановка
 // (точка — ближайшее к нему место на проезде).
 export const BUS_STOPS = {
-  ring_n: { name: 'Кольцо', at: [191, 1481], ring: true },
+  ring_n: { name: 'Северная проходная', at: [189, 1487], ring: true },
   c33: { name: 'Цех № 33', at: [5, 1350] },
   c20: { name: 'Цех № 20', at: [-247, 1110] },
   c19: { name: 'Цех № 19', at: [-400, 629] },
@@ -25,24 +26,47 @@ export const BUS_DIRS = {
   n: { name: 'к цеху № 29', from: 'c12' },
 };
 
-// Круг маршрута: остановки по порядку, разворот на Галерном острове и кольцо у ворот
-// Ново-Адмиралтейского острова (там автобус ждёт между рейсами).
+// Дорога с юга на север: опорные точки (по какой дороге ехать) и остановки по порядку.
+const WAY = [
+  { via: [-669, -370] },
+  { stop: 'c12' },
+  { via: [-604, -208] },
+  { via: [-542, -125] },
+  { stop: 'c22' },
+  { via: [-380, -78] },
+  { via: [-271, -78] },
+  { via: [-158, -15] },
+  { via: [-150, 80] },
+  { stop: 'zupr' },
+  { via: [-194, 137] },
+  { via: [-328, 297] },
+  { via: [-345, 345] },
+  { stop: 'otz' },
+  { via: [-309, 464] },
+  { via: [-423, 496] },
+  { stop: 'c19' },
+  { via: [-383, 679] },
+  { via: [-390, 759] },
+  { via: [-344, 984] },
+  { via: [-214, 1057] },
+  { stop: 'c20' },
+  { via: [-214, 1190] },
+  { stop: 'c33' },
+];
+// Круг: от конечной у Северной проходной на юг (к цеху № 12 — без остановки у цеха № 12 до
+// разворота), разворот на Галерном острове, обратно на север (к цеху № 29 — без цеха № 33) и
+// объезд квартала у проходной (на конечную по R57, с неё — по R59 и R58).
 const CYCLE = [
-  { stop: 'c33', dir: 's' },
-  { stop: 'c20', dir: 's' },
-  { stop: 'c19', dir: 's' },
-  { stop: 'otz', dir: 's' },
-  { stop: 'zupr', dir: 's' },
-  { stop: 'c22', dir: 's' },
-  { via: [-703, -384], uturn: true },
-  { stop: 'c12', dir: 'n' },
-  { stop: 'c22', dir: 'n' },
-  { stop: 'zupr', dir: 'n' },
-  { stop: 'otz', dir: 'n' },
-  { stop: 'c19', dir: 'n' },
-  { stop: 'c20', dir: 'n' },
   { stop: 'ring_n' },
-  // объезд квартала у Северной проходной: на кольцо по R59, обратно по R57
+  { via: [167.4, 1473.9] },
+  { via: [180, 1450.5] },
+  ...WAY.slice()
+    .reverse()
+    .filter((w) => w.stop !== 'c12')
+    .map((w) => (w.stop ? { stop: w.stop, dir: 's' } : w)),
+  { via: [-705, -385], uturn: true },
+  ...WAY.filter((w) => w.stop !== 'c33').map((w) => (w.stop ? { stop: w.stop, dir: 'n' } : w)),
+  { via: [185, 1453] },
   { via: [208.9, 1467.5] },
 ];
 
@@ -337,8 +361,8 @@ const V = 8; // крейсерская скорость, м/с (≈ 29 км/ч)
 const ACC = 0.8; // разгон и торможение, м/с²
 const DWELL = 60; // стоянка на остановке, с — для наглядности
 const DWELL_MIN = 20;
-const PRE = 15 * 60; // за сколько до первого рейса автобус уже ждёт на кольце, с
-const POST = 10 * 60; // сколько стоит на кольце после последнего рейса, с
+export const BUS_COUNT = 2; // автобусов на маршруте
+const GAP = 14; // автобус в очереди стоит за передним с таким шагом, м
 
 const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
 export const hm = (sec) => {
@@ -388,81 +412,103 @@ export function stopTimes(stop, dir, weekday) {
   return k < 0 ? [] : d[dir].map((t) => t + tt.offsets[k]);
 }
 
-// События дня по порядку: { node — индекс в круге маршрута, t — секунды от полуночи }
+// Рейсы дня по автобусам. Круговой рейс — отправление к цеху № 12 и следующее за ним обратное
+// (15:00 → 15:20 в пятницу — тот же автобус); круговые рейсы по очереди делают автобус 1 и
+// автобус 2, поэтому первый выходит в 7:30, второй — в 8:00. События: { node — индекс в круге
+// маршрута, t — отправление, секунды от полуночи }.
 const eventsCache = new Map();
-function dayEvents(weekday) {
-  if (!eventsCache.has(weekday)) eventsCache.set(weekday, buildEvents(weekday));
-  return eventsCache.get(weekday);
+function busEvents(bus, weekday) {
+  const key = `${bus}:${weekday}`;
+  if (!eventsCache.has(key)) eventsCache.set(key, buildEvents(bus, weekday));
+  return eventsCache.get(key);
 }
-function buildEvents(weekday) {
+function buildEvents(bus, weekday) {
   const d = busDeparts(weekday);
   if (!d) return [];
   const ev = [];
-  for (const dir of ['s', 'n']) {
-    const tt = BUS_TIMETABLE[dir];
-    for (const t0 of d[dir]) tt.stops.forEach((st, k) => ev.push({ node: cycleIndex(st, dir), t: (t0 + tt.offsets[k]) * 60, stop: st, dir }));
-  }
+  d.s.forEach((tS, k) => {
+    if (k % BUS_COUNT !== bus) return;
+    const trips = [['s', tS], ['n', d.n[k]]];
+    for (const [dir, t0] of trips) {
+      if (t0 == null) continue;
+      const tt = BUS_TIMETABLE[dir];
+      tt.stops.forEach((st, i) => ev.push({ node: cycleIndex(st, dir), t: (t0 + tt.offsets[i]) * 60, stop: st, dir }));
+    }
+  });
   return ev.sort((a, b) => a.t - b.t);
 }
 
-// Положение автобуса: weekday — день недели (0 — воскресенье), sec — секунды от полуночи.
-// → { visible, s (путь по кругу), state: 'stop' | 'move' | 'wait', text }
-export function busState(R, weekday, sec) {
-  const ev = dayEvents(weekday);
-  if (!ev.length) return { visible: false, text: `Автобус не ходит: ${WEEKDAYS[weekday]}, выходной` };
+// Положение одного автобуса (bus — 0 или 1): weekday — день недели (0 — воскресенье), sec —
+// секунды от полуночи. → { s (путь по кругу), state: 'park' | 'stop' | 'move', text, next }
+// next — когда автобус тронется (для очереди на стоянке).
+export function busState(R, bus, weekday, sec) {
   const S = (i) => R.nodes[i].s;
   const ring = R.nodes.findIndex((n) => n.stop === 'ring_n');
+  const ev = busEvents(bus, weekday);
+  // since — с какого времени стоит (кто раньше встал, тот и впереди)
+  const parked = (text, next = Infinity, since = -Infinity) => ({ s: S(ring), state: 'park', text, next, since });
+  if (!ev.length) return parked(`стоит у Северной проходной: ${WEEKDAYS[weekday]}, рейсов нет`);
   const span = (a, b) => (((S(b) - S(a)) % R.total) + R.total) % R.total;
   const name = (i) => `«${BUS_STOPS[CYCLE[i].stop].name}»`;
   const dirName = (e) => BUS_DIRS[e.dir].name;
+  const at = (a, L, Tt, t0) => S(a) + distAt(L, Tt, sec - t0);
 
-  // участок от узла a (отправление ta) к узлу b (отправление tb); через кольцо — со стоянкой на нём
+  // участок от узла a (отправление ta) к узлу b (отправление tb); через стоянку у проходной —
+  // со стоянкой на ней, если есть время
   const leg = (a, ta, b, tb, e0, e1) => {
-    const viaRing = span(a, ring) < span(a, b) && ring !== a;
     const L = span(a, b);
-    // перед первым рейсом — ждёт на кольце и выезжает к первой остановке впритык
-    if (a === ring) {
-      const T = travelTime(L);
-      const leave = Math.max(ta, tb - DWELL - T);
-      if (sec < leave) return { s: S(ring), state: 'wait', text: `стоит на кольце, первый рейс ${dirName(e1)} — в ${hm(tb)} от ${name(b)}` };
-      if (sec < leave + T) return { s: S(ring) + distAt(L, T, sec - leave), state: 'move', text: `едет к остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}` };
-      return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}` };
-    }
+    const viaRing = a === ring || span(a, ring) < L;
     if (viaRing) {
-      const L1 = span(a, ring);
+      const L1 = a === ring ? 0 : span(a, ring);
       const L2 = L - L1;
-      const T1 = travelTime(L1);
+      const T1 = L1 ? travelTime(L1) : 0;
       const T2 = travelTime(L2);
       const leave = Math.max(ta + T1, tb - DWELL - T2);
-      if (sec < ta + T1) return { s: S(a) + distAt(L1, T1, sec - ta), state: 'move', text: `едет на кольцо, следующий рейс ${dirName(e1)} — в ${hm(tb)} от ${name(b)}` };
-      if (sec < leave) return { s: S(ring), state: 'wait', text: `стоит на кольце, следующий рейс ${dirName(e1)} — в ${hm(tb)} от ${name(b)}` };
+      if (sec < ta + T1) return { s: at(a, L1, T1, ta), state: 'move', text: `едет к Северной проходной, следующий рейс ${dirName(e1)} — в ${hm(tb)}`, next: sec };
+      if (sec < leave) return parked(`стоит у Северной проходной, следующий рейс ${dirName(e1)} — в ${hm(tb)}`, leave, a === ring ? -Infinity : ta + T1);
       const Tt = Math.max(1, Math.min(T2, tb - DWELL_MIN - leave));
-      if (sec < leave + Tt) return { s: S(ring) + distAt(L2, Tt, sec - leave), state: 'move', text: `едет к остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}` };
-      return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}` };
+      if (sec < leave + Tt) return { s: at(ring, L2, Tt, leave), state: 'move', text: `едет к остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: sec };
+      return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: tb };
     }
     const Tt = Math.max(1, Math.min(travelTime(L), tb - ta - DWELL_MIN));
     const end = e0.dir !== e1.dir ? ` (конечная), обратно — в ${hm(tb)}` : ` — ${hm(tb)}`;
-    if (sec < ta + Tt) return { s: S(a) + distAt(L, Tt, sec - ta), state: 'move', text: `${dirName(e0)}, следующая остановка ${name(b)}${end}` };
-    return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}` };
+    if (sec < ta + Tt) return { s: at(a, L, Tt, ta), state: 'move', text: `${dirName(e0)}, следующая остановка ${name(b)}${end}`, next: sec };
+    return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: tb };
   };
 
   const first = ev[0];
   const last = ev[ev.length - 1];
   let st;
-  if (sec < first.t - PRE) return { visible: false, text: `Первый рейс в ${hm(first.t)} от остановки ${name(first.node)}` };
-  if (sec < first.t) st = leg(ring, first.t - PRE, first.node, first.t, first, first);
-  else if (sec >= last.t) {
+  if (sec < first.t) {
+    st = leg(ring, 0, first.node, first.t, first, first);
+    if (st.state === 'park') st.text = `стоит у Северной проходной, первый рейс ${dirName(first)} — в ${hm(first.t)}`;
+  } else if (sec >= last.t) {
     const L = span(last.node, ring);
     const T = travelTime(L);
-    if (sec >= last.t + T + POST) return { visible: false, text: weekday === 5 ? 'Рейсы закончились: в пятницу последний рейс в 15:00' : 'Рейсы на сегодня закончились' };
-    st = sec < last.t + T ? { s: S(last.node) + distAt(L, T, sec - last.t), state: 'move', text: 'последний рейс окончен, едет на кольцо' } : { s: S(ring), state: 'wait', text: 'рейсы на сегодня закончились, стоит на кольце' };
+    st = sec < last.t + T ? { s: at(last.node, L, T, last.t), state: 'move', text: 'рейсы окончены, едет к Северной проходной', next: sec } : parked('рейсы на сегодня окончены, стоит у Северной проходной', Infinity, last.t + T);
   } else {
     let i = 0;
     while (ev[i + 1].t <= sec) i++;
-    const e0 = ev[i];
-    const e1 = ev[i + 1];
-    // стоянка на остановке до отправления — показывается, пока не наступит время e0
-    st = leg(e0.node, e0.t, e1.node, e1.t, e0, e1);
+    st = leg(ev[i].node, ev[i].t, ev[i + 1].node, ev[i + 1].t, ev[i], ev[i + 1]);
   }
-  return { visible: true, ...st, s: ((st.s % R.total) + R.total) % R.total };
+  return { ...st, s: ((st.s % R.total) + R.total) % R.total };
+}
+
+// Оба автобуса. Если один догоняет другой (на стоянке у проходной или на конечной), задний
+// останавливается в GAP метрах позади и подтягивается, когда передний уедет.
+export function busStates(R, weekday, sec) {
+  const st = [];
+  for (let b = 0; b < BUS_COUNT; b++) st.push(busState(R, b, weekday, sec));
+  const fwd = (x, y) => (((y - x) % R.total) + R.total) % R.total;
+  for (let pass = 0; pass < 2; pass++)
+    for (let i = 0; i < st.length; i++)
+      for (let j = 0; j < st.length; j++) {
+        if (i === j) continue;
+        const d = fwd(st[i].s, st[j].s); // насколько j впереди i
+        // на одном месте впереди тот, кто раньше тронется; если оба стоят до конца дня — кто раньше встал
+        const first = (x, y) => x.next < y.next || (x.next === y.next && ((x.since ?? 0) < (y.since ?? 0) || ((x.since ?? 0) === (y.since ?? 0) && j < i)));
+        const tie = d < 1e-6 && first(st[j], st[i]);
+        if ((d > 1e-6 && d < GAP) || tie) st[i] = { ...st[i], s: (((st[j].s - GAP) % R.total) + R.total) % R.total, queued: true };
+      }
+  return st;
 }

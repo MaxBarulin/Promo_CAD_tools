@@ -8,7 +8,7 @@ import { buildBuilding, buildingSummary, archWallProxy } from './buildings.js';
 import { buildFence, autoFences } from './fences.js';
 import { buildCrane } from './cranes.js';
 import { buildShip, buildDock, buildSlipway, slipProfile, slipPitch } from './ships.js';
-import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildCar, buildBlocks, buildContainers, buildBusStop } from './structures.js';
+import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildBlocks, buildContainers, buildBusStop } from './structures.js';
 import { BUS_DIRS, stopTimes } from '../data/bus.js';
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, DEG } from '../geo.js';
@@ -22,10 +22,10 @@ export const LAYERS = [
   { id: 'shipyard', name: 'Здания верфи' },
   { id: 'production', name: 'Стапели, краны, оборудование' },
   { id: 'vessels', name: 'Суда и плавдоки' },
-  { id: 'transport', name: 'Автобус и остановки' },
+  { id: 'transport', name: 'Автобусы и остановки' },
   { id: 'bridges', name: 'Мосты' },
   { id: 'context', name: 'Окружающая застройка' },
-  { id: 'greenery', name: 'Деревья и автомобили' },
+  { id: 'greenery', name: 'Деревья' },
 ];
 
 export function initModel(THREE) {
@@ -263,13 +263,13 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   }
 
   // ---------- внутризаводской автобус: остановки ----------
-  // сам автобус движется по расписанию — его рисует просмотрщик (main.js)
+  // сами автобусы движутся по расписанию — их рисует просмотрщик (main.js)
   for (const st of data.bus?.stops || []) {
     const s = new Sink();
     buildBusStop(s, st);
     const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     let info;
-    if (st.ring) info = 'Разворотное кольцо внутризаводского автобуса у Северной проходной. Между рейсами автобус стоит здесь.';
+    if (st.ring) info = 'Конечная внутризаводских автобусов у Северной проходной: отсюда оба автобуса по очереди выходят на круг (первый — в 7:30, второй — в 8:00) и здесь же стоят между рейсами.';
     else {
       const all = stopTimes(st.stop, st.dir, 1).map(fmt);
       const fri = stopTimes(st.stop, st.dir, 5);
@@ -278,9 +278,9 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     const right = [Math.sin(st.zone.angle * DEG), -Math.cos(st.zone.angle * DEG)];
     add_('transport', {
       id: st.id,
-      name: st.ring ? 'Кольцо автобуса' : `Остановка «${st.name}»`,
+      name: st.ring ? 'Конечная «Северная проходная»' : `Остановка «${st.name}»`,
       sink: s,
-      info: { name: st.ring ? 'Кольцо автобуса' : `Остановка «${st.name}»`, info, kind: 'bus_stop' },
+      info: { name: st.ring ? 'Конечная «Северная проходная»' : `Остановка «${st.name}»`, info, kind: 'bus_stop' },
       proxy: boxProxy(add(st.zone.at, mul(right, 1.2)), st.zone.angle, st.zone.L, st.zone.W + 2.6, 0, 3),
     });
   }
@@ -297,7 +297,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     add_('context', { id: a.id, name: a.name, sink: s, info: { name: a.name, info: a.info, kind: 'landmark' }, proxy: boxProxy(a.at, a.angle, a.w + 9, 28, 0, a.h) });
   }
 
-  // ---------- озеленение и автомобили ----------
+  // ---------- озеленение ----------
   {
     const s = new Sink();
     const sY = new Sink();
@@ -327,51 +327,6 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     }
     add_('greenery', { id: 'trees', name: 'Деревья', sink: s, scope: 'city' });
     add_('greenery', { id: 'trees-yard', name: 'Деревья на территории верфи', sink: sY, scope: 'yard' });
-
-    const c = new Sink();
-    const cY = new Sink();
-    const carKeys = ['car', 'car2', 'car3', 'car', 'car3'];
-    // автомобили у обочин внутризаводских проездов — кроме полосы автобуса
-    const busPath = data.bus?.path || [];
-    const onBusLane = (q) => {
-      for (let i = 0; i < busPath.length - 1; i += 1) {
-        const a = busPath[i];
-        const b = busPath[i + 1];
-        if (Math.abs(q[0] - a[0]) > 30 || Math.abs(q[1] - a[1]) > 30) continue;
-        const dx = b[0] - a[0];
-        const dy = b[1] - a[1];
-        const t = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
-        if (Math.hypot(q[0] - a[0] - dx * t, q[1] - a[1] - dy * t) < 4.2) return true;
-      }
-      return false;
-    };
-    for (const r of data.internalRoads) {
-      const L = polylineLength(r.line);
-      for (let d = 15 + R() * 20; d < L - 10; d += 40 + R() * 60) {
-        const { p, dir } = pointAt(r.line, d);
-        const side = R() < 0.5 ? -1 : 1;
-        const q = add(p, mul(perp(dir), side * (r.w / 2 - 1.2)));
-        if (!onLand(q) || onBusLane(q)) continue;
-        buildCar(cY, q, Math.atan2(dir[1], dir[0]) / DEG, carKeys[Math.floor(R() * carKeys.length)]);
-      }
-    }
-    // движение на основных улицах города
-    let cars = 0;
-    for (const st of data.streets) {
-      if (!['primary', 'secondary', 'tertiary'].includes(st.cls) || cars > 220) continue;
-      const L = polylineLength(st.line);
-      for (let d = 15 + R() * 30; d < L - 10; d += 45 + R() * 60) {
-        const { p, dir } = pointAt(st.line, d);
-        const lane = R() < 0.5 ? -1 : 1;
-        const q = add(p, mul(perp(dir), (lane * st.w) / 4));
-        if (!P.carriageways.some((poly) => pointInRing(q, poly[0]))) continue;
-        const ang = (Math.atan2(dir[1], dir[0]) * 180) / Math.PI + (lane > 0 ? 180 : 0);
-        buildCar(c, q, ang, carKeys[Math.floor(R() * carKeys.length)]);
-        cars++;
-      }
-    }
-    add_('greenery', { id: 'cars', name: 'Автомобили на улицах', sink: c, scope: 'city' });
-    add_('greenery', { id: 'cars-yard', name: 'Автомобили на территории верфи', sink: cY, scope: 'yard' });
   }
 
   // ---------- доработки вручную: замена моделью из Blender, новые здания ----------

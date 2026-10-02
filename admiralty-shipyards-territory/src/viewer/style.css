@@ -1634,11 +1634,28 @@ body.ed-picking #scene {
   line-height: 1.35;
   color: var(--ink);
 }
-.bus-status span:not(.bus-dot) {
+.bus-status {
+  align-items: flex-start;
+}
+.bus-lines {
   flex: 1;
   min-width: 0;
+  display: grid;
+  gap: 3px;
 }
-.bus-dot {
+.bus-lines b {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-right: 4px;
+  border-radius: 3px;
+  background: #14aea6;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+.bus-status .bus-dot {
   flex: none;
   width: 8px;
   height: 8px;
