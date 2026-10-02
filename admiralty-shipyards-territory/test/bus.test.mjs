@@ -1,7 +1,7 @@
 // Проверка внутризаводских автобусов: маршрут по проездам и положение по расписанию.
 import assert from 'node:assert/strict';
 import { getTerritory } from '../src/data/index.js';
-import { busStates, busRuns, pointOnRoute, stopTimes, busDeparts, BUS_TIMETABLE } from '../src/data/bus.js';
+import { busStates, busRuns, busStopTimes, pointOnRoute, stopTimes, busDeparts, BUS_TIMETABLE } from '../src/data/bus.js';
 import { pointInRing, area } from '../src/geo.js';
 
 const R = getTerritory().bus;
@@ -37,29 +37,50 @@ const at = (wd, hm, bus = 0) => {
 const stopS = (id) => R.stops.find((s) => s.id === id).s;
 const near = (st, id) => Math.abs(st.s - stopS(id)) < 0.5;
 
-// оба автобуса вместе делают все рейсы расписания, каждый — со своей конечной точно по времени
+// первый автобус делает все рейсы расписания, точно по времени; второй — навстречу ему:
+// от цеха № 12 в те же минуты, что первый от цеха № 33, и наоборот, кроме последнего рейса на север
+// перед обедом и вечером
 for (const wd of [1, 5]) {
   const d = busDeparts(wd);
-  const runs = [0, 1].flatMap((b) => busRuns(R, b, wd));
+  const [one, two] = [0, 1].map((b) => busRuns(R, b, wd));
   for (const dir of ['s', 'n'])
     assert.deepEqual(
-      runs.filter((r) => r.kind === dir).map((r) => r.T / 60).sort((x, y) => x - y),
+      one.filter((r) => r.kind === dir).map((r) => r.T / 60),
       d[dir],
-      `рейсы ${dir} в день ${wd}`,
+      `рейсы ${dir} первого автобуса в день ${wd}`,
     );
+  assert.ok(one.filter((r) => r.T != null).every((r) => r.printed));
+  assert.ok(two.filter((r) => r.T != null).every((r) => !r.printed));
+  assert.deepEqual(two.filter((r) => r.kind === 'n').map((r) => r.T / 60), d.s, `второй навстречу рейсам на юг, день ${wd}`);
+  const lastN = [11 * 60 + 15, d.n.at(-1)];
+  assert.deepEqual(
+    two.filter((r) => r.kind === 's').map((r) => r.T / 60),
+    d.n.filter((t) => !lastN.includes(t)),
+    `второй навстречу рейсам на север, день ${wd}`,
+  );
 }
-// утром и после обеда: один выходит на линию, через полчаса другой — в рейс от цеха № 33
-assert.equal(at(3, '7:05', 0).state, 'move');
-assert.equal(at(3, '7:05', 1).state, 'park');
-assert.ok(near(at(3, '7:29:50', 1), 'BS-c33-s'));
-assert.equal(at(3, '12:35', 0).state, 'move');
-assert.equal(at(3, '12:35', 1).state, 'park');
+// утром и после обеда второй выходит на линию к цеху № 12 за полчаса, первый уходит рейсом по расписанию
+assert.equal(at(3, '7:05', 1).state, 'move');
+assert.equal(at(3, '7:05', 0).state, 'park');
+assert.ok(near(at(3, '7:29:50', 0), 'BS-c33-s'));
+assert.ok(near(at(3, '7:29:50', 1), 'BS-c12-n'));
+assert.equal(at(3, '12:35', 1).state, 'move');
+assert.equal(at(3, '12:35', 0).state, 'park');
+assert.equal(at(3, '13:00:30', 0).state, 'move');
 assert.equal(at(3, '13:00:30', 1).state, 'move');
-// на конечной у цеха № 12 автобус стоит до рейса обратно; в перерыв 9:30 — час на кольце у цеха № 12
-assert.ok(near(at(3, '7:44', 0), 'BS-c12-n'));
-assert.ok(near(at(3, '9:40', 0), 'BS-c12-n'));
-assert.equal(at(3, '9:40', 1).state, 'park');
-// отклонение от расписания на остановках — не больше пары минут
+// едут навстречу и встречаются у ОТЗ: в 10:06 оба рядом с ОТЗ, в разные стороны
+{
+  const otz = R.stops.find((x) => x.id === 'BS-otz-s');
+  const [a, b] = [at(3, '10:06', 0), at(3, '10:06', 1)].map((x) => pointOnRoute(R, x.s));
+  const pa = pointOnRoute(R, otz.s).p;
+  assert.ok(Math.hypot(a.p[0] - pa[0], a.p[1] - pa[1]) < 150 && Math.hypot(b.p[0] - pa[0], b.p[1] - pa[1]) < 150, 'в 10:06 оба у ОТЗ');
+  assert.ok(a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1] < -0.5, 'в 10:06 автобусы едут навстречу');
+}
+// в перерыв 9:30 — в разных концах: первый на северном кольце, второй у цеха № 12
+assert.equal(at(3, '9:40', 0).state, 'park');
+assert.ok(Math.min(at(3, '9:40', 0).s, R.total - at(3, '9:40', 0).s) < 20);
+assert.ok(near(at(3, '9:40', 1), 'BS-c12-n'));
+// отклонение от расписания на остановках — не больше пары минут (у второго — от его графика)
 const departed = (sid, T) => {
   const s0 = stopS(sid);
   for (let t = T - 150; t < T + 150; t++) {
@@ -71,10 +92,18 @@ const departed = (sid, T) => {
 };
 for (const dir of ['s', 'n'])
   for (const st of BUS_TIMETABLE[dir].stops)
-    for (const m of stopTimes(st, dir, 3).filter((_, i) => i % 3 === 0)) {
-      const dep = departed(`BS-${st}-${dir}`, m * 60);
-      assert.ok(dep != null && Math.abs(dep - m * 60) <= 120, `${st} ${dir} ${Math.floor(m / 60)}:${m % 60}: отклонение ${dep == null ? '—' : dep - m * 60} с`);
-    }
+    for (const [who, times] of [['первый', stopTimes(st, dir, 3)], ['второй', busStopTimes(R, 1, st, dir, 3)]])
+      for (const m of times.filter((_, i) => i % 3 === 0)) {
+        const dep = departed(`BS-${st}-${dir}`, m * 60);
+        assert.ok(dep != null && Math.abs(dep - m * 60) <= 120, `${who}: ${st} ${dir} ${Math.floor(m / 60)}:${m % 60}: отклонение ${dep == null ? '—' : dep - m * 60} с`);
+      }
+// только первый автобус (второй отключён): то же движение, без второго
+for (const t of ['7:05', '10:06', '12:00', '16:25']) {
+  const [h, m] = t.split(':').map(Number);
+  const one = busStates(R, 3, h * 3600 + m * 60, 1);
+  assert.equal(one.length, 1);
+  assert.equal(one[0].state, busStates(R, 3, h * 3600 + m * 60)[0].state);
+}
 // обед и ночь — оба на северном кольце, друг за другом
 for (const t of ['12:00', '23:00', '6:00']) {
   const [a, b] = [at(3, t, 0), at(3, t, 1)];
@@ -109,10 +138,11 @@ for (let t = 6 * 3600; t < 17.5 * 3600; t += 1) {
   const atRing = (x) => Math.min(x.s, R.total - x.s) < 60; // на кольце у Северной проходной (стоянка, отдых)
   assert.ok(g > 40 || (atRing(a[0]) && atRing(a[1])), `в ${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')} автобусы стоят рядом: ${a[0].text} / ${a[1].text}`);
 }
-// в 14:43 у цеха № 12 один автобус: второй ждёт на кольце-развороте, пока первый уйдёт в 14:45
+// у цеха № 12 вдвоём не стоят: в 14:43 один подъезжает, другой уже на северном кольце
 {
   const [x, y] = [at(3, '14:43', 0), at(3, '14:43', 1)];
-  assert.equal([x, y].filter((z) => near(z, 'BS-c12-n')).length, 1);
+  assert.ok([x, y].filter((z) => near(z, 'BS-c12-n')).length <= 1);
+  assert.ok(Math.min(y.s, R.total - y.s) < 20);
 }
 // на мосту — по настилу
 const b3 = R.bridges[0];

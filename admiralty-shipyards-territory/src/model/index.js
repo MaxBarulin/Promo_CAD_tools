@@ -9,7 +9,7 @@ import { buildFence, autoFences } from './fences.js';
 import { buildCrane } from './cranes.js';
 import { buildShip, buildDock, buildSlipway, slipProfile, slipPitch } from './ships.js';
 import { buildBridge, buildChimney, buildArch, buildTree, scatterInPolygon, buildBlocks, buildContainers, buildBusStop } from './structures.js';
-import { BUS_DIRS, stopTimes } from '../data/bus.js';
+import { BUS_DIRS, stopTimes, busStopTimes } from '../data/bus.js';
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, DEG } from '../geo.js';
 import { PALETTE } from './materials.js';
@@ -269,11 +269,14 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     buildBusStop(s, st);
     const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     let info;
-    if (st.ring) info = 'Кольцо внутризаводских автобусов у Северной проходной. Утром первый автобус выходит на линию в 7:00, второй в 7:30 (рейс от цеха № 33); после обеда в 12:30 и 13:00. Здесь автобусы ждут рейсов и стоят в обед.';
+    if (st.ring) info = 'Кольцо внутризаводских автобусов у Северной проходной. Утром в 7:00 один автобус выходит на линию к цеху № 12, в 7:30 другой уходит рейсом от цеха № 33; после обеда так же, в 12:30 и 13:00. Здесь автобусы стоят в обед и после рейсов.';
     else {
       const all = stopTimes(st.stop, st.dir, 1).map(fmt);
       const fri = stopTimes(st.stop, st.dir, 5);
-      info = `Внутризаводские автобусы, направление «${BUS_DIRS[st.dir].name}». Отправление с понедельника по четверг: ${all.join(', ')}. В пятницу последнее отправление в ${fmt(fri[fri.length - 1])}.`;
+      const two = busStopTimes(data.bus, 1, st.stop, st.dir, 1).map(fmt);
+      const twoFri = busStopTimes(data.bus, 1, st.stop, st.dir, 5);
+      info = `Внутризаводские автобусы, направление «${BUS_DIRS[st.dir].name}». Отправление по расписанию с понедельника по четверг: ${all.join(', ')}; в пятницу последнее в ${fmt(fri[fri.length - 1])}.`;
+      if (two.length) info += ` Между ними ходит второй автобус: ${two.join(', ')}; в пятницу последний в ${fmt(twoFri[twoFri.length - 1])}.`;
     }
     const right = [Math.sin(st.zone.angle * DEG), -Math.cos(st.zone.angle * DEG)];
     add_('transport', {

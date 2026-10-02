@@ -930,18 +930,34 @@ async function main() {
   let busText = '';
   let busTarget = -1; // за каким автобусом следит камера
   const busWorld = new THREE.Vector3();
+  // второй автобус ходит между рейсами расписания; его можно отключить, тогда ходит только первый
+  let busCount = store('admiralty-bus-count') === '1' ? 1 : BUS_COUNT;
+  function setBusCount(n) {
+    busCount = Math.max(1, Math.min(BUS_COUNT, Math.round(n) || 1));
+    $('optBus2').checked = busCount > 1;
+    store('admiralty-bus-count', String(busCount));
+    if (busTarget >= busCount) {
+      busTarget = -1;
+      follow = null;
+    }
+    updateBus();
+  }
+  $('optBus2').checked = busCount > 1;
+  $('optBus2').addEventListener('change', (e) => setBusCount(e.target.checked ? BUS_COUNT : 1));
   function updateBus() {
     if (!busRouteData) return;
     const ms = simMs();
-    const states = busStates(busRouteData, new Date(ms).getUTCDay(), (ms % DAY) / 1000);
-    states.forEach((st, k) => {
-      const b = buses[k];
+    const states = busStates(busRouteData, new Date(ms).getUTCDay(), (ms % DAY) / 1000, busCount);
+    buses.forEach((b, k) => {
+      const st = states[k] || null;
       b.st = st;
+      b.g.visible = !!st;
+      b.label.visible = !!st && transportGroup?.visible !== false;
+      if (!st) return;
       const { p, dir, z } = pointOnRoute(busRouteData, st.s);
       b.g.position.copy(V3(p[0], p[1], z));
       b.g.rotation.y = Math.atan2(dir[1], dir[0]);
       b.label.position.copy(V3(p[0], p[1], 7));
-      b.label.visible = transportGroup?.visible !== false;
     });
     const text = states.map((st, k) => `<div><b>${k + 1}</b> ${st.text}</div>`).join('');
     if (text !== busText) {
@@ -965,7 +981,7 @@ async function main() {
   // «Где автобус»: к автобусу в рейсе (если в рейсе оба или ни один — по очереди)
   $('busFind').addEventListener('click', () => {
     const active = buses.map((b, k) => (b.st && b.st.state !== 'park' ? k : -1)).filter((k) => k >= 0);
-    const pool = active.length === 1 ? active : buses.map((_, k) => k);
+    const pool = active.length === 1 ? active : buses.map((_, k) => k).filter((k) => buses[k].st);
     const k = pool[(pool.indexOf(busTarget) + 1) % pool.length] ?? pool[0];
     const { p, dir } = pointOnRoute(busRouteData, buses[k].st.s);
     const side = [-dir[1], dir[0]];
@@ -1065,7 +1081,7 @@ async function main() {
   if (location.hash === '#tour') tour.start();
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, setDateTime, setSpeed, buses, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, setDateTime, setSpeed, buses, setBusCount, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
   window.__ready = true;
 
   // ---------- вспомогательные ----------

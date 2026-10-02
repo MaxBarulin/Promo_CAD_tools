@@ -1655,6 +1655,10 @@ body.ed-picking #scene {
   font-size: 10px;
   font-weight: 700;
 }
+.toggle.bus-two {
+  padding: 3px 2px 0;
+  font-size: 12px;
+}
 .bus-status .bus-dot {
   flex: none;
   width: 8px;
