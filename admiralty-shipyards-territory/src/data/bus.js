@@ -2,8 +2,8 @@
 //
 // Маршрут проходит через опорные точки (по какой дороге ехать) и остановки; между ними —
 // кратчайший путь по внутризаводским проездам и заводским мостам, автобус едет по правой
-// полосе. Автобусов два, оба стоят у Северной проходной; второй ходит тем же кругом на 15 минут
-// позже первого, и они встречаются у остановки «ОТЗ».
+// полосе. Автобусов два, оба ночуют на кольце у Северной проходной и вместе делают рейсы
+// по расписанию: с конечных точно по времени, между ними с одной скоростью.
 // Положение автобусов в любой момент — busStates(route, день недели, секунды) по расписанию.
 
 import { add, sub, mul, dot, dist, norm, perp, lerp, smooth, centroid } from '../geo.js';
@@ -357,16 +357,20 @@ function pointRaw(R, s) {
   return lerp(R.path[lo], R.path[hi], t);
 }
 
-// ---------- расписание и положение автобуса ----------
-const V = 8; // крейсерская скорость, м/с (≈ 29 км/ч)
-const ACC = 0.8; // разгон и торможение, м/с²
-const DWELL = 60; // стоянка на остановке, с — для наглядности
-const DWELL_MIN = 20;
+// ---------- расписание и положение автобусов ----------
+// Автобусы идут ровно, с одной умеренной скоростью, и коротко стоят на остановках. С конечных
+// (от цеха № 33 на юг, от цеха № 12 на север) рейсы уходят точно по расписанию; лишнее время
+// автобус стоит на том кольце, где оказался. Рейс на юг берёт автобус, стоящий на северном кольце,
+// рейс на север — тот, кто дольше ждёт на кольце у цеха № 12. Утром и после обеда один автобус
+// выходит на линию на полчаса раньше другого, чтобы к первому рейсу от цеха № 12 уже стоять там.
+const V = 5; // скорость хода, м/с (18 км/ч)
+const ACC = 0.6; // разгон и торможение, м/с²
+const DWELL = 30; // посадка на промежуточной остановке, с
 export const BUS_COUNT = 2; // автобусов на маршруте
-// Второй автобус идёт тем же кругом на полкруга (15 минут) позже первого: автобусы всё время едут
-// навстречу друг другу и встречаются у остановки «ОТЗ» в :06, :21, :36 и :51.
-export const BUS_SHIFT = 15;
 const GAP = 14; // автобус в очереди стоит за передним с таким шагом, м
+const OUT_BEFORE = 45; // выход на линию: за столько минут до первого рейса от цеха № 12
+const HOME_AFTER = 15; // возврат на северное кольцо: через столько минут после последнего рейса от цеха № 12
+const BREAK = 60; // перерыв больше часа между рейсами на юг — обед, оба автобуса отдыхают на северном кольце
 
 const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
 export const hm = (sec) => {
@@ -407,106 +411,146 @@ export function busDeparts(weekday) {
   return { s, n };
 }
 
-// Круговые рейсы автобуса bus (0 или 1) в день недели: [{ s — отправление к цеху № 12 от цеха № 33,
-// n — обратно от цеха № 12 }], минуты от полуночи. Первый ходит по расписанию; второй — тем же
-// кругом на BUS_SHIFT минут позже; в пятницу у обоих последний рейс к цеху № 12 — не позже 15:00.
-export function busTrips(bus, weekday) {
-  if (bus === 0) {
-    const d = busDeparts(weekday);
-    return d ? d.s.map((s, k) => ({ s, n: d.n[k] })) : [];
-  }
-  const d = busDeparts(weekday === 5 ? 1 : weekday);
-  if (!d) return [];
-  const trips = d.s.map((s, k) => ({ s: s + BUS_SHIFT, n: d.n[k] + BUS_SHIFT }));
-  return weekday === 5 ? trips.filter((t) => t.s <= BUS_TIMETABLE.friday.lastS) : trips;
-}
-
-// Время отправления от остановки stop в направлении dir обоими автобусами (минуты от полуночи)
+// Время отправления от остановки stop в направлении dir по расписанию (минуты от полуночи)
 export function stopTimes(stop, dir, weekday) {
+  const d = busDeparts(weekday);
+  if (!d) return [];
   const tt = BUS_TIMETABLE[dir];
   const k = tt.stops.indexOf(stop);
-  if (k < 0) return [];
-  const out = [];
-  for (let b = 0; b < BUS_COUNT; b++) for (const t of busTrips(b, weekday)) out.push(t[dir] + tt.offsets[k]);
-  return out.sort((x, y) => x - y);
+  return k < 0 ? [] : d[dir].map((t) => t + tt.offsets[k]);
 }
 
-// События дня автобуса: отправления от остановок по его круговым рейсам.
-// { node — индекс в круге маршрута, t — отправление, секунды от полуночи }.
-const eventsCache = new Map();
-function busEvents(bus, weekday) {
-  const key = `${bus}:${weekday}`;
-  if (!eventsCache.has(key)) eventsCache.set(key, buildEvents(bus, weekday));
-  return eventsCache.get(key);
-}
-function buildEvents(bus, weekday) {
-  const ev = [];
-  for (const trip of busTrips(bus, weekday))
-    for (const dir of ['s', 'n']) {
-      const tt = BUS_TIMETABLE[dir];
-      tt.stops.forEach((st, i) => ev.push({ node: cycleIndex(st, dir), t: (trip[dir] + tt.offsets[i]) * 60, stop: st, dir }));
+// Проход по кругу от узла a до узла b с отправлением в t0: куски хода и стоянок на остановках.
+function runPieces(R, a, b, t0) {
+  const N = CYCLE.length;
+  const S = (i) => R.nodes[i].s;
+  const pieces = [];
+  let t = t0;
+  let s = S(a);
+  let i = a;
+  do {
+    i = (i + 1) % N;
+    if (!CYCLE[i].stop && i !== b) continue;
+    const L = (((S(i) - s) % R.total) + R.total) % R.total;
+    const T = travelTime(L);
+    pieces.push({ kind: 'move', s0: s, L, t0: t, t1: t + T, to: i });
+    t += T;
+    s = S(i);
+    if (i !== b) {
+      pieces.push({ kind: 'dwell', s0: s, t0: t, t1: t + DWELL, at: i });
+      t += DWELL;
     }
-  return ev.sort((a, b) => a.t - b.t);
+  } while (i !== b);
+  return { a, b, t0, t1: t, pieces };
+}
+
+// План дня: какие рейсы делает каждый автобус. Рейсы — { kind: 's' | 'n' | 'out' | 'home',
+// T — отправление по расписанию (с конечной), t0 — начало хода, t1 — приезд, pieces }.
+function dayPlan(R, weekday) {
+  R.plans ??= new Map();
+  if (R.plans.has(weekday)) return R.plans.get(weekday);
+  const ring = 0;
+  const c33 = cycleIndex('c33', 's');
+  const c12 = cycleIndex('c12', 'n');
+  const lead = travelTime(R.nodes[c33].s - R.nodes[ring].s) + DWELL; // от кольца до отправления от цеха № 33
+  const buses = Array.from({ length: BUS_COUNT }, () => ({ at: 'N', free: -Infinity, runs: [] }));
+  const d = busDeparts(weekday);
+  const go = (bus, kind, t0, T) => {
+    const south = kind === 's' || kind === 'out';
+    const run = { kind, T, ...runPieces(R, south ? ring : c12, south ? c12 : ring, t0) };
+    bus.runs.push(run);
+    bus.at = south ? 'S' : 'N';
+    bus.free = run.t1;
+  };
+  const pick = (at) => buses.filter((b) => b.at === at).sort((x, y) => x.free - y.free)[0];
+  if (d) {
+    const ev = [...d.s.map((t) => ({ dir: 's', t: t * 60 })), ...d.n.map((t) => ({ dir: 'n', t: t * 60 }))].sort((x, y) => x.t - y.t);
+    // блоки рейсов между долгими перерывами (утро — обед — вечер)
+    const blocks = [];
+    let lastS = -Infinity;
+    for (const e of ev) {
+      if (e.dir === 's' && blocks.length && e.t - lastS > BREAK * 60) blocks.push([]);
+      if (!blocks.length) blocks.push([]);
+      blocks[blocks.length - 1].push(e);
+      if (e.dir === 's') lastS = e.t;
+    }
+    for (const block of blocks) {
+      // выход на линию: к первому рейсу от цеха № 12 автобус должен уже стоять там
+      const firstN = block.find((e) => e.dir === 'n');
+      if (firstN && !pick('S')) {
+        const bus = pick('N');
+        go(bus, 'out', Math.max(bus.free, firstN.t - OUT_BEFORE * 60), null);
+      }
+      for (const e of block) {
+        const bus = pick(e.dir === 's' ? 'N' : 'S');
+        if (!bus) continue;
+        go(bus, e.dir, e.dir === 's' ? Math.max(bus.free, e.t - lead) : Math.max(bus.free, e.t), e.t);
+      }
+      // после последнего рейса от цеха № 12 — на северное кольцо
+      const lastN = [...block].reverse().find((e) => e.dir === 'n');
+      for (const bus of buses) if (bus.at === 'S') go(bus, 'home', Math.max(bus.free, (lastN ? lastN.t : 0) + HOME_AFTER * 60), null);
+    }
+  }
+  const plan = buses.map((b) => b.runs);
+  R.plans.set(weekday, plan);
+  return plan;
+}
+
+// Отправление рейса от остановки по расписанию (с), если рейс в расписании
+function scheduled(run, node) {
+  if (run.T == null) return null;
+  const c = CYCLE[node];
+  const tt = BUS_TIMETABLE[run.kind];
+  const k = c.stop && c.dir === run.kind ? tt.stops.indexOf(c.stop) : -1;
+  return k < 0 ? null : run.T + tt.offsets[k] * 60;
 }
 
 // Положение одного автобуса (bus — 0 или 1): weekday — день недели (0 — воскресенье), sec —
-// секунды от полуночи. → { s (путь по кругу), state: 'park' | 'stop' | 'move', text, next }
-// next — когда автобус тронется (для очереди на стоянке).
+// секунды от полуночи. → { s (путь по кругу), state: 'park' | 'stop' | 'move', text, next, since }
+// next — когда автобус тронется, since — с какого времени стоит (для очереди на кольце).
 export function busState(R, bus, weekday, sec) {
+  const runs = dayPlan(R, weekday)[bus];
   const S = (i) => R.nodes[i].s;
-  const ring = R.nodes.findIndex((n) => n.stop === 'ring_n');
-  const ev = busEvents(bus, weekday);
-  // since — с какого времени стоит (кто раньше встал, тот и впереди)
-  const parked = (text, next = Infinity, since = -Infinity) => ({ s: S(ring), state: 'park', text, next, since });
-  if (!ev.length) return parked(`стоит на кольце: ${WEEKDAYS[weekday]}, рейсов нет`);
-  const span = (a, b) => (((S(b) - S(a)) % R.total) + R.total) % R.total;
   const name = (i) => `«${BUS_STOPS[CYCLE[i].stop].name}»`;
-  const dirName = (e) => BUS_DIRS[e.dir].name;
-  const at = (a, L, Tt, t0) => S(a) + distAt(L, Tt, sec - t0);
-
-  // участок от узла a (отправление ta) к узлу b (отправление tb); через стоянку у проходной —
-  // со стоянкой на ней, если есть время
-  const leg = (a, ta, b, tb, e0, e1) => {
-    const L = span(a, b);
-    const viaRing = a === ring || span(a, ring) < L;
-    if (viaRing) {
-      const L1 = a === ring ? 0 : span(a, ring);
-      const L2 = L - L1;
-      const T1 = L1 ? travelTime(L1) : 0;
-      const T2 = travelTime(L2);
-      const leave = Math.max(ta + T1, tb - DWELL - T2);
-      if (sec < ta + T1) return { s: at(a, L1, T1, ta), state: 'move', text: `едет на кольцо, следующий рейс ${dirName(e1)} в ${hm(tb)}`, next: sec };
-      if (sec < leave) return parked(`стоит на кольце, следующий рейс ${dirName(e1)} в ${hm(tb)}`, leave, a === ring ? -Infinity : ta + T1);
-      const Tt = Math.max(1, Math.min(T2, tb - DWELL_MIN - leave));
-      if (sec < leave + Tt) return { s: at(ring, L2, Tt, leave), state: 'move', text: `едет к остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: sec };
-      return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: tb };
-    }
-    const Tt = Math.max(1, Math.min(travelTime(L), tb - ta - DWELL_MIN));
-    const end = e0.dir !== e1.dir ? ` (конечная), обратно в ${hm(tb)}` : ` в ${hm(tb)}`;
-    if (sec < ta + Tt) return { s: at(a, L, Tt, ta), state: 'move', text: `${dirName(e0)}, следующая остановка ${name(b)}${end}`, next: sec };
-    return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: tb };
+  const DIR = { s: BUS_DIRS.s.name, out: BUS_DIRS.s.name, n: BUS_DIRS.n.name, home: BUS_DIRS.n.name };
+  const north = 'на кольце у Северной проходной';
+  const south = 'на кольце у цеха № 12';
+  if (!runs.length) return { s: S(0), state: 'park', text: `стоит ${north}: ${WEEKDAYS[weekday]}, рейсов нет`, next: Infinity, since: -Infinity };
+  // ждёт следующего рейса там, где закончил предыдущий
+  const waiting = (prev, next) => {
+    const atSouth = prev && (prev.kind === 's' || prev.kind === 'out');
+    const s = atSouth ? S(prev.b) : S(0);
+    const where = atSouth ? south : north;
+    let text;
+    if (!next) text = `рейсы на сегодня окончены, стоит ${north}`;
+    else if (next.kind === 'out') text = `стоит ${north}, выйдет на линию в ${hm(next.t0)}`;
+    else if (next.kind === 'home') text = `стоит ${south}, вернётся на северное кольцо в ${hm(next.t0)}`;
+    else text = `стоит ${where}, рейс ${DIR[next.kind]} в ${hm(next.T)}`;
+    return { s, state: 'park', text, next: next ? next.t0 : Infinity, since: prev ? prev.t1 : -Infinity };
   };
-
-  const first = ev[0];
-  const last = ev[ev.length - 1];
-  let st;
-  if (sec < first.t) {
-    st = leg(ring, 0, first.node, first.t, first, first);
-    if (st.state === 'park') st.text = `стоит на кольце, первый рейс ${dirName(first)} в ${hm(first.t)}`;
-  } else if (sec >= last.t) {
-    const L = span(last.node, ring);
-    const T = travelTime(L);
-    st = sec < last.t + T ? { s: at(last.node, L, T, last.t), state: 'move', text: 'рейсы окончены, едет на кольцо', next: sec } : parked('рейсы на сегодня окончены, стоит на кольце', Infinity, last.t + T);
-  } else {
-    let i = 0;
-    while (ev[i + 1].t <= sec) i++;
-    st = leg(ev[i].node, ev[i].t, ev[i + 1].node, ev[i + 1].t, ev[i], ev[i + 1]);
+  let k = runs.findIndex((r) => sec < r.t1);
+  if (k < 0) return waiting(runs[runs.length - 1], null);
+  const run = runs[k];
+  if (sec < run.t0) return waiting(runs[k - 1], run);
+  const p = run.pieces.find((x) => sec < x.t1) || run.pieces[run.pieces.length - 1];
+  if (p.kind === 'dwell') {
+    const T = scheduled(run, p.at);
+    return { s: p.s0 % R.total, state: 'stop', text: `на остановке ${name(p.at)}, ${DIR[run.kind]}${T != null ? `, по расписанию ${hm(T)}` : ''}`, next: p.t1, since: p.t0 };
   }
-  return { ...st, s: ((st.s % R.total) + R.total) % R.total };
+  const s = (p.s0 + distAt(p.L, p.t1 - p.t0, sec - p.t0)) % R.total;
+  let text;
+  if (run.kind === 'out') text = `выходит на линию: едет ${south.replace('на кольце', 'на кольцо')}`;
+  else if (run.kind === 'home') text = `возвращается ${north.replace('на кольце', 'на кольцо')}`;
+  else if (p.to === run.b) text = run.kind === 's' ? `${DIR.s}, едет на конечную «Цех № 12»` : `${DIR.n}, едет на кольцо у Северной проходной`;
+  else {
+    const T = scheduled(run, p.to);
+    text = `${DIR[run.kind]}, следующая остановка ${name(p.to)}${T != null ? `, по расписанию ${hm(T)}` : ''}`;
+  }
+  return { s, state: 'move', text, next: sec, since: sec };
 }
 
-// Оба автобуса. Если один догоняет другой (на стоянке у проходной или на конечной), задний
-// останавливается в GAP метрах позади и подтягивается, когда передний уедет.
+// Оба автобуса. Если один догоняет другой (на кольце), задний останавливается в GAP метрах позади
+// и подтягивается, когда передний уедет.
 export function busStates(R, weekday, sec) {
   const st = [];
   for (let b = 0; b < BUS_COUNT; b++) st.push(busState(R, b, weekday, sec));
@@ -522,4 +566,9 @@ export function busStates(R, weekday, sec) {
         if ((d > 1e-6 && d < GAP) || tie) st[i] = { ...st[i], s: (((st[j].s - GAP) % R.total) + R.total) % R.total, queued: true };
       }
   return st;
+}
+
+// Рейсы автобуса за день (для проверки и подписей): [{ kind, T, t0, t1 }]
+export function busRuns(R, bus, weekday) {
+  return dayPlan(R, weekday)[bus].map(({ kind, T, t0, t1 }) => ({ kind, T, t0, t1 }));
 }

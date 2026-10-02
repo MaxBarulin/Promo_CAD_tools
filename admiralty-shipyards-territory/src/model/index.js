@@ -269,7 +269,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     buildBusStop(s, st);
     const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     let info;
-    if (st.ring) info = 'Кольцо внутризаводских автобусов у Северной проходной. Первый автобус выходит на круг в 7:30, второй тем же кругом в 7:45; между рейсами и в обед они стоят здесь.';
+    if (st.ring) info = 'Кольцо внутризаводских автобусов у Северной проходной. Утром первый автобус выходит на линию в 7:00, второй в 7:30 (рейс от цеха № 33); после обеда в 12:30 и 13:00. Здесь автобусы ждут рейсов и стоят в обед.';
     else {
       const all = stopTimes(st.stop, st.dir, 1).map(fmt);
       const fri = stopTimes(st.stop, st.dir, 5);

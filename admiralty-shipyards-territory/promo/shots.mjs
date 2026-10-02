@@ -128,13 +128,13 @@ if (want('city')) {
   await p.close();
 }
 if (want('bus')) {
-  // внутризаводской автобус 1 на остановке «ОТЗ» у Подзорного моста: среда, 8:35 — рейс к цеху № 12
+  // внутризаводской автобус на остановке «ОТЗ» у Подзорного моста: среда, 8:35, рейс 8:30 к цеху № 12
   const p = await open({ width: 1440, height: 900 });
   await hideUi(p);
   await p.evaluate(() => {
     const v = window.__viewer;
     v.setPanelCollapsed(true);
-    v.setDateTime('2026-09-30', 8 + 35.5 / 60, 0);
+    v.setDateTime('2026-09-30', 8 + 35.75 / 60, 0);
     v.flyTo([-302, 374, 24], [-327, 404, 1], 0);
   });
   await shot(p, 'bus.jpg', 7000);

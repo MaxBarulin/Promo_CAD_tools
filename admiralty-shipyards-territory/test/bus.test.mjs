@@ -1,7 +1,7 @@
 // Проверка внутризаводских автобусов: маршрут по проездам и положение по расписанию.
 import assert from 'node:assert/strict';
 import { getTerritory } from '../src/data/index.js';
-import { busStates, pointOnRoute, stopTimes, busDeparts } from '../src/data/bus.js';
+import { busStates, busRuns, pointOnRoute, stopTimes, busDeparts, BUS_TIMETABLE } from '../src/data/bus.js';
 import { pointInRing, area } from '../src/geo.js';
 
 const R = getTerritory().bus;
@@ -37,25 +37,45 @@ const at = (wd, hm, bus = 0) => {
 const stopS = (id) => R.stops.find((s) => s.id === id).s;
 const near = (st, id) => Math.abs(st.s - stopS(id)) < 0.5;
 
-// среда: автобус 1 ходит по расписанию, автобус 2 тем же кругом на 15 минут позже
-let st = at(3, '7:31:30');
-assert.equal(st.state, 'stop');
-assert.ok(near(st, 'BS-c20-s'));
-st = at(3, '7:32:30');
-assert.equal(st.state, 'move');
-assert.ok(st.s > stopS('BS-c20-s') && st.s < stopS('BS-c19-s'));
-st = at(3, '7:44:30');
-assert.equal(st.state, 'stop');
-assert.ok(near(st, 'BS-c12-n'));
-assert.equal(at(3, '7:40', 1).state, 'park');
-assert.ok(near(at(3, '7:44:30', 1), 'BS-c33-s'));
-// едут навстречу друг другу и встречаются у остановки «ОТЗ» в :06, :21, :36, :51
-for (const t of ['7:50:50', '8:05:50', '10:20:50', '14:50:50']) {
-  const [a, b] = [at(3, t, 0), at(3, t, 1)];
-  const both = [a, b].map((x) => (near(x, 'BS-otz-s') ? 's' : near(x, 'BS-otz-n') ? 'n' : '-')).sort().join('');
-  assert.equal(both, 'ns', `в ${t} автобусы не встретились у ОТЗ`);
+// оба автобуса вместе делают все рейсы расписания, каждый — со своей конечной точно по времени
+for (const wd of [1, 5]) {
+  const d = busDeparts(wd);
+  const runs = [0, 1].flatMap((b) => busRuns(R, b, wd));
+  for (const dir of ['s', 'n'])
+    assert.deepEqual(
+      runs.filter((r) => r.kind === dir).map((r) => r.T / 60).sort((x, y) => x - y),
+      d[dir],
+      `рейсы ${dir} в день ${wd}`,
+    );
 }
-// обед и ночь — оба у проходной, друг за другом
+// утром и после обеда: один выходит на линию, через полчаса другой — в рейс от цеха № 33
+assert.equal(at(3, '7:05', 0).state, 'move');
+assert.equal(at(3, '7:05', 1).state, 'park');
+assert.ok(near(at(3, '7:29:50', 1), 'BS-c33-s'));
+assert.equal(at(3, '12:35', 0).state, 'move');
+assert.equal(at(3, '12:35', 1).state, 'park');
+assert.equal(at(3, '13:00:30', 1).state, 'move');
+// на конечной у цеха № 12 автобус стоит до рейса обратно; в перерыв 9:30 — час на кольце у цеха № 12
+assert.ok(near(at(3, '7:44', 0), 'BS-c12-n'));
+assert.ok(near(at(3, '9:40', 0), 'BS-c12-n'));
+assert.equal(at(3, '9:40', 1).state, 'park');
+// отклонение от расписания на остановках — не больше пары минут
+const departed = (sid, T) => {
+  const s0 = stopS(sid);
+  for (let t = T - 150; t < T + 150; t++) {
+    const a = busStates(R, 3, t);
+    const b = busStates(R, 3, t + 1);
+    for (let k = 0; k < 2; k++) if (Math.abs(a[k].s - s0) < 0.5 && Math.abs(b[k].s - s0) > 0.01 && !b[k].queued) return t + 1;
+  }
+  return null;
+};
+for (const dir of ['s', 'n'])
+  for (const st of BUS_TIMETABLE[dir].stops)
+    for (const m of stopTimes(st, dir, 3).filter((_, i) => i % 3 === 0)) {
+      const dep = departed(`BS-${st}-${dir}`, m * 60);
+      assert.ok(dep != null && Math.abs(dep - m * 60) <= 120, `${st} ${dir} ${Math.floor(m / 60)}:${m % 60}: отклонение ${dep == null ? '—' : dep - m * 60} с`);
+    }
+// обед и ночь — оба на северном кольце, друг за другом
 for (const t of ['12:00', '23:00', '6:00']) {
   const [a, b] = [at(3, t, 0), at(3, t, 1)];
   assert.equal(a.state, 'park');
@@ -63,20 +83,15 @@ for (const t of ['12:00', '23:00', '6:00']) {
   const gap = (((a.s - b.s) % R.total) + R.total) % R.total;
   assert.ok(Math.abs(Math.min(gap, R.total - gap) - 14) < 0.5, `в ${t} автобусы стоят в ${gap.toFixed(1)} м`);
 }
-// пятница: обратно от цеха № 12 в 15:20 тот же автобус, что ушёл в 15:00; второй заканчивает
-// рейсом 14:45 и обратным 15:00; выходные: рейсов нет
-assert.equal(at(5, '15:16', 0).state, 'stop');
-assert.equal(at(5, '15:20:20', 0).state, 'move');
-assert.equal(at(5, '15:50', 0).state, 'park');
-assert.equal(at(5, '15:20', 1).state, 'park');
+// пятница: последний рейс от цеха № 33 в 15:00, обратно от цеха № 12 в 15:20; выходные — рейсов нет
+assert.equal(at(5, '15:20:20', 0).state === 'move' || at(5, '15:20:20', 1).state === 'move', true);
+assert.equal(at(5, '16:00', 0).state, 'park');
+assert.equal(at(5, '16:00', 1).state, 'park');
 assert.equal(at(6, '10:00', 0).state, 'park');
 assert.equal(at(0, '10:00', 1).state, 'park');
 assert.equal(busDeparts(6), null);
-
-// расписание остановок
-assert.deepEqual(stopTimes('c20', 's', 1).slice(0, 4), [7 * 60 + 32, 7 * 60 + 47, 8 * 60 + 2, 8 * 60 + 17]);
+assert.deepEqual(stopTimes('c20', 's', 1).slice(0, 3), [7 * 60 + 32, 8 * 60 + 2, 8 * 60 + 32]);
 assert.equal(stopTimes('c12', 'n', 5).at(-1), 15 * 60 + 20);
-assert.equal(stopTimes('c33', 's', 5).at(-1), 15 * 60);
 
 // движение плавное: за секунду автобус проезжает не больше 12 м, путь не идёт назад; автобусы
 // не наезжают друг на друга
