@@ -11,7 +11,7 @@ import { add, sub, mul, dot, dist, norm, perp, lerp, smooth, centroid } from '..
 // Остановки. at — примерная точка у дороги; near — здание, у которого стоит остановка
 // (точка — ближайшее к нему место на проезде).
 export const BUS_STOPS = {
-  ring_n: { name: 'Северная проходная', at: [189, 1487], ring: true },
+  ring_n: { name: 'Кольцо', at: [189, 1487], ring: true },
   c33: { name: 'Цех № 33', at: [5, 1350] },
   c20: { name: 'Цех № 20', at: [-247, 1110] },
   c19: { name: 'Цех № 19', at: [-400, 629] },
@@ -458,7 +458,7 @@ export function busState(R, bus, weekday, sec) {
   const ev = busEvents(bus, weekday);
   // since — с какого времени стоит (кто раньше встал, тот и впереди)
   const parked = (text, next = Infinity, since = -Infinity) => ({ s: S(ring), state: 'park', text, next, since });
-  if (!ev.length) return parked(`стоит у Северной проходной: ${WEEKDAYS[weekday]}, рейсов нет`);
+  if (!ev.length) return parked(`стоит на кольце: ${WEEKDAYS[weekday]}, рейсов нет`);
   const span = (a, b) => (((S(b) - S(a)) % R.total) + R.total) % R.total;
   const name = (i) => `«${BUS_STOPS[CYCLE[i].stop].name}»`;
   const dirName = (e) => BUS_DIRS[e.dir].name;
@@ -475,14 +475,14 @@ export function busState(R, bus, weekday, sec) {
       const T1 = L1 ? travelTime(L1) : 0;
       const T2 = travelTime(L2);
       const leave = Math.max(ta + T1, tb - DWELL - T2);
-      if (sec < ta + T1) return { s: at(a, L1, T1, ta), state: 'move', text: `едет к Северной проходной, следующий рейс ${dirName(e1)} — в ${hm(tb)}`, next: sec };
-      if (sec < leave) return parked(`стоит у Северной проходной, следующий рейс ${dirName(e1)} — в ${hm(tb)}`, leave, a === ring ? -Infinity : ta + T1);
+      if (sec < ta + T1) return { s: at(a, L1, T1, ta), state: 'move', text: `едет на кольцо, следующий рейс ${dirName(e1)} в ${hm(tb)}`, next: sec };
+      if (sec < leave) return parked(`стоит на кольце, следующий рейс ${dirName(e1)} в ${hm(tb)}`, leave, a === ring ? -Infinity : ta + T1);
       const Tt = Math.max(1, Math.min(T2, tb - DWELL_MIN - leave));
       if (sec < leave + Tt) return { s: at(ring, L2, Tt, leave), state: 'move', text: `едет к остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: sec };
       return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: tb };
     }
     const Tt = Math.max(1, Math.min(travelTime(L), tb - ta - DWELL_MIN));
-    const end = e0.dir !== e1.dir ? ` (конечная), обратно — в ${hm(tb)}` : ` — ${hm(tb)}`;
+    const end = e0.dir !== e1.dir ? ` (конечная), обратно в ${hm(tb)}` : ` в ${hm(tb)}`;
     if (sec < ta + Tt) return { s: at(a, L, Tt, ta), state: 'move', text: `${dirName(e0)}, следующая остановка ${name(b)}${end}`, next: sec };
     return { s: S(b), state: 'stop', text: `на остановке ${name(b)}, отправление ${dirName(e1)} в ${hm(tb)}`, next: tb };
   };
@@ -492,11 +492,11 @@ export function busState(R, bus, weekday, sec) {
   let st;
   if (sec < first.t) {
     st = leg(ring, 0, first.node, first.t, first, first);
-    if (st.state === 'park') st.text = `стоит у Северной проходной, первый рейс ${dirName(first)} — в ${hm(first.t)}`;
+    if (st.state === 'park') st.text = `стоит на кольце, первый рейс ${dirName(first)} в ${hm(first.t)}`;
   } else if (sec >= last.t) {
     const L = span(last.node, ring);
     const T = travelTime(L);
-    st = sec < last.t + T ? { s: at(last.node, L, T, last.t), state: 'move', text: 'рейсы окончены, едет к Северной проходной', next: sec } : parked('рейсы на сегодня окончены, стоит у Северной проходной', Infinity, last.t + T);
+    st = sec < last.t + T ? { s: at(last.node, L, T, last.t), state: 'move', text: 'рейсы окончены, едет на кольцо', next: sec } : parked('рейсы на сегодня окончены, стоит на кольце', Infinity, last.t + T);
   } else {
     let i = 0;
     while (ev[i + 1].t <= sec) i++;

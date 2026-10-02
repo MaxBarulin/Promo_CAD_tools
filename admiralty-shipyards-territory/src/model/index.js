@@ -269,7 +269,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     buildBusStop(s, st);
     const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     let info;
-    if (st.ring) info = 'Конечная внутризаводских автобусов у Северной проходной. Первый автобус выходит на круг в 7:30, второй тем же кругом в 7:45; между рейсами и в обед они стоят здесь.';
+    if (st.ring) info = 'Кольцо внутризаводских автобусов у Северной проходной. Первый автобус выходит на круг в 7:30, второй тем же кругом в 7:45; между рейсами и в обед они стоят здесь.';
     else {
       const all = stopTimes(st.stop, st.dir, 1).map(fmt);
       const fri = stopTimes(st.stop, st.dir, 5);
@@ -278,9 +278,9 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     const right = [Math.sin(st.zone.angle * DEG), -Math.cos(st.zone.angle * DEG)];
     add_('transport', {
       id: st.id,
-      name: st.ring ? 'Конечная «Северная проходная»' : `Остановка «${st.name}»`,
+      name: st.ring ? 'Кольцо у Северной проходной' : `Остановка «${st.name}»`,
       sink: s,
-      info: { name: st.ring ? 'Конечная «Северная проходная»' : `Остановка «${st.name}»`, info, kind: 'bus_stop' },
+      info: { name: st.ring ? 'Кольцо у Северной проходной' : `Остановка «${st.name}»`, info, kind: 'bus_stop' },
       proxy: boxProxy(add(st.zone.at, mul(right, 1.2)), st.zone.angle, st.zone.L, st.zone.W + 2.6, 0, 3),
     });
   }
