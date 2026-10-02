@@ -1,5 +1,5 @@
 // Реестр зданий и сооружений верфи: состав, расчётные показатели по модели и поля
-// технического учёта (экспертиза промышленной безопасности, техническое состояние).
+// технического учёта (ОПО, экспертиза промышленной безопасности, техническое состояние).
 // Общий код для просмотрщика и для выгрузки в Node (scripts/export.mjs).
 
 import { toLatLon, centroid, area } from '../geo.js';
@@ -26,6 +26,8 @@ const TYPE_NAMES = {
 export const FIELDS = [
   { key: 'invNo', label: 'Инвентарный №', type: 'text' },
   { key: 'year', label: 'Год постройки', type: 'number' },
+  // alt — прежние заголовки столбца: старые выгрузки загружаются без правки
+  { key: 'opo', label: 'Класс ОПО', alt: ['Класс опасности ОПО'], type: 'select', options: ['', 'I', 'II', 'III', 'IV', 'не ОПО'] },
   { key: 'opoReg', label: 'Рег. № ОПО', type: 'text' },
   { key: 'epbNo', label: '№ заключения ЭПБ', type: 'text' },
   { key: 'epbDate', label: 'Дата заключения ЭПБ', type: 'date' },
@@ -199,7 +201,7 @@ export function rowsToRecords(table) {
   const col = (label) => head.indexOf(label.toLowerCase());
   const idCol = col('Код в модели');
   if (idCol < 0) throw new Error('В таблице нет столбца «Код в модели» — используйте выгрузку из реестра как шаблон.');
-  const map = FIELDS.map((f) => ({ f, i: col(f.label) })).filter((x) => x.i >= 0);
+  const map = FIELDS.map((f) => ({ f, i: [f.label, ...(f.alt || [])].map(col).find((i) => i >= 0) ?? -1 })).filter((x) => x.i >= 0);
   const out = {};
   for (const row of table.slice(1)) {
     const id = String(row[idCol] ?? '').trim();
@@ -235,6 +237,7 @@ export function demoRecords(items) {
     const date = new Date(until);
     date.setUTCFullYear(date.getUTCFullYear() - (it.cat === 'device' ? 3 : 5));
     out[it.id] = {
+      opo: it.cat === 'device' ? 'IV' : it.cat === 'structure' ? 'III' : rnd() < 0.5 ? 'III' : rnd() < 0.5 ? 'IV' : 'не ОПО',
       epbNo: `ДЕМО-${String(Math.floor(rnd() * 9000) + 1000)}`,
       epbDate: date.toISOString().slice(0, 10),
       epbUntil: until.toISOString().slice(0, 10),
