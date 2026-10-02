@@ -1,5 +1,5 @@
 // Реестр зданий и сооружений верфи: состав, расчётные показатели по модели и поля
-// технического учёта (ОПО, экспертиза промышленной безопасности, документация).
+// технического учёта (экспертиза промышленной безопасности, техническое состояние).
 // Общий код для просмотрщика и для выгрузки в Node (scripts/export.mjs).
 
 import { toLatLon, centroid, area } from '../geo.js';
@@ -26,14 +26,12 @@ const TYPE_NAMES = {
 export const FIELDS = [
   { key: 'invNo', label: 'Инвентарный №', type: 'text' },
   { key: 'year', label: 'Год постройки', type: 'number' },
-  { key: 'opo', label: 'Класс опасности ОПО', type: 'select', options: ['', 'I', 'II', 'III', 'IV', 'не ОПО'] },
   { key: 'opoReg', label: 'Рег. № ОПО', type: 'text' },
   { key: 'epbNo', label: '№ заключения ЭПБ', type: 'text' },
   { key: 'epbDate', label: 'Дата заключения ЭПБ', type: 'date' },
   { key: 'epbUntil', label: 'Срок безопасной эксплуатации до', type: 'date' },
   { key: 'state', label: 'Техническое состояние', type: 'select', options: ['', 'нормативное', 'работоспособное', 'ограниченно работоспособное', 'аварийное'] },
   { key: 'surveyDate', label: 'Дата обследования', type: 'date' },
-  { key: 'docs', label: 'Исполнительная документация', type: 'select', options: ['', 'в наличии', 'неполная', 'отсутствует'] },
   { key: 'note', label: 'Примечание', type: 'text' },
 ];
 export const FIELD_KEYS = FIELDS.map((f) => f.key);
@@ -237,11 +235,9 @@ export function demoRecords(items) {
     const date = new Date(until);
     date.setUTCFullYear(date.getUTCFullYear() - (it.cat === 'device' ? 3 : 5));
     out[it.id] = {
-      opo: it.cat === 'device' ? 'IV' : it.cat === 'structure' ? 'III' : rnd() < 0.5 ? 'III' : rnd() < 0.5 ? 'IV' : 'не ОПО',
       epbNo: `ДЕМО-${String(Math.floor(rnd() * 9000) + 1000)}`,
       epbDate: date.toISOString().slice(0, 10),
       epbUntil: until.toISOString().slice(0, 10),
-      docs: ['в наличии', 'в наличии', 'неполная', 'отсутствует'][Math.floor(rnd() * 4)],
       state: ['работоспособное', 'работоспособное', 'ограниченно работоспособное', 'нормативное'][Math.floor(rnd() * 4)],
       note: 'ДЕМО — условные данные',
     };

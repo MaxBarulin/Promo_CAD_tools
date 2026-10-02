@@ -2,7 +2,7 @@
 //   dist/admiralty-shipyards.glb           — 3D (glTF 2.0, бинарный): слои → объекты, материалы по палитре
 //   dist/admiralty-shipyards-plan.dxf      — генплан DXF R12 (м, локальные координаты)
 //   dist/admiralty-shipyards.geojson       — слои в WGS84
-//   dist/admiralty-shipyards-registry.xlsx — реестр зданий и сооружений (шаблон для заполнения ЭПБ/ОПО)
+//   dist/admiralty-shipyards-registry.xlsx — реестр зданий и сооружений (шаблон для заполнения полей технического учёта)
 // Запуск: npm run export [-- --full | --no-context]
 //   по умолчанию рядовая городская застройка экспортируется упрощённо (объёмы без окон);
 //   --full       — вся застройка с окнами (файл ~30 МБ);
@@ -97,7 +97,7 @@ if (!noContext && !full) {
   const items = registryItems(model, data);
   const xlsx = registryXlsx(items, {}, { years: 2 });
   await writeFile(path.join(dist, 'admiralty-shipyards-registry.xlsx'), xlsx);
-  console.log(`Реестр:  dist/admiralty-shipyards-registry.xlsx  ${items.length} объектов (шаблон для заполнения ЭПБ/ОПО)`);
+  console.log(`Реестр:  dist/admiralty-shipyards-registry.xlsx  ${items.length} объектов (шаблон для заполнения полей технического учёта)`);
 }
 
 function reportCustom(r) {

@@ -94,11 +94,13 @@ if (want('objects')) {
   await p.close();
 }
 if (want('registry')) {
-  // демо-режим: условные сроки ЭПБ, в документе снимок помечен «ДЕМО»
+  // реестр как он есть: показатели по модели, поля учёта ещё не заполнены (без демо-значений)
   const p = await open({ width: 1440, height: 900 });
+  await p.addStyleTag({ content: '#regDemoBtn{display:none!important}' });
   await p.click('#regOpen');
-  await p.click('#regDemoBtn');
-  await p.selectOption('#regEpb', 'due');
+  await p.selectOption('#regCat', 'building');
+  await p.click('#regHead th[data-k="volume"] button');
+  await p.click('#regHead th[data-k="volume"] button');
   await shot(p, 'registry.jpg');
   await p.close();
 }

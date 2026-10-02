@@ -30,7 +30,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
   let shared = false;
   let db = null;
   let downloads = null;
-  const st = { q: '', cat: '', zone: '', opo: '', epb: '', years: 2, sort: { key: 'name', dir: 1 }, show: true, open: false, min: false };
+  const st = { q: '', cat: '', zone: '', epb: '', years: 2, sort: { key: 'name', dir: 1 }, show: true, open: false, min: false };
   const records = () => (demo ? demoRecs : saved);
 
   // ---------- хранилище ----------
@@ -103,7 +103,6 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       const r = recs[it.id] || {};
       if (st.cat && it.cat !== st.cat) return false;
       if (st.zone && it.zone !== st.zone) return false;
-      if (st.opo === '-' ? r.opo : st.opo && r.opo !== st.opo) return false;
       if (st.epb) {
         const s = epbStatus(r, st.years);
         if (st.epb === 'due' ? s !== 'soon' && s !== 'overdue' : s !== st.epb) return false;
@@ -115,8 +114,6 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     const val = (it) => {
       const r = recs[it.id] || {};
       if (key === 'epbUntil') return r.epbUntil || '9999';
-      if (key === 'opo') return r.opo || 'я';
-      if (key === 'docs') return r.docs || 'я';
       return it[key] ?? '';
     };
     return list.sort((a, b) => {
@@ -129,7 +126,6 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     [
       st.cat && { building: 'здания', structure: 'сооружения', device: 'краны' }[st.cat],
       st.zone,
-      st.opo && (st.opo === '-' ? 'класс ОПО не указан' : `класс ОПО: ${st.opo}`),
       st.epb && { due: `ЭПБ истекает в ближайшие ${st.years} г. или истекла`, soon: `ЭПБ истекает в ближайшие ${st.years} г.`, overdue: 'срок ЭПБ истёк', none: 'нет данных об ЭПБ', ok: 'ЭПБ в порядке' }[st.epb],
       st.q && `поиск: «${st.q}»`,
     ]
@@ -199,12 +195,11 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       <button class="icon-btn fold" type="button" id="regMin" aria-expanded="true" title="Свернуть реестр" aria-label="Свернуть реестр"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
       <button class="x" type="button" id="regClose" aria-label="Закрыть реестр" title="Закрыть реестр">×</button>
     </div>
-    <div class="reg-demo" id="regDemo" hidden>Демо-режим: поля ОПО, ЭПБ и документации заполнены условными значениями для показа возможностей. Это не данные предприятия, они не сохраняются.</div>
+    <div class="reg-demo" id="regDemo" hidden>Демо-режим: поля ЭПБ и технического состояния заполнены условными значениями для показа возможностей. Это не данные предприятия, они не сохраняются.</div>
     <div class="reg-filters">
       <input type="search" id="regQ" placeholder="Поиск: название, код, инв. №, № ЭПБ" aria-label="Поиск" />
       <select id="regCat" aria-label="Вид объекта"><option value="">Все объекты</option><option value="building">Здания</option><option value="structure">Сооружения</option><option value="device">Краны</option></select>
       <select id="regZone" aria-label="Участок"><option value="">Все участки</option>${zones.map((z) => `<option>${esc(z)}</option>`).join('')}</select>
-      <select id="regOpo" aria-label="Класс ОПО"><option value="">Любой класс ОПО</option>${['I', 'II', 'III', 'IV', 'не ОПО'].map((c) => `<option value="${c}">${c === 'не ОПО' ? 'Не ОПО' : 'Класс ' + c}</option>`).join('')}<option value="-">Класс не указан</option></select>
       <select id="regEpb" aria-label="Срок ЭПБ"><option value="">ЭПБ: все</option><option value="due">ЭПБ истекает или истекла</option><option value="soon">ЭПБ истекает</option><option value="overdue">Срок ЭПБ истёк</option><option value="ok">ЭПБ в порядке</option><option value="none">Нет данных об ЭПБ</option></select>
       <select id="regYears" aria-label="Горизонт"><option value="1">в течение 1 года</option><option value="2" selected>в течение 2 лет</option><option value="3">в течение 3 лет</option><option value="5">в течение 5 лет</option></select>
       <label class="toggle"><input type="checkbox" id="regShow" checked /><span class="box"></span>На модели</label>
@@ -227,9 +222,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     ['height', 'H, м'],
     ['footprint', 'S застр., м²'],
     ['volume', 'V, м³'],
-    ['opo', 'ОПО'],
     ['epbUntil', 'ЭПБ до'],
-    ['docs', 'Исп. док.'],
   ];
   $('regHead').innerHTML = `<tr>${COLS.map(([k, l]) => `<th data-k="${k}" scope="col"><button type="button">${l}</button></th>`).join('')}</tr>`;
   $('regHead').addEventListener('click', (e) => {
@@ -248,7 +241,6 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
   bind('regQ', 'q');
   bind('regCat', 'cat');
   bind('regZone', 'zone');
-  bind('regOpo', 'opo');
   bind('regEpb', 'epb');
   bind('regYears', 'years', Number);
   bind('regShow', 'show');
@@ -359,9 +351,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
           <td class="n">${num(it.height)}</td>
           <td class="n">${num(it.footprint)}</td>
           <td class="n">${num(it.volume)}</td>
-          <td>${esc(r.opo || '—')}</td>
           <td><span class="st ${s}">${r.epbUntil ? fmtDate(r.epbUntil) : STATUS_NAMES.none}</span></td>
-          <td>${esc(r.docs || '—')}</td>
         </tr>`;
       })
       .join('');
