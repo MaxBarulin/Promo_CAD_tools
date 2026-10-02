@@ -1,5 +1,5 @@
 // Снимки модели для документа ППУ (promo/img). Запуск после `npm run build`:
-//   node promo/shots.mjs [cover,objects,registry,plan,city,evening,mobile,editor,details]
+//   node promo/shots.mjs [cover,objects,registry,plan,city,bus,mobile,editor,details]
 // Затем пересоберите PDF: node promo/build-pdf.mjs
 // Нужен Playwright (npm i -D playwright или глобальная установка).
 
@@ -127,11 +127,17 @@ if (want('city')) {
   await shot(p, 'yard-only.jpg');
   await p.close();
 }
-if (want('evening')) {
-  const p = await open({ width: 1440, height: 900 }, { hash: '#slipways' });
+if (want('bus')) {
+  // внутризаводской автобус 1 на остановке «ОТЗ» у Подзорного моста: среда, 8:35 — рейс к цеху № 12
+  const p = await open({ width: 1440, height: 900 });
   await hideUi(p);
-  await p.evaluate(() => window.__viewer.setEvening(true));
-  await shot(p, 'evening.jpg');
+  await p.evaluate(() => {
+    const v = window.__viewer;
+    v.setPanelCollapsed(true);
+    v.setDateTime('2026-09-30', 8 + 35.5 / 60, 0);
+    v.flyTo([-302, 374, 24], [-327, 404, 1], 0);
+  });
+  await shot(p, 'bus.jpg', 7000);
   await p.close();
 }
 if (want('mobile')) {
