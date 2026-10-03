@@ -904,9 +904,6 @@ select.field {
 .registry.min > :not(.reg-head) {
   display: none !important;
 }
-body.reg-open.reg-min .card {
-  max-height: calc(100% - 140px);
-}
 .reg-head h2 {
   margin: 0;
   font-family: var(--font-display);
@@ -1155,9 +1152,16 @@ body.reg-open.reg-min .card {
   display: flex;
   gap: 6px;
 }
-body.reg-open .card {
-  max-height: calc(100% - min(50vh, 540px) - 48px);
-  box-sizing: border-box;
+/* при открытом реестре карточка объекта — прежней ширины и до низа окна (подсказки и компас
+   скрыты), а реестр занимает место левее неё */
+@media (min-width: 761px) {
+  body.reg-open .card:not(.min) {
+    bottom: 16px;
+    max-height: none;
+  }
+  body.reg-open.card-shown .registry {
+    right: calc(16px + var(--card-w, 352px) + 12px);
+  }
 }
 body.reg-open .hint,
 body.reg-open .hud {

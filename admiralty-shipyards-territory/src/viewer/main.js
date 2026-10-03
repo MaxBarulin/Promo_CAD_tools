@@ -448,6 +448,17 @@ async function main() {
 
   const ROOF_NAMES = { ...ROOF_TYPES, dome: 'Купол', onion: 'Луковичная главка' };
   let cardMin = false;
+  // открыта ли карточка (и какой ширины): при открытом реестре он заканчивается левее неё
+  {
+    const card = $('card');
+    const sync = () => {
+      const shown = !card.hidden;
+      document.body.classList.toggle('card-shown', shown);
+      if (shown) document.body.style.setProperty('--card-w', `${card.offsetWidth}px`);
+    };
+    new MutationObserver(sync).observe(card, { attributes: true, attributeFilter: ['hidden', 'class'] });
+    sync();
+  }
   function setCardMin(on) {
     cardMin = on;
     const card = $('card');
