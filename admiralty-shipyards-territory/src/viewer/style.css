@@ -256,6 +256,8 @@ button {
   overflow-y: auto;
   padding: 14px 16px;
   display: grid;
+  /* строки по содержимому: лишняя высота не раздвигает описание и кнопки */
+  align-content: start;
   gap: 10px;
   border-top: 3px solid var(--signal);
 }
@@ -899,12 +901,11 @@ select.field {
   display: flex;
   gap: 6px;
 }
-/* при открытом реестре карточка объекта — прежней ширины и до низа окна (подсказки и компас
-   скрыты), а реестр занимает место левее неё */
+/* при открытом реестре карточка объекта — прежней ширины, место под неё — до низа окна (подсказки
+   и компас скрыты): высота по содержимому, длинная прокручивается; реестр — левее неё */
 @media (min-width: 761px) {
   body.reg-open .card:not(.min) {
-    bottom: 16px;
-    max-height: none;
+    max-height: calc(100% - var(--top2) - var(--m));
   }
   body.reg-open.card-shown .registry {
     right: calc(var(--m) + var(--card-w, var(--col)) + var(--g));
