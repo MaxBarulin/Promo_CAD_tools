@@ -1,7 +1,7 @@
 // Территория по реальной геометрии (Overture Maps / OpenStreetMap, src/data/real-data.js).
 //
 // Отсюда берутся: граница территории верфи, контуры и высоты всех зданий, вода, улицы,
-// внутризаводские проезды, мосты, скверы, ворота. С карты предприятия (после привязки
+// внутризаводские проезды, мосты, скверы, ворота. Из исходного плана (после привязки
 // к реальной границе, см. mapdata.js) — назначение и названия цехов, стапели, подкрановые
 // пути, краны, суда, плавдоки.
 
@@ -99,7 +99,7 @@ function estimate(A, len, wid, zone, cls) {
   return { type: 'utility', h: 4.5 };
 }
 
-// Здания у границы, которые OSM относит к городу, а карта предприятия — к верфи
+// Здания у границы, которые OSM относит к городу, а исходный план — к верфи
 // (например, корпуса вдоль Лоцманской ул., стоящие в линии ограды).
 const CLAIMED = (() => {
   const ids = new Set();
@@ -141,10 +141,10 @@ function yardBuildings() {
   const fromMap = (m, note) => {
     used.add(m.index);
     const b = { ...mapById.get(m.index) };
-    b.info = b.info.replace(/Контур — по карте предприятия[^.]*\./, '') + ` Контур — по карте предприятия (${note}). Высота оценена.`;
+    b.info = [b.info.trim(), 'Высота оценена.'].filter(Boolean).join(' ');
     b.zone = zoneOf(centroid(b.poly)) || b.zone;
     b.geomSrc = 'map';
-    // оцифровка карты даёт «дрожащие» стены — выпрямляем, если это не искажает корпус
+    // контуры плана бывают с «дрожащими» стенами — выпрямляем, если это не искажает корпус
     // (прямоугольники карты уже ровные: у них ворота и кровля привязаны к сторонам)
     const st = b.poly.length > 4 ? straighten(b.poly) : null;
     if (st) {
@@ -155,8 +155,8 @@ function yardBuildings() {
   };
   let k = 0;
   for (const r of keep) {
-    // крупный объединённый контур OSM, в котором на карте предприятия несколько корпусов, —
-    // заменяем корпусами карты, остаток — пониженной вставкой
+    // крупный объединённый контур OSM, в котором по исходному плану несколько корпусов, —
+    // заменяем корпусами плана, остаток — пониженной вставкой
     const inside = r.hits.filter((h) => h.ov > 0.6 * h.m.area);
     if (r.A > 3000 && !r.name && inside.length >= 2 && inside.reduce((s, h) => s + h.ov, 0) > 0.45 * r.A) {
       for (const h of inside) out.push(fromMap(h.m, 'в OpenStreetMap комплекс обозначен одним контуром'));
@@ -231,7 +231,7 @@ function yardBuildings() {
       const A = area(ring);
       const mr = minRect(ring);
       if (A < 400 || Math.min(mr.w, mr.d) < 8 || A / mr.area < 0.5) continue;
-      out.push(decorate({ kind: 'shipyard', id: `Y${r.id.slice(0, 5)}${k++}`, zone: zoneOf(centroid(ring)) || 'kolomna', name: 'Пристройка к производственному комплексу', info: 'Часть общего контура OpenStreetMap между корпусами карты предприятия. Высота оценена.', geomSrc: 'osm', poly: ring, holes: poly.slice(1), h: 10, type: 'hall', wall: 'light', roofColor: 'r_gray', approx: true }, null));
+      out.push(decorate({ kind: 'shipyard', id: `Y${r.id.slice(0, 5)}${k++}`, zone: zoneOf(centroid(ring)) || 'kolomna', name: 'Пристройка к производственному комплексу', info: 'Часть общего контура OpenStreetMap между соседними корпусами. Высота оценена.', geomSrc: 'osm', poly: ring, holes: poly.slice(1), h: 10, type: 'hall', wall: 'light', roofColor: 'r_gray', approx: true }, null));
     }
   }
   // вывеска — на стороне, обращённой наружу территории

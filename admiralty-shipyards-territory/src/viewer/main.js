@@ -262,7 +262,7 @@ async function main() {
   $('note').innerHTML = data.meta.source === 'osm'
     ? `<b>Источник геометрии.</b> Контуры зданий, вода, улицы и ограждения — OpenStreetMap (© участники OSM, ODbL)${data.meta.osm?.fetched ? ', данные на ' + data.meta.osm.fetched.slice(0, 10) : ''}. Названия и описания объектов верфи — по открытым источникам.` +
       `<br /><span style="font-family:var(--font-data);font-size:11px">${model.stats.buildings} зданий · ${(model.stats.triangles / 1e6).toFixed(2)} млн треугольников</span>`
-    : '<b>Источники.</b> Граница территории, контуры зданий, вода, улицы и мосты — открытые данные OpenStreetMap и Microsoft ML Buildings (Overture Maps, ODbL). Этажность городских домов — из OSM; высоты цехов в открытых данных нет, они оценены. Назначение цехов, стапели и краны — с карты предприятия, совмещённой с реальной границей. ' +
+    : '<b>Источники.</b> Граница территории, контуры зданий, вода, улицы и мосты — открытые данные OpenStreetMap и Microsoft ML Buildings (Overture Maps, ODbL). Этажность городских домов — из OSM; высоты цехов в открытых данных нет, они оценены. ' +
     `<br /><span style="font-family:var(--font-data);font-size:11px">${model.stats.buildings} зданий · ${(model.stats.triangles / 1e6).toFixed(2)} млн треугольников</span>`;
 
   const viewsEl = $('views');

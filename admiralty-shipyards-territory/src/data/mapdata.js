@@ -1,9 +1,9 @@
-// Привязка карты предприятия (data/source/enterprise-map.png) к системе координат модели.
+// Привязка исходного плана (map-trace.js) к системе координат модели.
 //
-// Преобразование «пиксель → метры» подобрано tools/register_map.py: контуры участков с карты
-// совмещены с реальной границей территории верфи из открытых данных (OpenStreetMap через
-// Overture Maps, src/data/real-data.js). Совпадение площадей 89 %, медианное отклонение
-// контура ≈3 м; масштаб 1,502 м/пикс. Ось y карты направлена вниз.
+// Преобразование «пиксель → метры» подобрано так, что контуры участков плана совпадают с
+// реальной границей территории верфи из открытых данных (OpenStreetMap через Overture Maps,
+// src/data/real-data.js). Совпадение площадей 89 %, медианное отклонение контура ≈3 м;
+// масштаб 1,502 м/пикс. Ось y плана направлена вниз.
 
 import TRACE from './map-trace.js';
 import { ensureCCW, area, centroid, dist, sub, norm } from '../geo.js';
@@ -15,7 +15,7 @@ export const GEOREF = {
     [1.441015, -0.422823, -472.407934],
   ],
   scale: 1.502,
-  method: 'подбор по реальной границе территории (tools/register_map.py)',
+  method: 'подбор по реальной границе территории',
 };
 const [[A, B, C], [D, E, F]] = GEOREF.matrix;
 const DET = A * E - B * D;
@@ -43,7 +43,7 @@ export const MAP_PIECES = TRACE.pieces.map((p) => ({ cxPx: p.cx, cyPx: p.cy, pol
 export const MAP_WATER = TRACE.water.map((w) => conv(w.poly));
 // «Коридор» акватории: внутри него всё, что не территория верфи, — вода (без щелей по контуру).
 export const MAP_CORRIDOR = conv(TRACE.corridor);
-// Внутризаводские проезды (пиксели карты), проложенные tools/trace_map.py
+// Внутризаводские проезды (пиксели плана)
 export const MAP_ROADS = TRACE.roads || [];
 export const MAP_BRIDGES = TRACE.bridges.map((b) => ({ ...b, from: px(...b.a), to: px(...b.b), w: b.w * GEOREF.scale }));
 

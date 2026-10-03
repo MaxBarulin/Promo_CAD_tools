@@ -37,13 +37,13 @@ const polys = all.map((o) => {
 });
 const bbHit = (a, b) => a.bb[0] <= b.bb[2] && a.bb[2] >= b.bb[0] && a.bb[1] <= b.bb[3] && a.bb[3] >= b.bb[1];
 for (const { o, mp } of polys) {
-  // контуры из открытых данных принимаются как есть; проверяем постройки, нарисованные по карте предприятия
+  // контуры из открытых данных принимаются как есть; проверяем постройки исходного плана
   if (o.generated || (o.info?.geomSrc && o.info.geomSrc !== 'map')) continue;
   const wet = mpArea(pc.intersection(mp, P.water));
   if (wet > 2) warn(`${o.id} «${o.name}» заходит в воду на ${wet.toFixed(0)} м²`);
   const road = mpArea(pc.intersection(mp, P.carriageways));
   if (road > 2) warn(`${o.id} «${o.name}» пересекает проезжую часть на ${road.toFixed(0)} м²`);
-  // проезды — из OpenStreetMap, часть корпусов — с карты предприятия: мелкие расхождения источников
+  // проезды — из OpenStreetMap, часть корпусов — из исходного плана: мелкие расхождения источников
   const iroad = mpArea(pc.intersection(mp, P.internal));
   if (iroad > 0.15 * area(mp[0][0])) warn(`${o.id} «${o.name}» пересекает внутризаводской проезд на ${iroad.toFixed(0)} м²`);
 }
@@ -58,7 +58,7 @@ for (let i = 0; i < polys.length; i++) {
     const perim = inter.reduce((s, P) => s + P.reduce((t, r) => t + r.slice(1).reduce((u, p, i) => u + Math.hypot(p[0] - r[i][0], p[1] - r[i][1]), 0), 0), 0);
     if (perim && (2 * ov) / perim < 0.3) continue;
     // пристройки примыкают к корпусам общей стеной — допустимо только касание: здания верфи из
-    // разных источников (карта предприятия и космоснимок), заходящие друг в друга, — ошибка
+    // разных источников (исходный план и космоснимок), заходящие друг в друга, — ошибка
     const tol = a.o.info?.kind === 'building' && b.o.info?.kind === 'building' ? 2 : /^[ZY]/.test(a.o.id) && /^[ZY]/.test(b.o.id) ? 30 : 1;
     if (ov <= tol) continue;
     const msg = `${a.o.id} «${a.o.name}» и ${b.o.id} «${b.o.name}» пересекаются (${ov.toFixed(0)} м²)`;

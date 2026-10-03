@@ -87,7 +87,7 @@ export function registryItems(model, data) {
         estimated: !!i.approx,
         occupants: unitList(i.units, 'occupant'),
         owners: unitList(i.units, 'owner'),
-        source: i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'карта предприятия' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
+        source: i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'уточнённый контур' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
         lat: +lat.toFixed(6),
         lon: +lon.toFixed(6),
         center: c,

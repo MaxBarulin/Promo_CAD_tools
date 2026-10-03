@@ -1,7 +1,7 @@
-// Территория АО «Адмиралтейские верфи» по карте предприятия.
+// Территория АО «Адмиралтейские верфи».
 //
-// Контуры участков и всех 200 построек сняты с карты (tools/trace_map.py → map-trace.js)
-// и переведены в метры (mapdata.js). Здесь — назначение и параметры зданий,
+// Контуры участков и 200 построек исходного плана (map-trace.js) переведены в метры
+// (mapdata.js). Здесь — назначение и параметры зданий,
 // стапели, краны, суда, мосты, проезды, ворота.
 //
 // Участки (с юга на север):
@@ -191,7 +191,7 @@ function classify(raw) {
     mapIndex: raw.index,
     zone: raw.zone === 'moika' ? 'matisov' : raw.zone,
     name: named?.name || defaultName(type, A),
-    info: (named?.info ? named.info + ' ' : '') + `Контур — по карте предприятия (${Math.round(len)}×${Math.round(wid)} м).`,
+    info: named?.info || '',
     poly,
     h,
     floors,
@@ -374,11 +374,11 @@ export const DOCKS = [
 // ---------- мосты ----------
 
 export const BRIDGES = [
-  ...MAP_BRIDGES.map((b) => ({ id: b.id, name: b.name, info: 'Внутризаводской мост (по карте предприятия).', type: b.id === 'MB4' ? 'industrial' : 'industrial', from: b.from, to: b.to, w: Math.max(8, b.w) })),
+  ...MAP_BRIDGES.map((b) => ({ id: b.id, name: b.name, info: 'Внутризаводской мост.', type: b.id === 'MB4' ? 'industrial' : 'industrial', from: b.from, to: b.to, w: Math.max(8, b.w) })),
 ];
 
 // ---------- проезды ----------
-// Трассы проложены автоматически по свободным от зданий полосам карты (tools/trace_map.py).
+// Трассы проложены по свободным от зданий полосам плана.
 
 const L = (...pts) => pts.map(([x, y]) => px(x, y));
 export const INTERNAL_ROADS = MAP_ROADS.map((r) => ({ id: r.id, name: r.name, w: r.w, line: r.line.map(([x, y]) => px(x, y)) }));
