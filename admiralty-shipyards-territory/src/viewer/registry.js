@@ -408,7 +408,8 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       if (s === 'soon' || s === 'overdue') due++;
       if (s === 'none') none++;
     }
-    $('regSummary').textContent = `${items.length} объектов · ЭПБ истекает за ${st.years} г. или истекла: ${due}${none === items.length ? ' · сроки ещё не внесены' : ''}`;
+    // сводка — в подсказке кнопки «Учёт»
+    $('regOpen').title = `Реестр зданий и сооружений: ${items.length} объектов · ЭПБ истекает за ${st.years} г. или истекла: ${due}${none === items.length ? ' · сроки ещё не внесены' : ''}`;
   }
 
   // ---------- блок в карточке объекта ----------
@@ -493,6 +494,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
   return {
     decorateCard,
     toggle,
+    isOpen: () => st.open,
     refresh,
     get items() {
       return items;

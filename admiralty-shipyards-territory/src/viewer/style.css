@@ -105,36 +105,12 @@ body {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
-.brand {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  max-width: 330px;
-  padding: 14px 16px 12px;
-  display: grid;
-  gap: 4px;
-}
 .eyebrow {
   font-family: var(--font-data);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-}
-.brand h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 25px;
-  line-height: 1.05;
-  letter-spacing: 0.01em;
-  text-wrap: balance;
-}
-.brand p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.4;
 }
 .facts {
   display: flex;
@@ -152,75 +128,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.panel {
-  position: absolute;
-  left: 16px;
-  top: 196px;
-  bottom: 16px;
-  width: 330px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  /* clip, а не только hidden: иначе фокус на переключателе прокручивает саму панель
-     и её шапка с кнопкой «свернуть» уезжает за край (на телефоне — незакрываемая шторка) */
-  overflow: clip;
-}
-.panel-scroll {
-  overflow-y: auto;
-  padding: 12px 16px 14px;
-  display: grid;
-  gap: 16px;
-}
-.group {
-  display: block;
-}
-.group-body {
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
-}
-.group > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  list-style: none;
-  cursor: pointer;
-  user-select: none;
-  border-radius: 6px;
-}
-.group > summary::-webkit-details-marker {
-  display: none;
-}
-.group > summary::after {
-  content: '';
-  width: 6px;
-  height: 6px;
-  margin-right: 4px;
-  border-right: 1.6px solid var(--muted);
-  border-bottom: 1.6px solid var(--muted);
-  transform: translateY(-2px) rotate(45deg);
-  transition: transform 0.15s;
-}
-.group:not([open]) > summary::after {
-  transform: rotate(-45deg);
-}
-.group > summary:hover h2 {
-  color: var(--ink);
-}
-.group > summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.group h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
 .views {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -425,26 +332,9 @@ button {
 }
 
 /* ---------- HUD ---------- */
-.hud {
-  position: absolute;
-  z-index: 2;
-  right: 16px;
-  bottom: 16px;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-}
 .hud .sheet {
   position: relative;
   z-index: auto;
-}
-.coords {
-  padding: 7px 10px;
-  font-family: var(--font-data);
-  font-size: 11px;
-  line-height: 1.5;
-  font-variant-numeric: tabular-nums;
-  min-width: 182px;
 }
 .coords span {
   color: var(--muted);
@@ -463,21 +353,6 @@ button {
   height: 44px;
   transition: transform 0.05s linear;
 }
-.hint {
-  position: absolute;
-  left: 362px;
-  bottom: 16px;
-  max-width: calc(100% - 362px - 300px);
-  box-sizing: border-box;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 6px 4px 6px 10px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--muted);
-}
-
 /* ---------- подписи на сцене ---------- */
 .lbl {
   font-family: var(--font-body);
@@ -558,44 +433,6 @@ button {
   font-size: 12px;
 }
 
-.panel-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px 0 8px;
-  border-bottom: 1px solid var(--line);
-  flex: none;
-}
-.tabs {
-  display: flex;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-.tab {
-  appearance: none;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  background: transparent;
-  padding: 9px 8px 8px;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.tab:hover {
-  color: var(--ink);
-}
-.tab[aria-selected='true'] {
-  color: var(--ink);
-  border-bottom-color: var(--accent);
-}
-.tab:focus-visible,
 .icon-btn:focus-visible,
 .obj:focus-visible {
   outline: 2px solid var(--accent);
@@ -636,34 +473,7 @@ button {
 .registry .fold[aria-expanded='false'] svg {
   transform: none;
 }
-.panel.collapsed > :not(.panel-head) {
-  display: none !important;
-}
-.panel.collapsed .panel-head {
-  border-bottom-color: transparent;
-}
-@media (min-width: 761px) {
-  .panel.collapsed {
-    bottom: auto;
-  }
-  body.panel-collapsed .registry,
-  body.panel-collapsed .hint {
-    left: 16px;
-  }
-  body.panel-collapsed .hint {
-    max-width: calc(100% - 16px - 300px);
-  }
-}
-
 /* ---------- вкладка «Объекты верфи» ---------- */
-.panel-pane {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 10px;
-}
 .obj-filters {
   display: grid;
   gap: 6px;
@@ -789,65 +599,6 @@ select.field {
   padding-top: 8px;
 }
 
-@media (max-width: 760px) {
-  .brand {
-    left: 12px;
-    right: 12px;
-    top: 12px;
-    max-width: none;
-    padding: 10px 12px;
-  }
-  .brand h1 {
-    font-size: 20px;
-  }
-  .brand p,
-  .facts {
-    display: none;
-  }
-  .panel {
-    left: 12px;
-    right: 12px;
-    top: auto;
-    bottom: 12px;
-    width: auto;
-    max-height: 52%;
-  }
-  /* на телефоне панель — нижняя шторка: содержимое уходит вниз */
-  .panel .fold svg {
-    transform: rotate(180deg);
-  }
-  .panel .fold[aria-expanded='false'] svg {
-    transform: none;
-  }
-  .obj-hint {
-    display: none;
-  }
-  .card {
-    left: 12px;
-    right: 12px;
-    width: auto;
-    top: 130px;
-    max-height: calc(100% - 130px - 64px);
-    box-sizing: border-box;
-  }
-  /* развёрнутая шторка занимает до 52% высоты — карточка остаётся над ней */
-  body:not(.panel-collapsed) .card {
-    max-height: calc(48% - 150px);
-  }
-  .hud {
-    right: 12px;
-    bottom: auto;
-    top: 76px;
-  }
-  .coords,
-  .hint {
-    display: none;
-  }
-  .compass {
-    width: 46px;
-    height: 46px;
-  }
-}
 /* ---------- реестр зданий и сооружений ---------- */
 :root {
   --st-overdue: #b8321f;
@@ -868,10 +619,6 @@ select.field {
   --st-overdue: #ff8a78;
   --st-soon: #ffcf6e;
   --st-ok: #7fd6a2;
-}
-.reg-open-btn {
-  width: 100%;
-  font-weight: 600;
 }
 .reg-summary {
   margin: 6px 0 0;
@@ -1160,7 +907,7 @@ select.field {
     max-height: none;
   }
   body.reg-open.card-shown .registry {
-    right: calc(16px + var(--card-w, 352px) + 12px);
+    right: calc(var(--m) + var(--card-w, var(--col)) + var(--g));
   }
 }
 body.reg-open .hint,
@@ -1180,9 +927,6 @@ body.reg-open .hud {
     flex: 1 1 140px;
   }
   body.reg-open .card {
-    display: none;
-  }
-  body.reg-open .panel {
     display: none;
   }
   .registry.min {
@@ -1233,16 +977,6 @@ body.reg-open .hud {
   color: var(--accent-ink);
   border-color: var(--accent);
 }
-@media (max-width: 760px) {
-  .scope-toggle {
-    top: 76px;
-    left: 12px;
-    transform: none;
-    font-size: 13px;
-    padding: 7px 12px 7px 9px;
-  }
-}
-
 /* ---------- подразделения ---------- */
 .units {
   border-top: 1px solid var(--line);
@@ -1581,83 +1315,9 @@ body.ed-picking #scene {
 }
 
 /* ---------- время суток ---------- */
-.daytime {
-  display: grid;
-  gap: 4px;
-  padding: 4px 2px 2px;
-}
-.daytime-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 13px;
-}
-.daytime-head output {
-  font-family: var(--font-data);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent);
-}
-.daytime-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.daytime-foot span {
-  flex: 1;
-  min-width: 0;
-}
 .btn.mini {
   padding: 3px 8px;
   font-size: 12px;
-}
-.daytime-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto;
-  gap: 6px;
-  align-items: center;
-}
-.daytime-row .field {
-  min-height: 28px;
-  padding: 3px 6px;
-  font-size: 12px;
-}
-.daytime-row select.field {
-  padding-right: 20px;
-}
-.bus-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  padding-top: 6px;
-  border-top: 1px solid var(--line);
-  font-size: 11.5px;
-  line-height: 1.35;
-  color: var(--ink);
-}
-.bus-status {
-  align-items: flex-start;
-}
-.bus-lines {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-.bus-lines b {
-  display: inline-grid;
-  place-items: center;
-  width: 15px;
-  height: 15px;
-  margin-right: 4px;
-  border-radius: 3px;
-  background: #14aea6;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
 }
 .card .card-live {
   margin: 6px 0;
@@ -1665,17 +1325,6 @@ body.ed-picking #scene {
   border-left: 3px solid #14aea6;
   font-size: 12.5px;
   color: var(--ink);
-}
-.toggle.bus-two {
-  padding: 3px 2px 0;
-  font-size: 12px;
-}
-.bus-status .bus-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: #14aea6;
 }
 .lbl.pin.bus::before {
   background: #14aea6;
@@ -1691,11 +1340,6 @@ body.ed-picking #scene {
 }
 
 /* ---------- экскурсия ---------- */
-.tour-btn {
-  margin-top: 6px;
-  text-align: center;
-  font-weight: 600;
-}
 .tour {
   position: absolute;
   left: 50%;
@@ -1769,13 +1413,6 @@ body.ed-picking #scene {
 body.touring .hint {
   display: none;
 }
-@media (min-width: 761px) {
-  /* место под левую панель: плашка — по центру видимой части сцены */
-  body:not(.panel-collapsed) .tour {
-    left: calc(50% + 181px);
-    width: min(560px, calc(100% - 378px));
-  }
-}
 @media (max-width: 760px) {
   .tour {
     left: 12px;
@@ -1792,4 +1429,763 @@ body.touring .hint {
 }
 body.touring .coords {
   display: none;
+}
+
+/* ==========================================================================
+   Компоновка: колонка значков слева и колонка панелей 360 px рядом; справа — такая же
+   колонка: часы с автобусами, под ними карточка объекта или расписание. Поля 16 px,
+   зазор 8 px, верхний ряд 48 px; всё, что ниже ряда, начинается с одной линии.
+   ========================================================================== */
+:root {
+  --m: 16px;
+  --g: 8px;
+  --row: 48px;
+  --railw: 64px;
+  --col: 360px;
+  --top2: calc(var(--m) + var(--row) + var(--g));
+  --left2: calc(var(--m) + var(--railw) + var(--g));
+  --bus: #14aea6;
+  --bus2: #0d7f79;
+  --bus-lane: #9fd8d3;
+}
+
+/* ---------- колонка значков ---------- */
+.rail {
+  left: var(--m);
+  top: var(--m);
+  width: var(--railw);
+  box-sizing: border-box;
+  padding: 0 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail-logo {
+  height: var(--row);
+  margin: 0 -4px 6px;
+  display: grid;
+  place-items: center;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  cursor: default;
+}
+.rail-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px 0 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  line-height: 1.1;
+  color: var(--ink);
+  cursor: pointer;
+}
+.rail-btn svg,
+.search svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.rail-btn:hover {
+  background: var(--chip);
+}
+.rail-btn[aria-expanded='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.rail-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.rail-sep {
+  width: 36px;
+  margin: 4px auto;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- поиск и список под ним ---------- */
+.search {
+  left: var(--left2);
+  top: var(--m);
+  width: var(--col);
+  height: var(--row);
+  box-sizing: border-box;
+  padding: 0 10px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+.search.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow);
+}
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+.search-input::placeholder {
+  color: var(--muted);
+}
+.kbd {
+  font-family: var(--font-data);
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--muted);
+}
+.search.open .kbd {
+  display: none;
+}
+.drop,
+.fly {
+  left: var(--left2);
+  top: var(--top2);
+  width: var(--col);
+  box-sizing: border-box;
+  max-height: calc(100% - var(--top2) - var(--m));
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.drop {
+  z-index: 3;
+}
+.drop-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 6px;
+  flex: none;
+}
+.drop .obj-list {
+  flex: 1 1 auto;
+}
+.fly {
+  overflow-y: auto;
+}
+.fly-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  flex: none;
+}
+.fly-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+}
+.fly-body {
+  display: grid;
+  gap: 10px;
+}
+.fly-row {
+  display: flex;
+  gap: 18px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.fly-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.fly-sub {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+}
+.help-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.1;
+}
+.fly .note {
+  margin: 0;
+}
+
+/* ---------- «Только верфь»: посередине между колонками ---------- */
+.scope-toggle {
+  top: var(--m);
+  left: calc(50% + (var(--railw) + var(--g)) / 2);
+  height: var(--row);
+  box-sizing: border-box;
+  padding: 0 16px;
+  border-radius: 10px;
+}
+
+/* ---------- часы и автобусы ---------- */
+.clock {
+  right: var(--m);
+  top: var(--m);
+  width: var(--col);
+  height: var(--row);
+  box-sizing: border-box;
+  padding: 0 6px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.clock-play {
+  appearance: none;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+.clock-play svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.clock-play .i-play {
+  display: none;
+  fill: currentColor;
+  stroke-width: 1;
+}
+.clock.paused .clock-play .i-play {
+  display: inline;
+}
+.clock.paused .clock-play .i-pause {
+  display: none;
+}
+.clock-main {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.clock-main:hover {
+  background: var(--chip);
+}
+.clock-time {
+  font-family: var(--font-data);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.clock-date {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.clock-bus {
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clock-bus .bd {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin: 0 3px 0 6px;
+  border-radius: 2px;
+  background: var(--bus);
+}
+.clock-bus .bd.b2 {
+  background: var(--bus2);
+}
+.clock-chev {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s;
+}
+.clock-main[aria-expanded='true'] .clock-chev {
+  transform: rotate(180deg);
+}
+.tt {
+  right: var(--m);
+  top: var(--top2);
+  width: var(--col);
+  box-sizing: border-box;
+  max-height: calc(100% - var(--top2) - var(--m));
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.tt-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tt-row .range {
+  flex: 1;
+  min-width: 0;
+}
+.tt-row .btn.mini {
+  flex: none;
+  margin-left: 6px;
+}
+.tt-date {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 6px;
+  font-size: 12.5px;
+}
+.tt-speed {
+  display: flex;
+  margin-left: 4px;
+}
+.tt-speed .seg-btn {
+  padding: 5px 7px;
+}
+.tt-sun {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: -4px;
+}
+.tt-sec {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.bus-line {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: var(--font-body);
+}
+.bus-line .bl-cap {
+  font-family: var(--font-data);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  fill: var(--muted);
+}
+.bus-line .bl-lane-cap {
+  font-size: 11px;
+  fill: var(--ink);
+}
+.bus-line .bl-lane {
+  stroke: var(--bus-lane);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.bus-line .bl-chev {
+  fill: none;
+  stroke: var(--bus);
+  stroke-opacity: 0.55;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bus-line .bl-stop {
+  fill: var(--panel-solid);
+  stroke: var(--bus);
+  stroke-width: 2;
+}
+.bus-line .bl-label {
+  font-size: 10px;
+  fill: var(--ink);
+}
+.bus-line .bl-bus rect {
+  stroke: var(--panel-solid);
+  stroke-width: 2;
+}
+.bus-line .bl-bus text {
+  font-size: 12px;
+  font-weight: 700;
+  fill: #fff;
+}
+.bus-line .bl-bus.b1 rect,
+.bus-line .bl-bus.b1 path {
+  fill: var(--bus);
+}
+.bus-line .bl-bus.b2 rect,
+.bus-line .bl-bus.b2 path {
+  fill: var(--bus2);
+}
+.bus-lines {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.bus-lines > div {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+}
+.bb {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--bus);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: var(--font-body);
+}
+.bb.b2 {
+  background: var(--bus2);
+}
+.tt-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tt-tabs .seg {
+  display: flex;
+}
+.tt-tabs .btn.link {
+  margin-left: auto;
+}
+.tt-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.tt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-data);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-table caption {
+  caption-side: top;
+  padding: 8px 0;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: left;
+}
+.tt-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-solid);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+  padding: 2px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.tt-table td {
+  text-align: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tt-table td:first-child {
+  width: 26px;
+}
+.tt-table tr.past td {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.tt-table tr.now td {
+  background: rgba(20, 174, 166, 0.14);
+  font-weight: 600;
+}
+.tt-table td.here {
+  position: relative;
+}
+.tt-table td.here::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--signal);
+}
+.tt-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.tt-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.tt .toggle.bus-two {
+  padding: 0 2px;
+  font-size: 12.5px;
+}
+.card .card-live {
+  margin: 0;
+  padding: 2px 0 2px 8px;
+  border-left: 3px solid var(--bus);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.lbl.pin.bus::before {
+  background: var(--bus);
+  border-radius: 2px;
+}
+
+/* ---------- карточка объекта: правая колонка под часами ---------- */
+.card {
+  right: var(--m);
+  top: var(--top2);
+  width: var(--col);
+  box-sizing: border-box;
+  max-height: calc(100% - var(--top2) - var(--m) - var(--row) - var(--g));
+}
+body.clock-open .card {
+  display: none;
+}
+body.reg-open .coords {
+  display: none;
+}
+
+/* ---------- реестр: от колонки значков до правого края (или до карточки) ---------- */
+.registry {
+  left: var(--left2);
+  right: var(--m);
+  bottom: var(--m);
+}
+body.reg-open .fly,
+body.reg-open .drop,
+body.reg-open .coords {
+  display: none;
+}
+
+/* ---------- низ: координаты курсора, компас, подсказка ---------- */
+.coords {
+  left: var(--m);
+  bottom: var(--m);
+  padding: 7px 10px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  min-width: 182px;
+}
+.hud {
+  position: absolute;
+  z-index: 2;
+  right: var(--m);
+  bottom: var(--m);
+}
+.hud .compass {
+  width: var(--row);
+  height: var(--row);
+  border-radius: 10px;
+}
+.hud .compass svg {
+  width: 38px;
+  height: 38px;
+}
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: var(--m);
+  transform: translateX(-50%);
+  width: min(600px, calc(100% - 2 * var(--left2) - 2 * var(--col)));
+  min-width: 300px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 4px 6px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+body.clock-open .hint,
+body.touring .clock,
+body.touring .tt {
+  display: none;
+}
+
+/* ---------- узкое окно компьютера: «Только верфь» — значком ---------- */
+@media (max-width: 1180px) and (min-width: 761px) {
+  .scope-toggle span {
+    display: none;
+  }
+  .scope-toggle {
+    width: var(--row);
+    padding: 0;
+    justify-content: center;
+  }
+  .hint {
+    display: none;
+  }
+}
+
+/* ---------- телефон: поиск сверху, разделы — нижние вкладки, панели — шторки ---------- */
+@media (max-width: 760px) {
+  :root {
+    --m: 12px;
+    --tabs: 60px;
+  }
+  .rail {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    height: var(--tabs);
+    padding: 4px 4px 6px;
+    flex-direction: row;
+    justify-content: space-around;
+    border-radius: 14px 14px 0 0;
+    border-bottom: 0;
+  }
+  .rail-logo,
+  .rail-sep {
+    display: none;
+  }
+  .rail-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 0 4px;
+  }
+  .search {
+    left: var(--m);
+    right: calc(var(--m) + var(--row) + var(--g));
+    width: auto;
+  }
+  .kbd {
+    display: none;
+  }
+  .scope-toggle {
+    left: auto;
+    right: var(--m);
+    transform: none;
+    width: var(--row);
+    padding: 0;
+    justify-content: center;
+  }
+  .scope-toggle span {
+    display: none;
+  }
+  .drop {
+    left: var(--m);
+    right: var(--m);
+    width: auto;
+    height: auto;
+    bottom: calc(var(--tabs) + var(--g));
+    max-height: none;
+  }
+  .fly,
+  .tt {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: var(--tabs);
+    width: auto;
+    max-height: 60%;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+  }
+  .clock {
+    left: var(--m);
+    right: auto;
+    top: auto;
+    bottom: calc(var(--tabs) + var(--g));
+    width: auto;
+    max-width: calc(100% - 2 * var(--m) - var(--row) - var(--g));
+  }
+  .clock-date {
+    display: none;
+  }
+  body.clock-open .clock {
+    bottom: calc(var(--tabs) + 60% + var(--g));
+  }
+  .card {
+    left: var(--m);
+    right: var(--m);
+    width: auto;
+    top: var(--top2);
+    max-height: calc(100% - var(--top2) - var(--tabs) - var(--row) - 2 * var(--g));
+  }
+  .registry {
+    left: var(--m);
+    right: var(--m);
+    top: var(--top2);
+    bottom: calc(var(--tabs) + var(--g));
+    height: auto;
+  }
+  .coords,
+  .hint {
+    display: none;
+  }
+  .hud {
+    bottom: calc(var(--tabs) + var(--g));
+  }
+  .tour {
+    bottom: calc(var(--tabs) + var(--g));
+  }
+  body.reg-open .clock {
+    display: none;
+  }
+  /* открытый лист или список закрывает низ экрана: часы и компас прячутся под ним */
+  body.pane-open .clock,
+  body.search-open .clock,
+  body.pane-open .hud,
+  body.search-open .hud,
+  body.clock-open .hud {
+    display: none;
+  }
 }

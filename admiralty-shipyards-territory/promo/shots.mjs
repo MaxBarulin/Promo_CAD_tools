@@ -56,7 +56,7 @@ async function shot(p, name, wait = 5000) {
   console.log('Снимок:', name);
 }
 const hideUi = (p, keepScope = false) =>
-  p.addStyleTag({ content: `.brand,.panel,.hint,.hud,.card${keepScope ? '' : ',.scope-toggle'}{display:none!important}` });
+  p.addStyleTag({ content: `.rail,.search,.drop,.fly,.clock,.tt,.hint,.hud,.card,.coords${keepScope ? '' : ',.scope-toggle'}{display:none!important}` });
 
 if (want('cover')) {
   // обложка: портрет A4 во всю страницу, без подписей; утреннее солнце сбоку (с юго-востока)
@@ -82,14 +82,16 @@ if (want('cover')) {
   await p.close();
 }
 if (want('objects')) {
+  // поиск раскрыт: список объектов под строкой поиска, справа карточка выбранного цеха
   const p = await open({ width: 1440, height: 900 });
-  await p.click('#tabObjects');
   await p.evaluate(() => {
     const v = window.__viewer;
     const o = v.pickMesh.userData.objects.find((x) => x.id === 'Z129');
     v.select(o);
     v.focusObject(o);
   });
+  await p.waitForTimeout(2500);
+  await p.click('#objQ');
   await shot(p, 'objects.jpg');
   await p.close();
 }
@@ -142,7 +144,7 @@ if (want('bus')) {
 }
 if (want('mobile')) {
   const p = await open({ width: 390, height: 844 }, { mobile: true });
-  await p.tap('#tabObjects');
+  await p.tap('#objQ');
   await shot(p, 'mobile-list.jpg', 3000);
   await p.tap('#objList button.obj >> nth=0');
   await shot(p, 'mobile-card.jpg', 4000);

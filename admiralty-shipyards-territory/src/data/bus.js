@@ -600,7 +600,8 @@ function scheduled(run, node) {
 }
 
 // Положение одного автобуса (bus — 0 или 1): weekday — день недели (0 — воскресенье), sec —
-// секунды от полуночи. → { s (путь по кругу), state: 'park' | 'stop' | 'move', text, next, since }
+// секунды от полуночи. → { s (путь по кругу), state: 'park' | 'stop' | 'move', dir — куда едет
+// ('s' — на юг, к цеху № 12; 'n' — на север; у стоящего на кольце — null), text, next, since }
 // next — когда автобус тронется, since — с какого времени стоит (для очереди на кольце).
 export function busState(R, bus, weekday, sec) {
   const runs = dayPlan(R, weekday)[bus];
@@ -632,14 +633,34 @@ export function busState(R, bus, weekday, sec) {
     const T = scheduled(run, node);
     return T == null ? '' : `, ${run.printed ? 'по расписанию' : 'по графику'} ${hm(T)}`;
   };
-  if (p.kind === 'dwell') return { s: p.s0 % R.total, state: 'stop', text: `на остановке ${name(p.at)}, ${DIR[run.kind]}${when(p.at)}`, next: p.t1, since: p.t0 };
+  const dir = run.kind === 'out' ? 's' : run.kind === 'home' ? 'n' : run.kind;
+  if (p.kind === 'dwell') return { s: p.s0 % R.total, state: 'stop', dir, text: `на остановке ${name(p.at)}, ${DIR[run.kind]}${when(p.at)}`, next: p.t1, since: p.t0 };
   const s = (p.s0 + distAt(p.L, p.t1 - p.t0, sec - p.t0)) % R.total;
   let text;
   if (run.kind === 'out') text = `выходит на линию: едет ${south.replace('на кольце', 'на кольцо')}`;
   else if (run.kind === 'home') text = `возвращается ${north.replace('на кольце', 'на кольцо')}`;
   else if (p.to === run.b) text = run.kind === 's' ? `${DIR.s}, едет на конечную «Цех № 12»` : `${DIR.n}, едет на кольцо у Северной проходной`;
   else text = `${DIR[run.kind]}, следующая остановка ${name(p.to)}${when(p.to)}`;
-  return { s, state: 'move', text, next: sec, since: sec };
+  return { s, state: 'move', dir, text, next: sec, since: sec };
+}
+
+// Место на схеме маршрута (панель автобусов): x — от 0 у северного кольца через ц. 33, ц. 20,
+// ц. 19, ОТЗ, З/упр, ц. 22 до 7 у цеха № 12; dir — 's' на пути к цеху № 12, 'n' — обратно.
+export const LINE_STOPS = ['ring_n', 'c33', 'c20', 'c19', 'otz', 'zupr', 'c22', 'c12'];
+export function busLinePos(R, s) {
+  const S = (stop, dir) => R.nodes[cycleIndex(stop, dir)].s;
+  const c12 = S('c12', 'n');
+  const south = [[0, 0], ...LINE_STOPS.slice(1, 7).map((k, i) => [S(k, 's'), i + 1]), [c12, 7]];
+  const north = [[c12, 7], ...['c22', 'zupr', 'otz', 'c19', 'c20'].map((k, i) => [S(k, 'n'), 6 - i]), [R.total, 0]];
+  s = ((s % R.total) + R.total) % R.total;
+  const pts = s <= c12 ? south : north;
+  for (let i = 1; i < pts.length; i++)
+    if (s <= pts[i][0]) {
+      const [s0, x0] = pts[i - 1];
+      const [s1, x1] = pts[i];
+      return { dir: pts === south ? 's' : 'n', x: x0 + ((x1 - x0) * (s - s0)) / Math.max(1e-9, s1 - s0) };
+    }
+  return { dir: 'n', x: 0 };
 }
 
 // Автобусы на линии (count — сколько: 1 — только первый, по расписанию). Если один догоняет

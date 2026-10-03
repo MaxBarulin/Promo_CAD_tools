@@ -156,7 +156,7 @@ export function setupObjectList({ $, data, pickMesh, registryItems, onPick, onSh
     b.setAttribute('aria-current', 'true');
     const group = b.closest('details');
     if (group && !group.open) group.open = true;
-    if (!$('paneObjects').hidden) b.scrollIntoView({ block: 'nearest' });
+    if (!$('searchDrop').hidden) b.scrollIntoView({ block: 'nearest' });
   }
 
   render();

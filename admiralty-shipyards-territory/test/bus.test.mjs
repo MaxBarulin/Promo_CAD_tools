@@ -1,7 +1,7 @@
 // Проверка внутризаводских автобусов: маршрут по проездам и положение по расписанию.
 import assert from 'node:assert/strict';
 import { getTerritory } from '../src/data/index.js';
-import { busStates, busRuns, busStopTimes, pointOnRoute, stopTimes, busDeparts, BUS_TIMETABLE } from '../src/data/bus.js';
+import { busStates, busRuns, busStopTimes, busLinePos, pointOnRoute, stopTimes, busDeparts, BUS_TIMETABLE } from '../src/data/bus.js';
 import { pointInRing, area } from '../src/geo.js';
 
 const R = getTerritory().bus;
@@ -174,5 +174,19 @@ for (let s = 0; s < R.total; s += 2) {
   if (!close || d < close.d) close = { d, z: p.z };
 }
 assert.ok(close.d < 4 && close.z > 0.3, 'автобус проезжает по настилу моста');
+
+// схема маршрута в панели часов: на юг x растёт от 0 (кольцо) до 7 (цех № 12), на север убывает обратно
+{
+  let prev = { dir: 's', x: 0 };
+  for (let s = 0; s < R.total; s += 5) {
+    const q = busLinePos(R, s);
+    assert.ok(q.x >= 0 && q.x <= 7, `x ${q.x} вне схемы`);
+    if (q.dir === prev.dir) assert.ok(q.dir === 's' ? q.x >= prev.x - 1e-9 : q.x <= prev.x + 1e-9, `схема идёт назад у s=${s}`);
+    else assert.ok(prev.dir === 's' && q.dir === 'n' && prev.x > 6.9, `смена стороны не у цеха № 12 (s=${s})`);
+    prev = q;
+  }
+  assert.equal(prev.dir, 'n');
+  assert.ok(prev.x < 0.1);
+}
 
 console.log(`Автобусы: круг ${(R.total / 1000).toFixed(2)} км, ${R.stops.length} площадок остановок — проверки пройдены`);

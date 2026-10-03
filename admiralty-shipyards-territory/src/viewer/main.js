@@ -16,7 +16,7 @@ import { setupObjectList } from './objects.js';
 import { setupEditor } from './editor.js';
 import { setupTour } from './tour.js';
 import { sunPosition, sunTimes, lightingFor, hhmm } from './daytime.js';
-import { busStates, pointOnRoute, BUS_COUNT } from '../data/bus.js';
+import { busStates, busRuns, busLinePos, pointOnRoute, hm, BUS_COUNT, BUS_TIMETABLE } from '../data/bus.js';
 import { buildBus } from '../model/structures.js';
 import { Sink } from '../model/geom.js';
 
@@ -180,10 +180,6 @@ async function main() {
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
-  let shift = 0; // текущий сдвиг центра проекции, px
-  let shiftTo = 0;
-  const panelShift = () => (!narrow() && !$('panel').classList.contains('collapsed') ? $('panel').getBoundingClientRect().right : 0);
-
   let tween = null;
   let follow = null; // слежение камерой за автобусом: прошлое положение автобуса
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -314,33 +310,89 @@ async function main() {
     }
     return null;
   };
+  // Колонка значков: по щелчку рядом открывается панель раздела (одна; повторный щелчок, × или
+  // Esc — закрыть). Поиск открывает под собой список объектов; одновременно с панелью раздела он не
+  // открыт. На телефоне колонка — нижние вкладки, панели — шторки над ними.
+  const railBtns = [...document.querySelectorAll('.rail-btn[data-pane]')];
+  let openPaneId = null;
+  function openPane(id) {
+    openPaneId = id && openPaneId !== id ? id : null;
+    for (const b of railBtns) {
+      const on = b.dataset.pane === openPaneId;
+      b.setAttribute('aria-expanded', String(on));
+      $(b.dataset.pane).hidden = !on;
+    }
+    document.body.classList.toggle('pane-open', !!openPaneId);
+    if (openPaneId) {
+      setSearchOpen(false);
+      setClockOpen(false);
+      if (registry?.isOpen?.()) registry.toggle(false);
+    }
+  }
+  for (const b of railBtns) b.addEventListener('click', () => openPane(b.dataset.pane));
+  for (const x of document.querySelectorAll('.fly [data-close]')) x.addEventListener('click', () => openPane(null));
+  // прежние имена (скрипты снимков): «свернуть панель» — закрыть всё слева, вкладка «объекты» — поиск
   function setPanelCollapsed(c) {
-    $('panel').classList.toggle('collapsed', c);
-    document.body.classList.toggle('panel-collapsed', c);
-    const t = c ? 'Развернуть панель' : 'Свернуть панель';
-    $('menuToggle').setAttribute('aria-expanded', String(!c));
-    $('menuToggle').setAttribute('aria-label', t);
-    $('menuToggle').title = t;
-    if (!narrow()) store('admiralty-panel-collapsed', c ? '1' : '0');
-    shiftTo = panelShift();
+    if (c) {
+      openPane(null);
+      setSearchOpen(false);
+    }
   }
   function setTab(id) {
-    const objects = id === 'objects';
-    $('tabControls').setAttribute('aria-selected', String(!objects));
-    $('tabObjects').setAttribute('aria-selected', String(objects));
-    $('paneControls').hidden = objects;
-    $('paneObjects').hidden = !objects;
-    store('admiralty-panel-tab', id);
+    if (id === 'objects') setSearchOpen(true);
   }
-  $('menuToggle').addEventListener('click', () => setPanelCollapsed(!$('panel').classList.contains('collapsed')));
-  for (const [tab, id] of [['tabControls', 'controls'], ['tabObjects', 'objects']]) {
-    $(tab).addEventListener('click', () => {
-      setTab(id);
-      if ($('panel').classList.contains('collapsed')) setPanelCollapsed(false);
-      if (id === 'objects') objectList?.setActive(selected?.id);
-    });
+
+  // поиск и список объектов под ним
+  let searchOpen = false;
+  function setSearchOpen(on) {
+    searchOpen = on;
+    $('searchDrop').hidden = !on;
+    $('search').classList.toggle('open', on);
+    document.body.classList.toggle('search-open', on);
+    $('objQ').setAttribute('aria-expanded', String(on));
+    if (on) {
+      openPane(null);
+      setClockOpen(false);
+      objectList?.setActive(selected?.id);
+    }
   }
-  setTab(store('admiralty-panel-tab') === 'objects' ? 'objects' : 'controls');
+  $('objQ').addEventListener('focus', () => setSearchOpen(true));
+  $('objQ').addEventListener('input', () => !searchOpen && setSearchOpen(true));
+  $('objQ').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      $('objList').querySelector('button.obj')?.focus();
+    } else if (e.key === 'Enter') {
+      $('objList').querySelector('button.obj')?.click();
+    } else if (e.key === 'Escape') {
+      setSearchOpen(false);
+      $('objQ').blur();
+    }
+  });
+  // стрелки по строкам списка
+  $('objList').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const rows = [...$('objList').querySelectorAll('button.obj')];
+    const k = rows.indexOf(document.activeElement);
+    if (k < 0) return;
+    e.preventDefault();
+    if (e.key === 'ArrowUp' && k === 0) $('objQ').focus();
+    else rows[Math.max(0, Math.min(rows.length - 1, k + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
+  });
+  // щелчок мимо поиска и списка закрывает список
+  document.addEventListener('pointerdown', (e) => {
+    if (searchOpen && !e.target.closest('#search, #searchDrop')) setSearchOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+    if (e.key === '/' && !typing && !editor?.isEditing()) {
+      e.preventDefault();
+      $('objQ').focus();
+    } else if (e.key === 'Escape' && !typing) {
+      if (openPaneId) openPane(null);
+      else if (clockOpen) setClockOpen(false);
+    }
+  });
   $('compass').addEventListener('click', () => {
     const t = controls.target.clone();
     const d = camera.position.distanceTo(t);
@@ -351,7 +403,7 @@ async function main() {
 
   if (__ARTIFACT_BUILD__) {
     $('exportGroup').innerHTML =
-      '<h2>Файлы модели</h2><p class="note" style="border:0;padding:0;margin:0">GLB (3D), DXF (генплан) и GeoJSON лежат в репозитории в папке <code>admiralty-shipyards-territory/dist</code>; там же локальная версия этой страницы с кнопками экспорта.</p>';
+      '<p class="fly-text">GLB (3D), DXF (генплан) и GeoJSON лежат в репозитории в папке <code>admiralty-shipyards-territory/dist</code>; там же локальная версия этой страницы с кнопками выгрузки.</p>';
   } else {
     // модели из custom/ и из редактора вклеиваются в GLB вместе с текстурами
     setupExports({
@@ -431,6 +483,7 @@ async function main() {
       setPanelCollapsed(true);
       setCardMin(true);
     }
+    setSearchOpen(false);
     focusObject(o);
   }
   function focusObject(o) {
@@ -454,6 +507,8 @@ async function main() {
     const sync = () => {
       const shown = !card.hidden;
       document.body.classList.toggle('card-shown', shown);
+      // выбрали объект при открытых часах — карточка важнее, панель часов закрывается
+      if (shown && clockOpen) setClockOpen(false);
       if (shown) document.body.style.setProperty('--card-w', `${card.offsetWidth}px`);
     };
     new MutationObserver(sync).observe(card, { attributes: true, attributeFilter: ['hidden', 'class'] });
@@ -491,6 +546,8 @@ async function main() {
       registry?.decorateCard(card, null);
       return;
     }
+    // карточка и расписание делят правую колонку: выбранный объект закрывает расписание
+    if (document.body.classList.contains('clock-open')) setClockOpen(false);
     // у движущегося объекта рамка — в его собственной системе координат и едет вместе с ним
     highlight = makeHighlight(o.live ? o.localProxy : o.proxy);
     (o.live ? o.group : scene).add(highlight);
@@ -593,28 +650,8 @@ async function main() {
     }
   }
   $('scopeBtn').addEventListener('click', () => setYardOnly(!yardOnly));
-  // страховка для браузеров без overflow: clip — панель и сцена сами не прокручиваются
-  for (const el of [$('panel'), $('app')]) el.addEventListener('scroll', () => el.scrollTop && (el.scrollTop = 0));
-  // разделы левой панели сворачиваются; какие свёрнуты — запоминается (только удобство)
-  {
-    let closed = {};
-    try {
-      closed = JSON.parse(localStorage.getItem('admiralty-panel-groups') || '{}') || {};
-    } catch {
-      closed = {};
-    }
-    for (const d of document.querySelectorAll('details.group[data-grp]')) {
-      if (closed[d.dataset.grp]) d.open = false;
-      d.addEventListener('toggle', () => {
-        closed[d.dataset.grp] = !d.open;
-        try {
-          localStorage.setItem('admiralty-panel-groups', JSON.stringify(closed));
-        } catch {
-          /* только удобство */
-        }
-      });
-    }
-  }
+  // страховка для браузеров без overflow: clip — сцена сама не прокручивается
+  $('app').addEventListener('scroll', () => $('app').scrollTop && ($('app').scrollTop = 0));
   // подсказка по управлению: закрывается и больше не показывается
   try {
     if (localStorage.getItem('admiralty-hint-closed') === '1') $('hint').hidden = true;
@@ -751,6 +788,9 @@ async function main() {
   registry = setupRegistry({
     $, THREE, V3, data, model, pickMesh, scene, select, focusObject: flyToSelected, artifactBuild: __ARTIFACT_BUILD__,
     onOpen: () => {
+      openPane(null);
+      setSearchOpen(false);
+      setClockOpen(false);
       if (!selected) {
         setActiveView(null);
         flyTo(REGISTRY_VIEW.eye, REGISTRY_VIEW.target);
@@ -823,6 +863,7 @@ async function main() {
   // небо, туман, полусферный свет и окна — по высоте солнца; автобус — по расписанию.
   const MSK = 3 * 3600e3;
   const DAY = 864e5;
+  const WEEKDAY_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   // время модели в мс: поля UTC = московские дата и время
   const clock = { base: Date.now() + MSK, wall: Date.now(), speed: 1 };
   const simMs = () => clock.base + (Date.now() - clock.wall) * clock.speed;
@@ -868,6 +909,7 @@ async function main() {
       ({ rise, set } = sunTimes(date));
       const inp = $('optDate');
       if (inp && document.activeElement !== inp) inp.value = day;
+      $('clockDate').textContent = `${WEEKDAY_SHORT[date.getDay()]}, ${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
     }
     const hours = (ms % DAY) / 3600e3;
     const { el, az } = sunPosition(date, hours);
@@ -903,10 +945,16 @@ async function main() {
   function setEvening(on) {
     setDayTime(on ? duskHours() : 13);
   }
+  let lastSpeed = 1; // к какой скорости вернуться после паузы
   function setSpeed(v) {
     setSim(simMs());
     clock.speed = v;
-    if ($('optSpeed')) $('optSpeed').value = String(v);
+    if (v > 0) lastSpeed = v;
+    for (const b of $('optSpeed').querySelectorAll('[data-speed]')) b.setAttribute('aria-pressed', String(+b.dataset.speed === v));
+    $('clock').classList.toggle('paused', v === 0);
+    const t = v === 0 ? 'Пустить часы' : 'Остановить часы';
+    $('clockPlay').setAttribute('aria-label', t);
+    $('clockPlay').title = t;
   }
   // дата и время модели: y-m-d по календарю, h — часы по Москве; speed — ход часов (0 — пауза)
   function setDateTime(iso, h, speed) {
@@ -927,7 +975,16 @@ async function main() {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) return;
     setDateTime(e.target.value, (simMs() % DAY) / 3600e3);
   });
-  $('optSpeed').addEventListener('change', (e) => setSpeed(+e.target.value));
+  $('optSpeed').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-speed]');
+    if (b) setSpeed(+b.dataset.speed);
+  });
+  $('clockPlay').addEventListener('click', () => setSpeed(clock.speed ? 0 : lastSpeed));
+  for (const [id, d] of [['dayPrev', -1], ['dayNext', 1]])
+    $(id).addEventListener('click', () => {
+      const ms = simMs() + d * DAY;
+      setDateTime(isoDay(ms), (ms % DAY) / 3600e3);
+    });
   // «Сейчас»: сегодняшняя дата и время по Москве, часы идут в реальном времени
   $('optTimeNow').addEventListener('click', () => {
     setSim(Date.now() + MSK);
@@ -1020,11 +1077,16 @@ async function main() {
       b.g.rotation.y = Math.atan2(dir[1], dir[0]);
       b.label.position.copy(V3(p[0], p[1], 7));
     });
-    const text = states.map((st, k) => `<div><b>${k + 1}</b> ${st.text}</div>`).join('');
-    if (text !== busText) {
-      busText = text;
-      $('busStatus').innerHTML = text;
+    // плашка часов: куда едет каждый автобус
+    const word = (st) => (st.dir === 's' ? 'на юг' : st.dir === 'n' ? 'на север' : 'стоит');
+    const sum = states.some((st) => st.dir)
+      ? states.map((st, k) => `<i class="bd b${k + 1}"></i>${k + 1} ${word(st)}`).join(' ')
+      : `${states.map((st, k) => `<i class="bd b${k + 1}"></i>`).join('')} ${states.length > 1 ? 'автобусы стоят' : 'автобус стоит'}`;
+    if (sum !== busText) {
+      busText = sum;
+      $('clockBus').innerHTML = sum;
     }
+    if (clockOpen) renderBusPanel(states, ms);
     // карточка выбранного автобуса: где он сейчас
     if (selected?.live) {
       const el = $('cardLive');
@@ -1045,6 +1107,110 @@ async function main() {
       follow.copy(busWorld);
     }
   }
+  // ---------- панель часов: дата, время, схема маршрута и расписание автобусов ----------
+  let clockOpen = false;
+  function setClockOpen(on) {
+    clockOpen = on;
+    $('clockPanel').hidden = !on;
+    $('clockBtn').setAttribute('aria-expanded', String(on));
+    document.body.classList.toggle('clock-open', on);
+    if (on) {
+      openPane(null);
+      setSearchOpen(false);
+      ttKey = '';
+      updateBus();
+    }
+  }
+  $('clockBtn').addEventListener('click', () => setClockOpen(!clockOpen));
+
+  // схема маршрута: север слева (кольцо у проходной), юг справа (цех № 12); верхняя линия — на юг
+  const LX0 = 30;
+  const LX1 = 322;
+  const lineX = (x) => LX0 + (x / 7) * (LX1 - LX0);
+  const LANE = { s: 34, n: 66 };
+  const LINE_LABELS = ['Кольцо', '33', '20', '19', 'ОТЗ', 'З/у', '22', '12'];
+  {
+    const chev = (y, d) =>
+      Array.from({ length: 13 }, (_, k) => {
+        const x = LX0 + 14 + (k * (LX1 - LX0 - 28)) / 12;
+        return `<path d="M${x - 2 * d} ${y - 3}l${4 * d} 3l${-4 * d} 3" />`;
+      }).join('');
+    $('busLine').innerHTML = `
+      <text class="bl-cap" x="0" y="10">СЕВЕР</text><text class="bl-cap" x="332" y="10" text-anchor="end">ЮГ</text>
+      <text class="bl-lane-cap" x="0" y="${LANE.s + 4}">юг</text><text class="bl-lane-cap" x="0" y="${LANE.n + 4}">сев.</text>
+      <line class="bl-lane" x1="${LX0}" y1="${LANE.s}" x2="${LX1}" y2="${LANE.s}" /><line class="bl-lane" x1="${LX0}" y1="${LANE.n}" x2="${LX1}" y2="${LANE.n}" />
+      <g class="bl-chev">${chev(LANE.s, 1)}${chev(LANE.n, -1)}</g>
+      ${LINE_LABELS.map((t, i) => `<circle class="bl-stop" cx="${lineX(i)}" cy="${LANE.s}" r="4" /><circle class="bl-stop" cx="${lineX(i)}" cy="${LANE.n}" r="4" /><text class="bl-label" x="${lineX(i)}" y="92" text-anchor="middle">${t}</text>`).join('')}
+      <g id="busMarks"></g>`;
+  }
+  const STOP_SHORT = { c33: 'ц. 33', c20: 'ц. 20', c19: 'ц. 19', otz: 'ОТЗ', zupr: 'З/упр', c22: 'ц. 22', c12: 'ц. 12' };
+  let ttDir = 's';
+  let ttAll = false;
+  let ttKey = '';
+  let marksAt = 0;
+  function renderBusPanel(states, ms) {
+    const now = performance.now();
+    const wd = new Date(ms).getUTCDay();
+    const sec = (ms % DAY) / 1000;
+    if (now - marksAt > 250) {
+      marksAt = now;
+      // автобусы на схеме: номер и стрелка, куда едет
+      $('busMarks').innerHTML = states
+        .map((st, k) => {
+          const pos = busLinePos(busRouteData, st.s);
+          const d = st.dir || pos.dir;
+          const x = lineX(pos.x);
+          const y = LANE[d];
+          const tip = st.dir ? (d === 's' ? `<path d="M${x + 13} ${y - 5}l6 5-6 5z" />` : `<path d="M${x - 13} ${y - 5}l-6 5 6 5z" />`) : '';
+          return `<g class="bl-bus b${k + 1}">${tip}<rect x="${x - 11}" y="${y - 10}" width="22" height="20" rx="5" /><text x="${x}" y="${y + 4.5}" text-anchor="middle">${k + 1}</text></g>`;
+        })
+        .join('');
+      $('busStatus').innerHTML = states
+        .map((st, k) => `<div><b class="bb b${k + 1}">${k + 1}</b><span>${st.dir === 's' ? 'на юг, ' : st.dir === 'n' ? 'на север, ' : ''}${st.text}</span></div>`)
+        .join('');
+    }
+    // расписание: рейсы обоих автобусов в выбранную сторону, у каждого — номер автобуса
+    const key = `${ttDir}|${ttAll}|${busCount}|${wd}|${Math.floor(sec / 20)}`;
+    if (key === ttKey) return;
+    ttKey = key;
+    const tt = BUS_TIMETABLE[ttDir];
+    const runs = [];
+    for (let b = 0; b < busCount; b++) for (const r of busRuns(busRouteData, b, wd)) if (r.kind === ttDir && r.T != null) runs.push({ ...r, bus: b });
+    runs.sort((a, b) => a.T - b.T || a.bus - b.bus);
+    if (!runs.length) {
+      $('busTable').innerHTML = `<caption>В субботу и воскресенье рейсов нет</caption>`;
+      return;
+    }
+    const cur = Math.max(0, runs.findIndex((r) => sec < r.t1) < 0 ? runs.length - 1 : runs.findIndex((r) => sec < r.t1));
+    const shown = ttAll ? runs : runs.slice(Math.max(0, cur - 1), Math.max(0, cur - 1) + 6);
+    $('busTable').innerHTML =
+      `<thead><tr><th></th>${tt.stops.map((st) => `<th>${STOP_SHORT[st]}</th>`).join('')}</tr></thead><tbody>` +
+      shown
+        .map((r) => {
+          const cls = r.t1 <= sec ? 'past' : r.t0 <= sec ? 'now' : '';
+          const times = tt.offsets.map((o) => r.T + o * 60);
+          const here = cls === 'now' ? times.filter((t) => t <= sec).length - 1 : -1;
+          return `<tr class="${cls}"><td><b class="bb b${r.bus + 1}" title="${r.printed ? 'рейс по расписанию' : 'второй автобус, между рейсами расписания'}">${r.bus + 1}</b></td>${times.map((t, k) => `<td${k === here ? ' class="here"' : ''}>${hm(t)}</td>`).join('')}</tr>`;
+        })
+        .join('') +
+      '</tbody>';
+    if (ttAll) $('busTable').querySelector('tr.now, tr:not(.past)')?.scrollIntoView({ block: 'nearest' });
+  }
+  $('clockPanel').addEventListener('click', (e) => {
+    const d = e.target.closest('[data-dir]');
+    if (d) {
+      ttDir = d.dataset.dir;
+      for (const b of $('clockPanel').querySelectorAll('[data-dir]')) b.setAttribute('aria-pressed', String(b === d));
+      ttKey = '';
+    }
+    if (e.target.closest('#ttAll')) {
+      ttAll = !ttAll;
+      $('ttAll').setAttribute('aria-pressed', String(ttAll));
+      $('ttAll').textContent = ttAll ? 'ближайшие' : 'весь день';
+      ttKey = '';
+    }
+  });
+
   // подлететь к автобусу и вести камеру следом, пока не возьмёшься за управление
   function followBus(k) {
     const st = buses[k]?.st;
@@ -1070,14 +1236,10 @@ async function main() {
   objectList?.refresh(registry.items);
 
   // ---------- размер и цикл отрисовки ----------
-  // центр проекции смещён вправо на ширину левой панели, чтобы модель не пряталась под ней;
-  // у свёрнутой панели смещения нет
   function applyView() {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
-    camera.aspect = (w + shift) / h;
-    if (shift > 0.5) camera.setViewOffset(w + shift, h, 0, 0, w, h);
-    else camera.clearViewOffset();
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
   function resize() {
@@ -1085,11 +1247,9 @@ async function main() {
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     labelRenderer.setSize(w, h);
-    shift = shiftTo = panelShift();
     applyView();
   }
   window.addEventListener('resize', resize);
-  setPanelCollapsed(narrow() || store('admiralty-panel-collapsed') === '1');
   resize();
 
   const startView = VIEWS.find((v) => '#' + v.id === location.hash) || VIEWS[0];
@@ -1109,10 +1269,6 @@ async function main() {
       camera.position.lerpVectors(tween.e0, tween.e1, k);
       controls.target.lerpVectors(tween.t0, tween.t1, k);
       if (t >= 1) tween = null;
-    }
-    if (shift !== shiftTo) {
-      shift = reduceMotion || Math.abs(shiftTo - shift) < 1 ? shiftTo : shift + (shiftTo - shift) * (1 - Math.exp(-dt / 70));
-      applyView();
     }
     applyDayTime();
     updateBus();
@@ -1155,7 +1311,11 @@ async function main() {
       if (narrow()) setPanelCollapsed(true);
     },
   });
-  $('tourStart').addEventListener('click', () => tour.start());
+  $('tourStart').addEventListener('click', () => {
+    openPane(null);
+    setClockOpen(false);
+    tour.start();
+  });
   if (location.hash === '#tour') tour.start();
 
   $('loading').remove();
