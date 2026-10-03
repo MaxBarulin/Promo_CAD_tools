@@ -1,4 +1,4 @@
-// Вкладка «Объекты верфи» левой панели: список зданий, сооружений, кранов и судов
+// Вкладка «Объекты верфи» левой панели: список зданий, сооружений, кранов, судов и автобусов
 // предприятия с поиском и отбором по типу, сгруппированный по участкам.
 // Щелчок по строке — выбрать объект и подлететь к нему.
 // Режим «Подразделения»: службы, отделы, бюро и их здания (кто размещается, кто отвечает),
@@ -19,15 +19,18 @@ const TYPES = [
   { id: 'utility', name: 'Вспомогательные здания', test: (i) => i.type === 'utility' },
   { id: 'structure', name: 'Стапели, краны, мосты', test: (i) => STRUCTURES.includes(i.kind) },
   { id: 'vessel', name: 'Суда и плавдоки', test: (i) => i.kind === 'vessel' || i.kind === 'dock' },
+  { id: 'bus', name: 'Автобусы', test: (i) => i.kind === 'bus' },
 ];
 
-const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба' };
+const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба', bus: 'Внутризаводской автобус' };
 const LAYERS = new Set(['shipyard', 'production', 'vessels', 'bridges']);
 const WATER = 'Акватория';
+const TRANSPORT = 'Транспорт';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-export function setupObjectList({ $, data, pickMesh, registryItems, onPick, onShowMany }) {
+// extra — объекты не из призмы выбора (движущиеся автобусы)
+export function setupObjectList({ $, data, pickMesh, registryItems, onPick, onShowMany, extra = () => [] }) {
   let list = [];
   let byId = new Map();
   let units = []; // [{ name, items: [{ it, role, person }] }]
@@ -49,6 +52,10 @@ export function setupObjectList({ $, data, pickMesh, registryItems, onPick, onSh
         text: `${o.id} ${o.name} ${kind} ${(o.info.units || []).map((u) => `${u.name} ${u.person || ''}`).join(' ')}`.toLowerCase(),
       });
     }
+    for (const o of extra()) {
+      const kind = KIND_NAMES[o.info.kind] || 'Объект';
+      list.push({ o, id: o.id, name: o.name, kind, zone: TRANSPORT, size: 0, text: `${o.id} ${o.name} ${kind} ${o.info.info || ''}`.toLowerCase() });
+    }
     // подразделения — по всем объектам, где они указаны
     const map = new Map();
     for (const o of pickMesh.userData.objects) {
@@ -63,7 +70,7 @@ export function setupObjectList({ $, data, pickMesh, registryItems, onPick, onSh
     byId = new Map(list.map((it) => [it.id, it]));
   }
   collect(registryItems);
-  const zoneOrder = [...Object.values(ZONE_NAMES), WATER];
+  const zoneOrder = [...Object.values(ZONE_NAMES), WATER, TRANSPORT];
 
   const st = { q: '', type: '', mode: 'objects' };
   let activeId = null;

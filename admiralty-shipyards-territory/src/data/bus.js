@@ -6,7 +6,7 @@
 // по расписанию, второй ходит между ними навстречу первому.
 // Положение автобусов в любой момент — busStates(route, день недели, секунды).
 
-import { add, sub, mul, dot, dist, norm, perp, lerp, smooth, centroid } from '../geo.js';
+import { add, sub, mul, dot, dist, norm, perp, lerp, smooth, centroid, polylineLength } from '../geo.js';
 
 // Остановки. at — примерная точка у дороги; near — здание, у которого стоит остановка
 // (точка — ближайшее к нему место на проезде).
@@ -205,6 +205,80 @@ function shortest(G, from, to) {
 
 // ---------- геометрия пути ----------
 const dedupe = (pts) => pts.filter((p, i) => i === 0 || dist(p, pts[i - 1]) > 0.05);
+const cumLength = (pts) => {
+  const c = [0];
+  for (let i = 1; i < pts.length; i++) c.push(c[i - 1] + dist(pts[i - 1], pts[i]));
+  return c;
+};
+
+// Срезать «усики»: точку, в которой путь на коротком отрезке поворачивает назад (заезд к опорной
+// точке, легшей на тупичок у перекрёстка, и обратно).
+function cutSpurs(pts) {
+  let p = pts;
+  for (let changed = true; changed; ) {
+    changed = false;
+    const out = [p[0]];
+    for (let i = 1; i < p.length - 1; i++) {
+      const a = out[out.length - 1];
+      const b = p[i];
+      const c = p[i + 1];
+      const ab = dist(a, b);
+      const bc = dist(b, c);
+      if (ab > 0.05 && bc > 0.05 && Math.min(ab, bc) < 8 && dot(sub(b, a), sub(c, b)) < -0.5 * ab * bc) {
+        changed = true;
+        continue;
+      }
+      out.push(b);
+    }
+    out.push(p[p.length - 1]);
+    p = dedupe(out);
+  }
+  return p;
+}
+
+// Упростить линию (Дуглас — Пекер): убрать изломы меньше tol метров — ступеньки на стыках
+// проездов, из которых на правой полосе получались крючки. Крайние отрезки (подъезд к развороту
+// и отъезд от него) — как есть: по ним разворачивается петля.
+function simplify(pts, tol) {
+  const n = pts.length;
+  if (n < 5) return pts;
+  const keep = new Array(n).fill(false);
+  keep[0] = keep[1] = keep[n - 2] = keep[n - 1] = true;
+  const stack = [[1, n - 2]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    let far = -1;
+    let dmax = tol;
+    for (let i = a + 1; i < b; i++) {
+      const d = projectSeg({ a: pts[a], b: pts[b] }, pts[i]).d;
+      if (d > dmax) {
+        dmax = d;
+        far = i;
+      }
+    }
+    if (far < 0) continue;
+    keep[far] = true;
+    stack.push([a, far], [far, b]);
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+
+// Разбить отрезки длиннее step на равные части
+function densify(pts, step) {
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const n = Math.max(1, Math.ceil(dist(pts[i - 1], pts[i]) / step));
+    for (let k = 1; k <= n; k++) out.push(lerp(pts[i - 1], pts[i], k / n));
+  }
+  return out;
+}
+
+// Замкнутый путь (первая точка = последней) с началом в точке на длине s0 от прежнего начала
+function rotateClosed(path, cum, s0) {
+  const j = Math.max(1, cum.findIndex((c) => c > s0));
+  const p = lerp(path[j - 1], path[j], (s0 - cum[j - 1]) / Math.max(1e-9, cum[j] - cum[j - 1]));
+  return dedupe([p, ...path.slice(j, path.length - 1), ...path.slice(0, j), p]);
+}
 
 // смещение вправо по ходу (правостороннее движение)
 function rightLane(pts, d) {
@@ -260,9 +334,6 @@ export function busRoute(data) {
     const j = (i + 1) % CYCLE.length;
     legs.push(dedupe(shortest(G, keys[i], keys[j])));
   }
-  // правая полоса; на развороте — петля
-  const path = [];
-  const marks = [];
   const widthAt = (p) => {
     let w = 6;
     let best = Infinity;
@@ -276,24 +347,47 @@ export function busRoute(data) {
       }
     return w;
   };
-  for (let i = 0; i < legs.length; i++) {
-    let leg = rightLane(legs[i], LANE);
-    leg = smooth(leg, 3);
-    marks.push(path.length);
-    path.push(...(path.length ? leg.slice(1) : leg));
-    const next = CYCLE[(i + 1) % CYCLE.length];
-    if (next.uturn) {
-      const a = legs[i][legs[i].length - 2];
-      const b = legs[i][legs[i].length - 1];
-      path.push(...uturnLoop(b, norm(sub(b, a))).slice(1));
-    }
+  // Круг одной линией, разорванной только на развороте: от разворота на север, через кольцо у
+  // проходной и обратно к развороту. Участки идут подряд, поэтому правая полоса и сглаживание
+  // непрерывны и на опорных точках (поворот плавный, без излома на стыке участков), а «усики» —
+  // заезд в тупичок к опорной точке и обратно, если точка легла на соседний проезд у перекрёстка, —
+  // срезаются: на правой полосе из такого заезда получалась петля.
+  const N = CYCLE.length;
+  const u = CYCLE.findIndex((c) => c.uturn);
+  let axis = [];
+  for (let k = 0; k < N; k++) {
+    const leg = legs[(u + k) % N];
+    axis.push(...(axis.length ? leg.slice(1) : leg));
   }
-  path.push(path[0]);
-  // длины
-  const cum = [0];
-  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + dist(path[i - 1], path[i]));
+  // ступеньки меньше метра — долой; длинные отрезки — на части, чтобы сглаживание срезало угол
+  // перекрёстка на несколько метров, как поворачивает автобус, а не съезжало с проезда
+  axis = densify(simplify(cutSpurs(dedupe(axis)), 1), 8);
+  const lane = smooth(rightLane(axis, LANE), 3);
+  const end = axis[axis.length - 1];
+  let path = dedupe([...lane, ...uturnLoop(end, norm(sub(end, axis[axis.length - 2]))).slice(1)]);
+  path[path.length - 1] = path[0];
+  let cum = cumLength(path);
+  // узлы круга по порядку от разворота: ближайшая к узлу точка пути, дальше предыдущего узла
+  // (по проезду автобус идёт в обе стороны — ищем в пределах длины участка)
+  const nodeS = new Array(N).fill(0);
+  let from = 0;
+  for (let k = 1; k < N; k++) {
+    const i = (u + k) % N;
+    const reach = cum[from] + polylineLength(legs[(i + N - 1) % N]) * 1.5 + 40;
+    let best = null;
+    for (let j = from; j < path.length - 1 && cum[j] <= reach; j++) {
+      const pr = projectSeg({ a: path[j], b: path[j + 1] }, G.snapped[i]);
+      if (!best || pr.d < best.d) best = { d: pr.d, j, s: cum[j] + pr.t * (cum[j + 1] - cum[j]) };
+    }
+    nodeS[i] = best.s;
+    from = best.j;
+  }
+  // начало круга — кольцо у Северной проходной
+  const s0 = nodeS[0];
+  path = rotateClosed(path, cum, s0);
+  cum = cumLength(path);
   const total = cum[cum.length - 1];
-  const nodes = CYCLE.map((c, i) => ({ ...c, s: cum[marks[i]], center: G.snapped[i] }));
+  const nodes = CYCLE.map((c, i) => ({ ...c, s: (((nodeS[i] - s0) % total) + total) % total, center: G.snapped[i] }));
 
   // площадки остановок: справа по ходу, у края проезда
   const stops = [];

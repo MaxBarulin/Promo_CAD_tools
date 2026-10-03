@@ -49,6 +49,7 @@ const KIND_LABEL = {
   bridge: 'Мост',
   fence: 'Ограждение',
   bus_stop: 'Остановка автобуса',
+  bus: 'Внутризаводской автобус',
   chimney: 'Дымовая труба',
   landmark: 'Достопримечательность',
   misc: 'Оборудование',
@@ -219,6 +220,11 @@ async function main() {
     else addLabel(l.text, l.at, 14, 'street', 0, 1300, 'city');
   }
   for (const l of data.water.labels) addLabel(l.text, l.at, 1, 'water' + (l.size === 'xl' ? ' xl' : ''), 0, l.size === 'xl' || l.size === 'l' ? 4000 : 1800);
+  // Названия объектов по исходным данным (до правок в custom/ и в редакторе): если объект
+  // переименовали, подпись над ним и заголовок в экскурсии — новое название
+  const baseNames = new Map();
+  for (const k of DATA_KEYS) for (const it of data[k] || []) if (it?.id && it.name) baseNames.set(it.id, it.name);
+  const renamedTo = (o) => (o && baseNames.has(o.id) && o.name !== baseNames.get(o.id) ? o.name : null);
   let pinLabels = [];
   function makePins() {
     for (const l of pinLabels) {
@@ -228,11 +234,12 @@ async function main() {
     }
     pinLabels = [];
     for (const o of pickMesh.userData.objects) {
-      const pin = PINS[o.id] || (PIN_NAMES[o.name] ? [o.name.replace(' АО «Адмиралтейские верфи»', ''), PIN_NAMES[o.name]] : null);
+      const base = baseNames.get(o.id) ?? o.name;
+      const pin = PINS[o.id] || (PIN_NAMES[base] ? [base.replace(' АО «Адмиралтейские верфи»', ''), PIN_NAMES[base]] : null);
       if (!pin) continue;
       const p = o.proxy;
       const c = centroid(p.poly);
-      pinLabels.push(addLabel(pin[0], c, p.z1 + 4, 'pin', 0, pin[1], o.scope === 'city' ? 'city' : 'yard'));
+      pinLabels.push(addLabel(renamedTo(o) || pin[0], c, p.z1 + 4, 'pin', 0, pin[1], o.scope === 'city' ? 'city' : 'yard'));
     }
   }
   makePins();
@@ -360,6 +367,8 @@ async function main() {
   const mouse = new THREE.Vector2();
   let selected = null;
   let highlight = null;
+  // объекты, которые движутся (автобусы): выбираются по своей геометрии, а не по общей призме выбора
+  let liveObjects = () => [];
   let downAt = null;
   let lastTap = null;
   canvas.addEventListener('pointerdown', (e) => (downAt = [e.clientX, e.clientY]));
@@ -374,6 +383,8 @@ async function main() {
       const ob = objs[fo[h.faceIndex]];
       return !hiddenLayers[ob.layer] && !(yardOnly && ob.scope === 'city');
     });
+    const live = liveObjects().filter((x) => !hiddenLayers[x.layer]);
+    const liveHit = live.length ? raycaster.intersectObjects(live.map((x) => x.group), true)[0] : null;
     // во время правки щелчок не выбирает объекты, а указывает точку: там, куда попал щелчок, —
     // на крыше или стене здания, иначе на земле (луч до земли за крышей уводит точку далеко назад)
     if (editor?.isEditing()) {
@@ -381,7 +392,12 @@ async function main() {
       editor.onCanvasClick(pt ? [pt.x, -pt.z] : null);
       return;
     }
-    const o = hit ? objs[fo[hit.faceIndex]] : null;
+    let o = hit ? objs[fo[hit.faceIndex]] : null;
+    if (liveHit && (!hit || liveHit.distance < hit.distance)) {
+      let m = liveHit.object;
+      while (m && !m.userData.live) m = m.parent;
+      o = live.find((x) => x.group === m) || o;
+    }
     // двойной щелчок (на телефоне — двойное касание) по объекту — подлететь к нему
     const now = performance.now();
     const dbl = lastTap && now - lastTap.t < 450 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 16 && o && lastTap.o === o;
@@ -418,6 +434,7 @@ async function main() {
     focusObject(o);
   }
   function focusObject(o) {
+    if (o.live) return followBus(o.bus);
     const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
     const h = o.proxy.z1 ?? o.proxy.h ?? 10;
     // на узком вертикальном экране отходим дальше, чтобы объект поместился по ширине
@@ -453,7 +470,7 @@ async function main() {
       manyHighlight = null;
     }
     if (highlight) {
-      scene.remove(highlight);
+      highlight.parent?.remove(highlight);
       highlight.traverse((c) => c.geometry && c.geometry.dispose());
       highlight = null;
     }
@@ -463,8 +480,9 @@ async function main() {
       registry?.decorateCard(card, null);
       return;
     }
-    highlight = makeHighlight(o.proxy);
-    scene.add(highlight);
+    // у движущегося объекта рамка — в его собственной системе координат и едет вместе с ним
+    highlight = makeHighlight(o.live ? o.localProxy : o.proxy);
+    (o.live ? o.group : scene).add(highlight);
     const i = o.info;
     const rows = [];
     rows.push(['Код', o.id]);
@@ -475,9 +493,11 @@ async function main() {
     if (i.footprint) rows.push(['Площадь застройки', `${i.footprint.toLocaleString('ru-RU')} м²`]);
     if (i.roof && ROOF_NAMES[i.roof]) rows.push(['Кровля', ROOF_NAMES[i.roof].toLowerCase()]);
     if (i.refined) rows.push(['Уточнено', i.refined]);
-    const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
-    const [lat, lon] = toLatLon(c);
-    rows.push(['Координаты', `${lat.toFixed(5)}, ${lon.toFixed(5)}`]);
+    if (!o.live) {
+      const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
+      const [lat, lon] = toLatLon(c);
+      rows.push(['Координаты', `${lat.toFixed(5)}, ${lon.toFixed(5)}`]);
+    }
     if (o.custom) rows.push(['Модель', `из Blender: custom/${o.custom}`]);
     card.innerHTML = `
       <div class="card-tools">
@@ -488,9 +508,10 @@ async function main() {
       <h3>${escapeHtml(o.name)}</h3>
       ${i.approx || o.generated ? '<span class="badge">Положение условное</span>' : ''}
       ${i.info ? `<p>${escapeHtml(i.info)}</p>` : ''}
+      ${o.live ? `<p class="card-live" id="cardLive">${escapeHtml(o.status())}</p>` : ''}
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('')}</dl>
       ${unitsBlock(i.units)}
-      <div class="row"><button class="btn" type="button" id="cardFly">Приблизить</button></div>`;
+      <div class="row"><button class="btn" type="button" id="cardFly">${o.live ? 'Следить' : 'Приблизить'}</button></div>`;
     card.hidden = false;
     card.querySelector('.x').addEventListener('click', () => select(null));
     card.querySelector('[data-act="min"]').addEventListener('click', () => setCardMin(!cardMin));
@@ -698,7 +719,7 @@ async function main() {
     selectById(selectId);
   }
   function selectById(id) {
-    select(id ? pickMesh.userData.objects.find((o) => o.id === id) || null : null);
+    select(id ? pickMesh.userData.objects.find((o) => o.id === id) || liveObjects().find((o) => o.id === id) || null : null);
   }
   let editHighlight = null;
   function highlightProxy(p) {
@@ -728,7 +749,7 @@ async function main() {
 
   // ---------- вкладка «Объекты верфи» ----------
   objectList = setupObjectList({
-    $, data, pickMesh, registryItems: registry.items,
+    $, data, pickMesh, registryItems: registry.items, extra: () => liveObjects(),
     onPick: (o) => {
       if (hiddenLayers[o.layer]) {
         const cb = $('layer-' + o.layer);
@@ -912,6 +933,11 @@ async function main() {
   const busTemplate = new Sink();
   buildBus(busTemplate);
   const busGeoms = busTemplate.toGeometries(THREE);
+  const BUS_PROXY = { poly: [[-6.1, -1.35], [6.1, -1.35], [6.1, 1.35], [-6.1, 1.35]], z0: 0, z1: 3.4 };
+  const BUS_INFO = [
+    'Бирюзовый городской автобус длиной 12 м. Делает все рейсы по расписанию: от цеха № 33 к цеху № 12 и обратно.',
+    'Бирюзовый городской автобус длиной 12 м. Ходит между рейсами расписания со сдвигом на 15 минут, навстречу первому; встречаются у ОТЗ.',
+  ];
   const buses = [];
   for (let k = 0; k < BUS_COUNT; k++) {
     const g = new THREE.Group();
@@ -925,8 +951,30 @@ async function main() {
     }
     transportGroup?.add(g);
     const label = addLabel(`Автобус ${k + 1}`, [0, 0], 0, 'pin bus', 0, 1500, 'yard');
-    buses.push({ g, label, st: null });
+    // автобус — такой же объект, как остальные: щелчок открывает карточку, он есть в списке объектов
+    g.userData.live = true;
+    const obj = {
+      id: `BUS${k + 1}`,
+      name: `Автобус ${k + 1}`,
+      layer: 'transport',
+      scope: 'yard',
+      live: true,
+      bus: k,
+      group: g,
+      localProxy: BUS_PROXY,
+      status: () => `Сейчас: ${buses[k]?.st?.text || 'на линии нет'}`,
+      info: { kind: 'bus', info: BUS_INFO[k] || BUS_INFO[BUS_INFO.length - 1], dims: [12, 2.55], height: 3.3 },
+      // контур там, где автобус сейчас
+      get proxy() {
+        const a = g.rotation.y;
+        const u = [Math.cos(a), Math.sin(a)];
+        const c = [g.position.x, -g.position.z];
+        return { poly: BUS_PROXY.poly.map(([x, y]) => [c[0] + u[0] * x - u[1] * y, c[1] + u[1] * x + u[0] * y]), z0: 0, z1: BUS_PROXY.z1 };
+      },
+    };
+    buses.push({ g, label, st: null, obj });
   }
+  liveObjects = () => buses.slice(0, busCount).map((b) => b.obj);
   let busText = '';
   let busTarget = -1; // за каким автобусом следит камера
   const busWorld = new THREE.Vector3();
@@ -940,7 +988,9 @@ async function main() {
       busTarget = -1;
       follow = null;
     }
+    if (selected?.live && selected.bus >= busCount) select(null);
     updateBus();
+    objectList?.refresh(registry.items);
   }
   $('optBus2').checked = busCount > 1;
   $('optBus2').addEventListener('change', (e) => setBusCount(e.target.checked ? BUS_COUNT : 1));
@@ -964,6 +1014,12 @@ async function main() {
       busText = text;
       $('busStatus').innerHTML = text;
     }
+    // карточка выбранного автобуса: где он сейчас
+    if (selected?.live) {
+      const el = $('cardLive');
+      const t = selected.status();
+      if (el && el.textContent !== t) el.textContent = t;
+    }
     // слежение камерой: сдвигаем камеру вместе с автобусом
     if (follow && busTarget >= 0) {
       buses[busTarget].g.getWorldPosition(busWorld);
@@ -978,19 +1034,29 @@ async function main() {
       follow.copy(busWorld);
     }
   }
-  // «Где автобус»: к автобусу в рейсе (если в рейсе оба или ни один — по очереди)
-  $('busFind').addEventListener('click', () => {
-    const active = buses.map((b, k) => (b.st && b.st.state !== 'park' ? k : -1)).filter((k) => k >= 0);
-    const pool = active.length === 1 ? active : buses.map((_, k) => k).filter((k) => buses[k].st);
-    const k = pool[(pool.indexOf(busTarget) + 1) % pool.length] ?? pool[0];
-    const { p, dir } = pointOnRoute(busRouteData, buses[k].st.s);
+  // подлететь к автобусу и вести камеру следом, пока не возьмёшься за управление
+  function followBus(k) {
+    const st = buses[k]?.st;
+    if (!st) return;
+    const { p, dir } = pointOnRoute(busRouteData, st.s);
     const side = [-dir[1], dir[0]];
     setActiveView(null);
     // крутой вид сверху-сзади: соседние корпуса не закрывают автобус
     flyTo([p[0] - dir[0] * 34 + side[0] * 26, p[1] - dir[1] * 34 + side[1] * 26, 95], [p[0] + dir[0] * 4, p[1] + dir[1] * 4, 1]);
     busTarget = k;
     follow = V3(p[0], p[1], 0.05);
+  }
+  // «Где автобус»: к автобусу в рейсе (если в рейсе оба или ни один — по очереди), с его карточкой
+  $('busFind').addEventListener('click', () => {
+    const active = buses.map((b, k) => (b.st && b.st.state !== 'park' ? k : -1)).filter((k) => k >= 0);
+    const pool = active.length === 1 ? active : buses.map((_, k) => k).filter((k) => buses[k].st);
+    const k = pool[(pool.indexOf(busTarget) + 1) % pool.length] ?? pool[0];
+    if (k == null) return;
+    select(buses[k].obj);
+    if (narrow()) setCardMin(true);
+    followBus(k);
   });
+  objectList?.refresh(registry.items);
 
   // ---------- размер и цикл отрисовки ----------
   // центр проекции смещён вправо на ширину левой панели, чтобы модель не пряталась под ней;
@@ -1068,6 +1134,7 @@ async function main() {
     controls,
     reduceMotion,
     objects: () => pickMesh.userData.objects,
+    renamed: (id) => renamedTo(pickMesh.userData.objects.find((o) => o.id === id)),
     highlightProxy,
     beforeStart: () => {
       if (editor?.isEditing()) return false;

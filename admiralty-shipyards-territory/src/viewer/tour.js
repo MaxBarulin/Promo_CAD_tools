@@ -54,6 +54,7 @@ const STOPS = [
   },
   {
     title: 'Котельная «Судомеха»',
+    own: true, // заголовок — название самого здания: если его переименовали, берётся новое
     text: 'На берегу Мойки — котельная бывшего завода «Судомех» с тремя чёрными стальными трубами на растяжках; её хорошо видно с набережной Мойки.',
     eye: [175, 1150, 60],
     target: [95, 1320, 16],
@@ -61,6 +62,7 @@ const STOPS = [
   },
   {
     title: 'Цех у устья Мойки',
+    own: true, // заголовок — название самого здания: если его переименовали, берётся новое
     text: 'Цех 1965 года на оконечности Ново-Адмиралтейского острова: сплошное остекление в сетку, мятный верхний пояс и тёмно-зелёный блок с ленточными окнами — приметный вид с Васильевского острова.',
     eye: [-470, 1235, 40],
     target: [-300, 1105, 12],
@@ -78,7 +80,7 @@ const STOPS = [
 const FLY_MS = 3400;
 const STAY_MS = 7500;
 
-export function setupTour({ $, flyTo, controls, objects, highlightProxy, beforeStart, reduceMotion }) {
+export function setupTour({ $, flyTo, controls, objects, highlightProxy, beforeStart, reduceMotion, renamed }) {
   const el = $('tour');
   let i = -1;
   let playing = false;
@@ -102,7 +104,7 @@ export function setupTour({ $, flyTo, controls, objects, highlightProxy, beforeS
   function render() {
     const s = STOPS[i];
     $('tourStep').textContent = `${i + 1} / ${STOPS.length}`;
-    $('tourTitle').textContent = s.title;
+    $('tourTitle').textContent = (s.own && s.id && renamed?.(s.id)) || s.title;
     $('tourText').textContent = s.text;
     $('tourPlay').textContent = playing ? '❚❚' : '▶';
     $('tourPlay').setAttribute('aria-label', playing ? 'Пауза' : 'Продолжить');

@@ -30,6 +30,26 @@ for (let s = 0; s < R.total; s += 3) {
   assert.ok(!inside, `путь проходит через здание ${inside?.id} у ${p.map(Math.round)}`);
 }
 
+// без петель и крючков: кроме разворота у цеха № 12 путь нигде не поворачивает круче 45° на 2 м
+// (на опорных точках у перекрёстков, как у (−214, 1057), раньше была петля)
+{
+  const uturn = R.nodes.find((n) => n.uturn).s;
+  for (let s = 0; s < R.total; s += 0.5) {
+    const ds = Math.min(Math.abs(s - uturn), R.total - Math.abs(s - uturn));
+    if (ds < 40) continue;
+    const a = pointOnRoute(R, s).dir;
+    const b = pointOnRoute(R, s + 2).dir;
+    const turn = (Math.abs(Math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1])) * 180) / Math.PI;
+    assert.ok(turn < 45, `крутой поворот ${turn.toFixed(0)}° у ${pointOnRoute(R, s).p.map(Math.round)}`);
+  }
+  for (let i = 1; i < R.path.length - 1; i++) {
+    const [p, q, r] = [R.path[i - 1], R.path[i], R.path[i + 1]];
+    const d = (q[0] - p[0]) * (r[0] - q[0]) + (q[1] - p[1]) * (r[1] - q[1]);
+    const ds = Math.min(Math.abs(R.cum[i] - uturn), R.total - Math.abs(R.cum[i] - uturn));
+    assert.ok(d > -1e-9 || ds < 40, `путь идёт назад у ${q.map(Math.round)}`);
+  }
+}
+
 const at = (wd, hm, bus = 0) => {
   const [h, m, s = 0] = hm.split(':').map(Number);
   return busStates(R, wd, h * 3600 + m * 60 + s)[bus];
