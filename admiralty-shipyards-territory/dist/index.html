@@ -2005,6 +2005,27 @@ body.touring .coords {
 body.clock-open .card {
   display: none;
 }
+/* кнопки и метка в карточке — по ширине текста, в один размер с остальными мелкими кнопками */
+.card .badge {
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 2px 8px;
+  line-height: 1.4;
+}
+.card .row {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.card .row .btn {
+  flex: none;
+  width: auto;
+  min-height: 0;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-align: center;
+}
 body.reg-open .coords {
   display: none;
 }
