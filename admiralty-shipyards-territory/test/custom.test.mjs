@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { getTerritory } from '../src/data/index.js';
 import { initModel, buildModel, makeBuildingObject } from '../src/model/index.js';
-import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel, editBuilding, splitRing } from '../src/model/custom.js';
+import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel, editBuilding, splitRing, newObjectInYard, modelBuilding } from '../src/model/custom.js';
 import { straighten } from '../src/model/straighten.js';
 import { mergeGlb, placementTRS } from '../src/export/glb-merge.js';
 import { centroid, area } from '../src/geo.js';
@@ -80,6 +80,26 @@ assert.deepEqual(e1.info.units, [
 const reg = registryItems(model, data).find((i) => i.id === 'Z141');
 assert.equal(reg.occupants, 'Отдел главного механика (Иванов И. И.)');
 assert.equal(reg.owners, 'Административно-хозяйственная служба');
+
+// к чему относится новый объект: явно, по слою (судно на воде — всё равно верфь), иначе по месту
+assert.equal(newObjectInYard({ layer: 'vessels' }, false), true);
+assert.equal(newObjectInYard({ layer: 'production' }, false), true);
+assert.equal(newObjectInYard({ layer: 'vessels', scope: 'city' }, false), false);
+assert.equal(newObjectInYard({ scope: 'yard' }, false), true);
+assert.equal(newObjectInYard({ layer: 'context' }, true), false);
+assert.equal(newObjectInYard({}, true), true);
+assert.equal(newObjectInYard({}, false), false);
+assert.equal(modelBuilding('N9', { hull: [[0, 0], [10, 0], [10, 5], [0, 5]], z0: 0, z1: 6 }, { layer: 'vessels' }, { inYard: () => false, zoneOf: () => null }).kind, 'shipyard');
+{
+  // модель судна, добавленная в слой «Суда и плавдоки», в сборке — объект верфи
+  const n1 = files.find((f) => f.file === 'N1.glb');
+  const c2 = prepareCustom({ buildings: { N9: { name: 'Судно (проверка)', layer: 'vessels' } } }, [{ file: 'N9.glb', bytes: n1.bytes }]);
+  const m2 = buildModel(getTerritory(), { contextDetail: 'low', custom: c2 });
+  const v = find(m2, 'N9');
+  assert.equal(v.layer, 'vessels');
+  assert.equal(v.o.scope, 'yard');
+  assert.equal(v.o.info.kind, 'vessel');
+}
 
 // новое здание по размерам: 12 × 6 м, тип и высота из записи
 const n2 = find(model, 'N2');

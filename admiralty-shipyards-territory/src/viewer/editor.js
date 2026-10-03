@@ -9,7 +9,7 @@
 //   • локальный файл — этот браузер (localStorage, модели — IndexedDB).
 // «Скачать изменения» — архив для папки custom/: после сборки правки становятся частью модели.
 
-import { BUILDING_TYPES, WALLS, ROOF_TYPES, ROOF_COLORS, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb, moveObject, moveDataItem, objectPivot, NEW_LAYERS, LAYER_KIND } from '../model/custom.js';
+import { BUILDING_TYPES, WALLS, ROOF_TYPES, ROOF_COLORS, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb, moveObject, moveDataItem, objectPivot, NEW_LAYERS, LAYER_KIND, SCOPES } from '../model/custom.js';
 import { makeBuildingObject, buildingLayer } from '../model/index.js';
 import { buildingSummary } from '../model/buildings.js';
 import { Sink } from '../model/geom.js';
@@ -625,7 +625,8 @@ export function setupEditor(api) {
           <div class="ed-row"><button type="button" class="btn" data-act="addunit">Добавить подразделение</button></div>
           <datalist id="edUnitNames">${knownUnits().map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist>`)}
         ${s.movable ? section('model', 'Модель', mdl ? '.glb' : '', `
-          ${!orig && !origObjects.has(s.id) ? `<label class="ed-f">Слой<select class="field" name="layer"><option value="">по месту: здания верфи или город</option>${Object.entries(NEW_LAYERS).map(([k, v]) => `<option value="${k}"${k === e.layer ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select></label>` : ''}
+          ${!orig && !origObjects.has(s.id) ? `<label class="ed-f">Слой<select class="field" name="layer"><option value="">по месту: здания верфи или город</option>${Object.entries(NEW_LAYERS).map(([k, v]) => `<option value="${k}"${k === e.layer ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+          <label class="ed-f" title="Объекты верфи видны в режиме «Только верфь» и есть в списке объектов">Относится<select class="field" name="scope"><option value="">по слою или месту</option>${Object.entries(SCOPES).map(([k, v]) => `<option value="${k}"${k === e.scope ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select></label>` : ''}
           <p class="ed-now">Сейчас: ${modelLine}</p>
           <div class="ed-row">
             <label class="btn ed-file">Заменить моделью .glb<input type="file" accept=".glb,model/gltf-binary" hidden data-act="glb" /></label>
@@ -714,8 +715,8 @@ export function setupEditor(api) {
       if (t.name === 'type') {
         setField('type', t.value);
         updatePreview();
-      } else if (t.name === 'layer') {
-        setField('layer', t.value);
+      } else if (t.name === 'layer' || t.name === 'scope') {
+        setField(t.name, t.value);
       } else if (t.name === 'wall' || t.name === 'roof' || t.name === 'roofColor') {
         setField(t.name, t.value);
         updatePreview();

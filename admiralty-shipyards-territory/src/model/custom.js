@@ -329,6 +329,19 @@ function applyRoof(b, e) {
   return b;
 }
 
+// К чему относится новый объект — к верфи или к городу (от этого зависят режим «Только верфь»,
+// список объектов верфи и реестр): явно — полем scope записи ('yard' | 'city'); иначе по
+// выбранному слою (здания верфи, стапели и краны, суда — верфь; окружающая застройка — город);
+// иначе по месту: на территории верфи или за ней (судно на воде — за ней).
+export const SCOPES = { yard: 'к верфи', city: 'к городу' };
+const YARD_LAYERS = new Set(['shipyard', 'production', 'vessels']);
+export function newObjectInYard(e, byPlace) {
+  if (e?.scope === 'yard' || e?.scope === 'city') return e.scope === 'yard';
+  if (YARD_LAYERS.has(e?.layer)) return true;
+  if (e?.layer === 'context') return false;
+  return byPlace;
+}
+
 // Новое здание по записи с box: коробка нужного размера, кровля и проёмы по типу.
 export function boxBuilding(id, e, { inYard, zoneOf }) {
   const bx = e.box || {};
@@ -337,7 +350,7 @@ export function boxBuilding(id, e, { inYard, zoneOf }) {
   const [x, y] = ring ? centroid(ring) : [+bx.x || 0, +bx.y || 0];
   const type = BUILDING_TYPES.includes(e.type) ? e.type : 'warehouse';
   const fin = DEFAULT_FINISH[type];
-  const yard = inYard([x, y]);
+  const yard = newObjectInYard(e, inYard([x, y]));
   const b = decorate(
     {
       kind: yard ? 'shipyard' : 'context',
@@ -383,7 +396,7 @@ export const scaleOf = (e) => (Number.isFinite(+e?.scale) && +e.scale > 0 ? +e.s
 // Сведения о новом здании-модели (без своих данных) — для карточки и реестра.
 export function modelBuilding(id, m, e, { inYard, zoneOf }) {
   const c = centroid(m.hull);
-  const yard = inYard(c);
+  const yard = newObjectInYard(e, inYard(c));
   return {
     id,
     name: has(e?.name) ? e.name : `Новое здание ${id}`,
