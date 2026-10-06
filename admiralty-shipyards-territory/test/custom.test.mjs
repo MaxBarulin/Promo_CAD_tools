@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { getTerritory } from '../src/data/index.js';
 import { initModel, buildModel, makeBuildingObject } from '../src/model/index.js';
-import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel, editBuilding, splitRing, newObjectInYard, modelBuilding } from '../src/model/custom.js';
+import { prepareCustom, analyzeGlb, parseGlb, customIdFromFile, transformRing, placeModel, editBuilding, splitRing, newObjectInYard, modelBuilding, boxBuilding } from '../src/model/custom.js';
 import { straighten } from '../src/model/straighten.js';
 import { mergeGlb, placementTRS } from '../src/export/glb-merge.js';
 import { centroid, area } from '../src/geo.js';
@@ -89,6 +89,13 @@ assert.equal(newObjectInYard({ scope: 'yard' }, false), true);
 assert.equal(newObjectInYard({ layer: 'context' }, true), false);
 assert.equal(newObjectInYard({}, true), true);
 assert.equal(newObjectInYard({}, false), false);
+// новое здание коробкой: остекление и низ окон из формы применяются (ленточные окна ночью светятся)
+{
+  const nb = boxBuilding('N8', { type: 'hall', glazing: 'ribbon', sill: 1.5, box: { x: 0, y: 0, length: 30, width: 18 } }, { inYard: () => true, zoneOf: () => null });
+  assert.equal(nb.glazing, 'ribbon');
+  assert.equal(nb.sill, 1.5);
+  assert.equal(boxBuilding('N8', { glazing: 'nope', box: {} }, { inYard: () => true, zoneOf: () => null }).glazing, undefined);
+}
 assert.equal(modelBuilding('N9', { hull: [[0, 0], [10, 0], [10, 5], [0, 5]], z0: 0, z1: 6 }, { layer: 'vessels' }, { inYard: () => false, zoneOf: () => null }).kind, 'shipyard');
 {
   // модель судна, добавленная в слой «Суда и плавдоки», в сборке — объект верфи

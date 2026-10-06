@@ -9,7 +9,7 @@
 //   • локальный файл — этот браузер (localStorage, модели — IndexedDB).
 // «Скачать изменения» — архив для папки custom/: после сборки правки становятся частью модели.
 
-import { BUILDING_TYPES, WALLS, ROOF_TYPES, ROOF_COLORS, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb, moveObject, moveDataItem, objectPivot, NEW_LAYERS, LAYER_KIND, SCOPES } from '../model/custom.js';
+import { BUILDING_TYPES, WALLS, ROOF_TYPES, ROOF_COLORS, GLAZING, DATA_KEYS, UNIT_ROLES, cleanUnits, editBuilding, boxBuilding, placeModel, modelBuilding, modelObject, patchInfo, analyzeGlb, moveObject, moveDataItem, objectPivot, NEW_LAYERS, LAYER_KIND, SCOPES } from '../model/custom.js';
 import { makeBuildingObject, buildingLayer } from '../model/index.js';
 import { buildingSummary } from '../model/buildings.js';
 import { Sink } from '../model/geom.js';
@@ -578,12 +578,13 @@ export function setupEditor(api) {
           <label class="ed-f">Фасад<select class="field" name="wall"${procedural ? '' : ' disabled'}>${!wallVal ? '<option value="">—</option>' : ''}${WALLS.map((w) => `<option value="${w}"${w === wallVal ? ' selected' : ''}>${esc(wallName(w))}</option>`).join('')}</select></label>
         </div>
         ${nParts > 1 ? `<p class="ed-hint">Здание из ${nParts} частей разной высоты: этажность и высота частей заданы в custom.json (поле parts).</p>` : ''}
-        ${procedural ? section('look', 'Кровля и окна', [ROOF_TYPES[roofVal] || '', e.windows === false ? 'без окон' : ''].filter(Boolean).join(' · '), `
+        ${procedural ? section('look', 'Кровля и окна', [ROOF_TYPES[roofVal] || '', e.windows === false ? 'без окон' : GLAZING[e.glazing] || ''].filter(Boolean).join(' · '), `
           <div class="ed-2">
             <label class="ed-f">Кровля<select class="field" name="roof">${!ROOF_TYPES[roofVal] ? `<option value="" selected>${roofVal ? 'прежняя' : '—'}</option>` : ''}${Object.entries(ROOF_TYPES).map(([k, n]) => `<option value="${k}"${k === roofVal ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
             <label class="ed-f">Высота кровли, м<input class="field" name="roofH" type="number" min="0" max="60" step="any" placeholder="авто" value="${esc(e.roofH ?? '')}" /></label>
             <label class="ed-f">Покрытие<select class="field" name="roofColor"><option value="">${esc(orig?.roof?.color ? roofColorName(orig.roof.color) : 'прежнее')}</option>${ROOF_COLORS.map((k) => `<option value="${k}"${k === e.roofColor ? ' selected' : ''}>${esc(roofColorName(k))}</option>`).join('')}</select></label>
             <label class="ed-f">Низ окон, м<input class="field" name="sill" type="number" min="0" max="6" step="any" placeholder="по типу" value="${esc(e.sill ?? '')}" title="Высота низа окон первого этажа над землёй" /></label>
+            <label class="ed-f">Остекление<select class="field" name="glazing" title="Ленточные окна и окна по этажам ночью светятся"><option value="">${esc(orig?.glazing ? GLAZING[orig.glazing] || 'прежнее' : 'по типу')}</option>${Object.entries(GLAZING).map(([k, n]) => `<option value="${k}"${k === e.glazing ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
           </div>
           <label class="toggle"><input type="checkbox" name="noWindows"${e.windows === false ? ' checked' : ''} /><span class="box"></span>Без окон (подстанция, техническое здание)</label>
           <p class="ed-hint" id="edRoofHint"${st.obj?.info.dims ? ' hidden' : ''}>Контур не прямоугольный: двускатная и вальмовая кровли пойдут скатами по контуру, остальные — плоской.</p>`) : ''}` : ''}
@@ -717,7 +718,7 @@ export function setupEditor(api) {
         updatePreview();
       } else if (t.name === 'layer' || t.name === 'scope') {
         setField(t.name, t.value);
-      } else if (t.name === 'wall' || t.name === 'roof' || t.name === 'roofColor') {
+      } else if (t.name === 'wall' || t.name === 'roof' || t.name === 'roofColor' || t.name === 'glazing') {
         setField(t.name, t.value);
         updatePreview();
       } else if (t.name === 'noWindows') {

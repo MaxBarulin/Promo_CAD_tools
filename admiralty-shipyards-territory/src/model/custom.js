@@ -372,6 +372,8 @@ export function boxBuilding(id, e, { inYard, zoneOf }) {
   );
   if (has(e.src)) b.refined = e.src;
   if (liftOf(e)) b.lift = liftOf(e);
+  if (has(e.sill)) b.sill = +e.sill;
+  if (GLAZING[e.glazing]) b.glazing = e.glazing;
   if (e.windows === false) b.windows = false;
   return { ...applyRoof(b, e), edited: true };
 }

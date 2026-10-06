@@ -693,6 +693,10 @@ async function main() {
     holder.scale.setScalar(t.scale || 1);
     if (inner) inner.position.set(-cx, 0, cy);
   }
+  // стекло с материалом «Остекление_освещённое» (имя из выгрузки модели; Blender может дописать .001)
+  // ночью светится, как окна остальных зданий: заменяется общим материалом палитры
+  const LIT_GLASS = /^(остекление_освещ[её]нное|glass_lit)(\.\d+)?$/i;
+  const litGlass = (m) => (m && LIT_GLASS.test(m.name || '') ? getMaterial('glass_lit') : m);
   function makeModelHolder(bytes, label = '') {
     const holder = new THREE.Group();
     const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
@@ -704,6 +708,7 @@ async function main() {
           if (c.isMesh) {
             c.castShadow = true;
             c.receiveShadow = true;
+            c.material = Array.isArray(c.material) ? c.material.map(litGlass) : litGlass(c.material);
           }
         });
         holder.add(gltf.scene);
