@@ -50,7 +50,8 @@ await page.goto(pathToFileURL(path.join(root, 'dist/index.html')).href);
 await page.waitForFunction(() => window.__ready === true, null, { timeout: 180000 });
 await mkdir(outDir, { recursive: true });
 const views = await page.evaluate(() => window.__viewer.VIEWS.map((v) => v.id));
-if (flags.evening) await page.evaluate(() => window.__viewer.setEvening(true));
+// страница открывается в текущем времени; снимки — в полдень (или в сумерках с --evening)
+await page.evaluate((ev) => window.__viewer.setEvening(ev), !!flags.evening);
 for (const id of views) {
   if (only && !only.includes(id)) continue;
   await page.evaluate((id) => {

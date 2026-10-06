@@ -985,14 +985,14 @@ async function main() {
       const ms = simMs() + d * DAY;
       setDateTime(isoDay(ms), (ms % DAY) / 3600e3);
     });
-  // «Сейчас»: сегодняшняя дата и время по Москве, часы идут в реальном времени
-  $('optTimeNow').addEventListener('click', () => {
+  // «Сейчас»: сегодняшняя дата и время по Москве, часы идут в реальном времени; так страница и открывается
+  function setNow() {
     setSim(Date.now() + MSK);
     setSpeed(1);
     applyDayTime(true);
-  });
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light';
-  setEvening(prefersDark || document.documentElement.dataset.theme === 'dark');
+  }
+  $('optTimeNow').addEventListener('click', setNow);
+  setNow();
 
   // ---------- внутризаводские автобусы ----------
   // Оба едут по кругу маршрута (data.bus) туда, где должны быть по расписанию в момент часов модели.
@@ -1319,7 +1319,7 @@ async function main() {
   if (location.hash === '#tour') tour.start();
 
   $('loading').remove();
-  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, setDateTime, setSpeed, buses, setBusCount, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
+  window.__viewer = { scene, camera, controls, flyTo, model, VIEWS, setEvening, setDayTime, setDateTime, setSpeed, setNow, buses, setBusCount, tour, select, selectById, focusObject, pickMesh, registry, objectList, editor, setYardOnly, setPanelCollapsed, setTab };
   window.__ready = true;
 
   // ---------- вспомогательные ----------

@@ -48,6 +48,8 @@ async function open(viewport, { hash = '', mobile = false, storage = {} } = {}) 
   }, storage);
   await p.goto(url + hash, { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => window.__ready === true, null, { timeout: 240000 });
+  // страница открывается в текущем времени; снимки — днём, в 13:00
+  await p.evaluate(() => window.__viewer.setDayTime(13));
   return p;
 }
 async function shot(p, name, wait = 5000) {
