@@ -145,8 +145,10 @@ export function applyGenplan(oldYard, { zoneOf }) {
     const officialName = row ? clean(row.name) : `${PURPOSE_RU[purpose][0].toUpperCase()}${PURPOSE_RU[purpose].slice(1)} здание без номера`;
     const name = row ? officialName : purpose === 'third' ? 'Объект сторонней организации' : 'Здание без номера на схеме';
     const est = estimateGp(purpose, name, G.A, len, wid);
-    const type = pickType(purpose, donorFits ? donor.type : null, name);
-    const useDonorH = donorFits && donor.h && (!donor.approx || G.A >= 0.5 * area(donor.poly));
+    // будки, бытовки, контейнеры: тип и высота — по названию, а не по прежнему (оценочному) зданию
+    const lowByName = /будк|бытовк|контейнер|ларёк|ларек|киоск/i.test(name);
+    const type = lowByName && purpose !== 'third' ? 'utility' : pickType(purpose, donorFits && !lowByName ? donor.type : null, name);
+    const useDonorH = donorFits && donor.h && !lowByName && (!donor.approx || (G.A >= 0.5 * area(donor.poly) && purpose !== 'engineering'));
     const h = useDonorH ? donor.h : est.h;
     const floors = useDonorH ? donor.floors || est.floors : est.floors;
     const idx = g.nums.length ? +g.nums[0] : unnamed + 500;
