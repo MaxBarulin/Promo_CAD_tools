@@ -60,7 +60,16 @@ for (const id of views) {
   }, id);
   await page.waitForTimeout(1200);
   const file = path.join(outDir, `${id}${flags.evening ? '-evening' : ''}.jpg`);
-  await page.screenshot({ path: file, type: 'jpeg', quality: 82 });
+  // без GPU кадр рисуется долго: ждём до 5 минут и повторяем при сбое
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.screenshot({ path: file, type: 'jpeg', quality: 82, timeout: 300000 });
+      break;
+    } catch (e) {
+      if (attempt >= 3) throw e;
+      console.log('повтор снимка', id, String(e.message || e).slice(0, 60));
+    }
+  }
   console.log('снимок:', path.relative(root, file));
 }
 await browser.close();
