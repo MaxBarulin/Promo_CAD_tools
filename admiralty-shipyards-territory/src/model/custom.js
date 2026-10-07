@@ -19,7 +19,7 @@ import { decorate, minRect } from '../data/decorate.js';
 // Код объекта по имени файла: «Z129.glb», «Z129 Корпусосборочный цех.glb» → Z129
 export const customIdFromFile = (file) => file.replace(/\.glb$/i, '').trim().split(/\s+/)[0];
 
-export const BUILDING_TYPES = ['hall', 'elling', 'elling_historic', 'warehouse', 'office', 'checkpoint', 'utility', 'historic'];
+export const BUILDING_TYPES = ['hall', 'elling', 'elling_historic', 'warehouse', 'office', 'checkpoint', 'utility', 'historic', 'foreign'];
 
 // ---------- разбор GLB ----------
 
@@ -140,6 +140,7 @@ export const DEFAULT_FINISH = {
   checkpoint: { wall: 'white', roof: 'r_dark' },
   utility: { wall: 'gray', roof: 'r_bitumen' },
   historic: { wall: 'yellow', roof: 'r_rust' },
+  foreign: { wall: 'gray', roof: 'r_gray' },
 };
 // Формы кровли: двускатная, вальмовая, сводчатая и односкатная — для прямоугольного контура
 export const ROOF_TYPES = { flat: 'Плоская', gable: 'Двускатная', hip: 'Вальмовая', barrel: 'Сводчатая', shed: 'Односкатная', pyramid: 'Шатровая', multigable: 'Многопролётная', dome: 'Купол' };
@@ -454,7 +455,7 @@ export function prepareCustom(config = {}, files = []) {
 }
 
 // Удаление из исходных данных (до сборки): так удалённое пропадает и из DXF/GeoJSON.
-export const DATA_KEYS = ['buildings', 'cranes', 'ships', 'docks', 'slipways', 'bridges', 'chimneys', 'arches', 'fences'];
+export const DATA_KEYS = ['buildings', 'cranes', 'ships', 'docks', 'slipways', 'bridges', 'chimneys', 'arches', 'fences', 'platforms', 'markers'];
 // Возвращает коды, которые нашлись в данных.
 export function removeFromData(data, remove) {
   const found = new Set();

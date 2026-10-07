@@ -1,7 +1,7 @@
 // Прочие сооружения: мосты, дымовые трубы, арка Новой Голландии, деревья,
 // автомобили, складируемый металл, секции корпуса, контейнеры.
 
-import { sub, add, mul, norm, dist, lerp, rect, pointInRing, bbox, rng, DEG } from '../geo.js';
+import { sub, add, mul, norm, dist, lerp, rect, pointInRing, bbox, rng, ensureCCW, DEG } from '../geo.js';
 
 // ---------- мосты ----------
 
@@ -311,3 +311,23 @@ export function buildContainers(sink, at, angle, n, seed) {
 }
 
 export { rect, lerp };
+
+// Площадка или плита со схемы генплана: тонкая плита по контуру (бетон / металл), яма — заглублённая
+export function buildPlatform(sink, p) {
+  const ring = ensureCCW(p.poly);
+  if (p.surface === 'pit') {
+    // борт ямы по контуру и тёмное дно чуть ниже земли
+    sink.prism('asphalt', ring, -0.02, 0.05, { bottom: false });
+    return;
+  }
+  const key = p.surface === 'metal' ? 'steel_plate' : 'apron';
+  sink.prism(key, ring, 0.02, p.surface === 'metal' ? 0.22 : 0.3, { bottom: false });
+}
+
+// Отметка объекта без контура: стойка с табличкой (сам объект — набережная, пирс, эстакада — на схеме не очерчен)
+export function buildMarker(sink, m) {
+  const [x, y] = m.at;
+  sink.cylinder('marker_post', [x, y], 0, 2.3, 0.07, 0.07, 8, { top: true });
+  sink.box(m.kind === 'service' ? 'marker_service' : 'marker_sign', [x, y, 2.1], [0.9, 0.08, 0.6], 0);
+  sink.cylinder('apron', [x, y], 0, 0.12, 0.6, 0.6, 12, { top: true });
+}

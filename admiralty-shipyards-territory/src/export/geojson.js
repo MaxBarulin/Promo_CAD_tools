@@ -36,6 +36,8 @@ export function buildGeoJSON(data, model) {
   for (const r of data.internalRoads) add({ type: 'LineString', coordinates: r.line.map(ll) }, { layer: 'internal_road', name: r.name, width: r.w });
   for (const r of data.rails) add({ type: 'LineString', coordinates: r.line.map(ll) }, { layer: 'rail', name: r.name, gauge: r.gauge });
   for (const c of data.cranes) add({ type: 'Point', coordinates: ll(c.at) }, { layer: 'crane', id: c.id, name: c.name, type: c.type });
+  for (const p of data.platforms || []) add({ type: 'Polygon', coordinates: [ring(p.poly)] }, { layer: 'platform', id: p.id, name: p.name, surface: p.surface, genplan_no: p.gp?.num ?? null, inv: p.gp?.inv || null, lit: p.gp?.lit || null });
+  for (const m of data.markers || []) add({ type: 'Point', coordinates: ll(m.at) }, { layer: 'genplan_point', id: m.id, name: m.name, kind: m.kind, genplan_no: m.gp?.num ?? null, inv: m.gp?.inv || null, lit: m.gp?.lit || null });
   for (const l of [...data.labels, ...data.water.labels]) add({ type: 'Point', coordinates: ll(l.at) }, { layer: 'label', name: l.text });
   for (const b of data.bridges) add({ type: 'Polygon', coordinates: [ring(bufferPolyline([b.from, b.to], b.w / 2))] }, { layer: 'bridge', id: b.id, name: b.name });
 

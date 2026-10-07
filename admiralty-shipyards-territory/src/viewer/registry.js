@@ -108,7 +108,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
         const s = epbStatus(r, st.years);
         if (st.epb === 'due' ? s !== 'soon' && s !== 'overdue' : s !== st.epb) return false;
       }
-      if (q && !`${it.id} ${it.name} ${it.kind} ${r.invNo || ''} ${r.opoReg || ''} ${r.epbNo || ''}`.toLowerCase().includes(q)) return false;
+      if (q && !`${it.id} ${it.name} ${it.kind} №${it.gpNum} ${it.gpNums} ${it.inv} ${it.lit} ${it.purpose} ${it.marks} ${r.invNo || ''} ${r.opoReg || ''} ${r.epbNo || ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
     const { key, dir } = st.sort;
@@ -200,7 +200,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     </div>
     <div class="reg-demo" id="regDemo" hidden>Демо-режим: поля ОПО, ЭПБ и технического состояния заполнены условными значениями для показа возможностей. Это не данные предприятия, они не сохраняются.</div>
     <div class="reg-filters">
-      <input type="search" id="regQ" placeholder="Поиск: название, код, инв. №, № ЭПБ" aria-label="Поиск" />
+      <input type="search" id="regQ" placeholder="Поиск: название, код, № на генплане, инв. №, № ЭПБ" aria-label="Поиск" />
       <select id="regCat" aria-label="Вид объекта"><option value="">Все объекты</option><option value="building">Здания</option><option value="structure">Сооружения</option><option value="device">Краны</option></select>
       <select id="regZone" aria-label="Участок"><option value="">Все участки</option>${zones.map((z) => `<option>${esc(z)}</option>`).join('')}</select>
       <select id="regOpo" aria-label="Класс ОПО"><option value="">Любой класс ОПО</option>${['I', 'II', 'III', 'IV', 'не ОПО'].map((c) => `<option value="${c}">${c === 'не ОПО' ? 'Не ОПО' : 'Класс ' + c}</option>`).join('')}<option value="-">Класс не указан</option></select>
@@ -221,6 +221,8 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
   const COLS = [
     ['id', 'Код'],
     ['name', 'Наименование'],
+    ['gpNum', '№ ГП'],
+    ['purpose', 'Назначение'],
     ['zone', 'Участок'],
     ['floors', 'Эт.'],
     ['height', 'H, м'],
@@ -352,6 +354,8 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
         return `<tr data-id="${esc(it.id)}" tabindex="0">
           <td class="mono">${esc(it.id)}</td>
           <td>${esc(it.name)}${it.kind !== it.name ? `<small>${esc(it.kind)}</small>` : ''}</td>
+          <td class="mono">${esc(it.gpNum === '' ? '—' : it.gpNum)}${it.gpNums ? `<small>${esc(it.gpNums)}</small>` : ''}</td>
+          <td>${esc(it.purpose || '—')}${it.inv ? `<small>инв. ${esc(it.inv)}${it.lit ? `, лит. ${esc(it.lit)}` : ''}</small>` : ''}</td>
           <td>${esc(it.zone)}</td>
           <td class="n">${it.floors ?? '—'}</td>
           <td class="n">${num(it.height)}</td>

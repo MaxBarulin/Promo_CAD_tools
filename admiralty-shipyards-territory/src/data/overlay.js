@@ -1,6 +1,7 @@
 // Подмешивание данных OpenStreetMap к схеме.
-// Геометрия зданий, воды, улиц и ограждений берётся из OSM; названия, описания и
-// оформление зданий верфи переносятся со схемы на совпавшие OSM-контуры.
+// Геометрия воды, улиц, ограждений и городской застройки берётся из OSM. Здания верфи
+// с контурами по схеме генплана сохраняются; для прочих зданий верфи названия, описания
+// и оформление переносятся на совпавшие OSM-контуры.
 // Стапели, краны, суда, доки и мосты остаются из схемы.
 
 import { centroid, pointInRing, area } from '../geo.js';
@@ -10,10 +11,19 @@ export function applyOverlay(data, ov) {
   const report = { matched: [], unmatched: [] };
   const out = { ...data, meta: { ...data.meta, source: 'osm', osm: { fetched: ov.fetched, attribution: ov.source } } };
 
-  // здания: переносим имена схемы на OSM-контуры
-  const osmB = ov.buildings.map((b) => ({ ...b }));
+  // здания верфи по схеме генплана остаются как есть: OSM-контуры внутри территории не используются;
+  // для остальных зданий верфи имена схемы переносятся на совпавшие OSM-контуры
+  const yardZones = (data.zones || []).filter((z) => z.kind === 'shipyard').map((z) => z.polygon);
+  const genplanYard = data.buildings.filter((b) => b.kind === 'shipyard' && b.geomSrc === 'genplan');
+  const osmB = ov.buildings
+    .filter((b) => !genplanYard.length || !(b.kind === 'shipyard' || yardZones.some((z) => pointInRing(centroid(b.poly), z))))
+    .map((b) => ({ ...b }));
   const schemaYard = data.buildings.filter((b) => b.kind === 'shipyard');
   for (const sb of schemaYard) {
+    if (sb.geomSrc === 'genplan') {
+      report.matched.push(sb.id);
+      continue;
+    }
     const c = centroid(sb.poly);
     const hit = osmB.filter((b) => pointInRing(c, b.poly)).sort((a, b) => area(a.poly) - area(b.poly))[0];
     if (hit && !hit.matched) {
@@ -38,7 +48,7 @@ export function applyOverlay(data, ov) {
   }
   // знаковые здания окружения из схемы, не совпавшие ни с одним OSM-контуром, сохраняем
   const keepContext = data.buildings.filter((b) => b.kind === 'context' && !osmB.some((o) => pointInRing(centroid(b.poly), o.poly)));
-  out.buildings = [...osmB, ...keepContext];
+  out.buildings = [...genplanYard, ...osmB, ...keepContext];
   out.frontage = false;
 
   if (ov.water && ov.water.length) out.water = { ...data.water, osmPolygons: ov.water };

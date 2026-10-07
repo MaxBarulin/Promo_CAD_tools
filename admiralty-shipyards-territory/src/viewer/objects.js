@@ -17,12 +17,13 @@ const TYPES = [
   { id: 'office', name: 'Административные, проходные', test: (i) => OFFICES.includes(i.type) },
   { id: 'warehouse', name: 'Склады', test: (i) => i.type === 'warehouse' },
   { id: 'utility', name: 'Вспомогательные здания', test: (i) => i.type === 'utility' },
+  { id: 'foreign', name: 'Объекты сторонних организаций', test: (i) => i.type === 'foreign' },
   { id: 'structure', name: 'Стапели, краны, мосты', test: (i) => STRUCTURES.includes(i.kind) },
   { id: 'vessel', name: 'Суда и плавдоки', test: (i) => i.kind === 'vessel' || i.kind === 'dock' },
   { id: 'bus', name: 'Автобусы', test: (i) => i.kind === 'bus' },
 ];
 
-const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба', bus: 'Внутризаводской автобус' };
+const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба', bus: 'Внутризаводской автобус', platform: 'Площадка, плита', marker: 'Сооружение (номер на схеме)', service: 'Отметка на схеме' };
 const LAYERS = new Set(['shipyard', 'production', 'vessels', 'bridges']);
 const WATER = 'Акватория';
 const TRANSPORT = 'Транспорт';
@@ -49,7 +50,7 @@ export function setupObjectList({ $, data, pickMesh, registryItems, onPick, onSh
         kind: kind.replace(/ \(сооружение\)$/, ''),
         zone: r?.zone || ZONE_NAMES[o.info.zone] || zoneByPoint(c, data) || WATER,
         size: r?.footprint ?? (o.proxy.poly ? Math.round(area(o.proxy.poly)) : 0),
-        text: `${o.id} ${o.name} ${kind} ${(o.info.units || []).map((u) => `${u.name} ${u.person || ''}`).join(' ')}`.toLowerCase(),
+        text: `${o.id} ${o.name} ${kind} ${o.info.gp?.num ? `№${o.info.gp.num} ${(o.info.gp.nums || []).join(' ')} ${o.info.gp.inv || ''} ${o.info.gp.lit || ''}` : ''} ${(o.info.units || []).map((u) => `${u.name} ${u.person || ''}`).join(' ')} ${(o.info.services || []).join(' ')}`.toLowerCase(),
       });
     }
     for (const o of extra()) {

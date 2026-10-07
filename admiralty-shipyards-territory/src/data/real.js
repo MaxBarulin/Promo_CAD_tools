@@ -11,6 +11,7 @@ import * as Y from './shipyard.js';
 import { MAP_BUILDINGS_RAW, MAP_PIECES, px } from './mapdata.js';
 import { minRect, hash, decorate } from './decorate.js';
 import { straighten } from '../model/straighten.js';
+import { applyGenplan } from './genplan-apply.js';
 import { PALETTE } from '../model/materials.js';
 import { ensureCCW, area, centroid, dist, sub, norm, add, mul, pointInRing, bbox, angleOf, polylineLength, pointAt } from '../geo.js';
 
@@ -503,9 +504,15 @@ function streetLabels(list) {
   return [...best.values()].filter((x) => x.L > 120).map(({ s, L }) => ({ text: s.name, at: pointAt(s.line, L / 2).p, kind: 'street' }));
 }
 
+// отчёт о переносе схемы генплана: отброшенные здания и соответствие кодов
+export let GENPLAN_REPORT = null;
+
 export function realTerritory() {
   const st = streets();
-  const yb = yardBuildings();
+  // здания верфи — по схеме генплана; прежние здания отдают коды, высоты и отделку
+  const gp = applyGenplan(yardBuildings(), { zoneOf });
+  GENPLAN_REPORT = { dropped: gp.dropped, idMap: gp.idMap, notes: gp.notes };
+  const yb = gp.buildings;
   return {
     zones: YARD_ZONES,
     // участки, отошедшие от завода: сам участок — в пределах прежней границы верфи

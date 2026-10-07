@@ -1,6 +1,7 @@
 // Интерактивный просмотр модели территории АО «Адмиралтейские верфи».
 
 import * as THREE from 'three';
+import { PURPOSE_SHORT, PURPOSE_COLORS } from '../data/genplan.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import CUSTOM from 'custom:files';
@@ -8,7 +9,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { getTerritory } from '../data/index.js';
 import { initModel, buildModel, toMergedGroups, fillLayerGroup, buildPickMesh } from '../model/index.js';
 import { prepareCustom, DATA_KEYS, ROOF_TYPES } from '../model/custom.js';
-import { createMaterialFactory } from '../model/materials.js';
+import { createMaterialFactory, purposeKeyMap } from '../model/materials.js';
 import { toLatLon, centroid, area, pointInRing } from '../geo.js';
 import { setupExports } from './exports.js';
 import { setupRegistry } from './registry.js';
@@ -53,6 +54,9 @@ const KIND_LABEL = {
   chimney: 'Дымовая труба',
   landmark: 'Достопримечательность',
   misc: 'Оборудование',
+  platform: 'Площадка, плита',
+  marker: 'Сооружение (номер на схеме генплана)',
+  service: 'Отметка на схеме генплана',
 };
 
 const ZONE_LABEL = { galerny: 'Галерный остров', kolomna: 'Основная площадка (между Фонтанкой и Пряжкой)', matisov: 'Матисов остров', novo: 'Ново-Адмиралтейский остров' };
@@ -61,16 +65,16 @@ const ZONE_LABEL = { galerny: 'Галерный остров', kolomna: 'Осн�
 const PINS = {
   Z199: ['Центральная проходная', 2600],
   Z182: ['Заводоуправление', 1600],
-  Z129: ['Главная судостроительная мастерская', 1600],
-  Z3: ['Главный корпус Галерного острова', 1800],
-  S1: ['Стапель № 1', 2600],
-  S2: ['Стапель № 2', 2600],
-  Z14: ['Корпусообрабатывающий цех', 1400],
-  Z58: ['Сборочно-сварочный цех', 1600],
-  Z68: ['Цех у устья Мойки', 1400],
-  Z136: ['Большой каменный эллинг', 2600],
-  Z171: ['Малый каменный эллинг', 1800],
-  Z126: ['Крытый эллинг', 2600],
+  Z129: ['Цех № 6-Ю', 1600],
+  Z3: ['Цех № 12, основной корпус', 1800],
+  S1: ['Южный стапель 5-Ю', 2600],
+  S2: ['Северный стапель 5-С', 2600],
+  Z14: ['Участок предсборки цеха № 8', 1400],
+  Z58: ['Участок № 2 цеха № 7', 1600],
+  Z68: ['Цеха 6-С и 10', 1400],
+  Z136: ['Эллинг № 2 (Большой каменный)', 2600],
+  Z171: ['Эллинг № 1 (Малый каменный)', 1800],
+  Z126: ['Цех № 9 ЦОС (крытый эллинг)', 2600],
   D1: ['Плавдок «Луга»', 1800],
   D2: ['Плавдок СПД-2М', 1600],
   KR: ['Ледокол «Красин»', 1600],
@@ -293,6 +297,18 @@ async function main() {
     layersEl.appendChild(lab);
   }
   const hiddenLayers = {};
+
+  // раскраска зданий верфи по назначению (легенда схемы генплана)
+  let purposeMode = false;
+  const purposeMapOf = (o) => purposeKeyMap(o.info?.gp?.purpose);
+  $('purposeLegend').innerHTML = [...Object.entries(PURPOSE_SHORT).map(([k, n]) => [PURPOSE_COLORS[k], n]), ['#bdbdb9', 'назначение не указано']]
+    .map(([c, n]) => `<span class="chip"><i style="background:${c}"></i>${n}</span>`)
+    .join('');
+  $('optPurpose').addEventListener('change', (e) => {
+    purposeMode = e.target.checked;
+    $('purposeLegend').hidden = !purposeMode;
+    rebuildLayers(['shipyard']);
+  });
 
   $('optLabels').addEventListener('change', (e) => ($('labels').style.display = e.target.checked ? '' : 'none'));
   $('optShadows').addEventListener('change', (e) => {
@@ -554,6 +570,10 @@ async function main() {
     const i = o.info;
     const rows = [];
     rows.push(['Код', o.id]);
+    if (i.gp?.num) rows.push(['№ на генплане', i.gp.nums?.length > 1 ? i.gp.nums.join(', ') : i.gp.num]);
+    if (i.gp?.inv) rows.push(['Инв. номер', i.gp.inv]);
+    if (i.gp?.lit) rows.push(['Литера', i.gp.lit]);
+    if (i.gp?.purpose && PURPOSE_SHORT[i.gp.purpose]) rows.push(['Назначение', PURPOSE_SHORT[i.gp.purpose]]);
     if (i.zone && ZONE_LABEL[i.zone]) rows.push(['Участок', ZONE_LABEL[i.zone]]);
     if (i.dims) rows.push(['Размеры', `${i.dims[0]} × ${i.dims[1]} м`]);
     if (i.height) rows.push(['Высота', `${i.height} м`]);
@@ -561,6 +581,7 @@ async function main() {
     if (i.footprint) rows.push(['Площадь застройки', `${i.footprint.toLocaleString('ru-RU')} м²`]);
     if (i.roof && ROOF_NAMES[i.roof]) rows.push(['Кровля', ROOF_NAMES[i.roof].toLowerCase()]);
     if (i.refined) rows.push(['Уточнено', i.refined]);
+    if (i.services?.length) rows.push(['Отмечено на схеме', i.services.join(', ')]);
     if (!o.live) {
       const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
       const [lat, lon] = toLatLon(c);
@@ -574,7 +595,7 @@ async function main() {
       </div>
       <div class="kind">${KIND_LABEL[i.kind] || 'Объект'}</div>
       <h3>${escapeHtml(o.name)}</h3>
-      ${i.approx || o.generated ? '<span class="badge">Положение условное</span>' : ''}
+      ${i.approx || o.generated ? `<span class="badge">${i.gp ? 'Высота оценена' : 'Положение условное'}</span>` : ''}
       ${i.info ? `<p>${escapeHtml(i.info)}</p>` : ''}
       ${o.live ? `<p class="card-live" id="cardLive">${escapeHtml(o.status())}</p>` : ''}
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('')}</dl>
@@ -755,7 +776,7 @@ async function main() {
       const g = groups.find((x) => x.userData.layer === id);
       const layer = model.layers.find((l) => l.id === id);
       if (!g || !layer) continue;
-      fillLayerGroup(THREE, g, layer, getMaterial, exclude);
+      fillLayerGroup(THREE, g, layer, getMaterial, exclude, purposeMode && id === 'shipyard' ? purposeMapOf : null);
       for (const sg of g.children) if (sg.userData.scope === 'city') sg.visible = !yardOnly;
     }
   }

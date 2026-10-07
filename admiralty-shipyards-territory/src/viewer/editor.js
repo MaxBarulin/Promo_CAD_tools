@@ -27,8 +27,9 @@ const TYPE_NAMES = {
   checkpoint: 'Проходная, КПП',
   utility: 'Вспомогательное здание',
   historic: 'Историческое здание',
+  foreign: 'Объект сторонней организации',
 };
-const EDITABLE_KINDS = new Set(['building', 'context', 'crane', 'vessel', 'dock', 'slipway', 'bridge', 'fence', 'chimney', 'landmark', 'misc']);
+const EDITABLE_KINDS = new Set(['building', 'context', 'crane', 'vessel', 'dock', 'slipway', 'bridge', 'fence', 'chimney', 'landmark', 'misc', 'platform', 'marker', 'service']);
 const BUILDING_KINDS = new Set(['building', 'context']);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const wallName = (k) => (PALETTE[k]?.name || k).replace(/^Стена_/, '').replace(/_/g, ' ');

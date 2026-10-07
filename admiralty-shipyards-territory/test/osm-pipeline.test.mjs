@@ -17,9 +17,13 @@ assert.equal(ov.fences.length, 1);
 assert.equal(ov.streets.length, 1);
 assert.match(ov.buildings[1].name, /Декабристов/);
 
-const data = applyOverlay(getTerritory({ useOSM: false }), ov);
-assert.ok(data.overlayReport.matched.includes('Z136'), 'название «Большой каменный эллинг» перенесено на OSM-контур');
-assert.equal(data.buildings.find((b) => b.id === 'Z136').name, 'Большой каменный эллинг');
+const base = getTerritory({ useOSM: false });
+const data = applyOverlay(base, ov);
+assert.ok(data.overlayReport.matched.includes('Z136'), 'эллинг Z136 сохранён при подмешивании OSM');
+const z136 = data.buildings.find((b) => b.id === 'Z136');
+assert.equal(z136.name, base.buildings.find((b) => b.id === 'Z136').name);
+assert.equal(z136.geomSrc, 'genplan', 'контур эллинга — по схеме генплана, а не OSM');
+assert.equal(data.buildings.filter((b) => b.kind === 'shipyard' && b.geomSrc !== 'genplan').length, 0, 'OSM-контуры внутри территории верфи не добавляются');
 
 initModel(THREE);
 const model = buildModel(data);

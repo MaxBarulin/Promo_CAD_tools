@@ -133,7 +133,35 @@ export const PALETTE = {
   container: { name: 'Контейнеры', color: '#2f6fa0', roughness: 0.7, metalness: 0.3 },
   container2: { name: 'Контейнеры_2', color: '#b8552e', roughness: 0.7, metalness: 0.3 },
   pick: { name: 'Служебный_выбор', color: '#ffffff' },
+  steel_plate: { name: 'Площадка_металл', color: '#6b7076', roughness: 0.5, metalness: 0.5 },
+  marker_post: { name: 'Отметка_стойка', color: '#3a3d40', metalness: 0.5, roughness: 0.5 },
+  marker_sign: { name: 'Отметка_табличка', color: '#1f5fae', roughness: 0.5 },
+  marker_service: { name: 'Отметка_служба', color: '#e07a2f', roughness: 0.5 },
+
+  // --- раскраска зданий верфи по назначению (цвета легенды схемы генплана) ---
+  p_production: { name: 'Назначение_производственное', color: '#a0c7ee', roughness: 0.9 },
+  p_production_r: { name: 'Назначение_производственное_кровля', color: '#84aed9', roughness: 0.9 },
+  p_admin: { name: 'Назначение_административно-бытовое', color: '#eda5a6', roughness: 0.9 },
+  p_admin_r: { name: 'Назначение_административно-бытовое_кровля', color: '#d48a8b', roughness: 0.9 },
+  p_warehouse: { name: 'Назначение_коммунально-складское', color: '#cfbcea', roughness: 0.9 },
+  p_warehouse_r: { name: 'Назначение_коммунально-складское_кровля', color: '#b5a1d3', roughness: 0.9 },
+  p_engineering: { name: 'Назначение_инженерно-техническое', color: '#f1e484', roughness: 0.9 },
+  p_engineering_r: { name: 'Назначение_инженерно-техническое_кровля', color: '#d9ca66', roughness: 0.9 },
+  p_third: { name: 'Назначение_сторонняя_организация', color: '#e4e1da', roughness: 0.9 },
+  p_third_r: { name: 'Назначение_сторонняя_организация_кровля', color: '#c8c5bd', roughness: 0.9 },
+  p_none: { name: 'Назначение_не_указано', color: '#bdbdb9', roughness: 0.9 },
+  p_none_r: { name: 'Назначение_не_указано_кровля', color: '#a3a39f', roughness: 0.9 },
 };
+
+// Ключи материалов стен зданий
+export const WALL_KEYS = new Set(['brick', 'brick_dark', 'ochre', 'yellow', 'cream', 'pink', 'terracotta', 'green', 'blue_stucco', 'mint', 'red', 'green_dark', 'sand', 'light', 'white', 'gray', 'panel', 'blue_gray', 'blue']);
+
+// Переназначение материалов для раскраски по назначению: стены и кровли — цветом легенды,
+// остекление, двери, цоколь и прочее — без изменений. purpose — ключ назначения или undefined.
+export function purposeKeyMap(purpose) {
+  const p = PALETTE[`p_${purpose}`] ? purpose : 'none';
+  return (key) => (WALL_KEYS.has(key) ? `p_${p}` : key.startsWith('r_') ? `p_${p}_r` : key);
+}
 
 export const WALL_KEYS_CITY = ['ochre', 'yellow', 'cream', 'pink', 'terracotta', 'green', 'sand', 'light', 'blue_stucco', 'gray', 'ochre', 'yellow', 'cream'];
 export const ROOF_KEYS_CITY = ['r_gray', 'r_dark', 'r_rust', 'r_gray', 'r_green', 'r_gray'];

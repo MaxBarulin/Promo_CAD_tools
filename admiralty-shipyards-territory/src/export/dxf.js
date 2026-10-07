@@ -174,6 +174,14 @@ export function buildDXF(data, model) {
     poly('BRIDGES', bufferPolyline([b.from, b.to], b.w / 2));
     text('LABELS', b.from, 2.5, b.name);
   }
+  for (const p of data.platforms || []) {
+    poly('PLATFORMS', p.poly);
+    text('LABELS', p.poly[0], 1.5, `${p.gp?.num ? p.gp.num + ' ' : ''}${p.name}`);
+  }
+  for (const m of data.markers || []) {
+    circle('GENPLAN_POINTS', m.at, 1.5);
+    text('LABELS', [m.at[0] + 2, m.at[1]], 1.5, `${m.gp?.num ? m.gp.num + ' ' : ''}${m.name}`);
+  }
   for (const c of data.cranes) {
     circle('CRANES', c.at, c.type === 'gantry' ? 2 : 6);
     text('CRANES', [c.at[0] + 7, c.at[1]], 1.5, c.name);

@@ -834,7 +834,9 @@ export function buildingSummary(b) {
     roof: b.roof?.type || 'flat',
     units: b.units,
     refined: b.refined,
-    ...(b.partsCustom ? partsSummary(b) : {}),
+    gp: b.gp,
+    services: b.services,
+    ...(b.partsCustom && b.parts?.length ? partsSummary(b) : {}),
   };
 }
 

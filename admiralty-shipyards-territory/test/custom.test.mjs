@@ -31,12 +31,12 @@ const find = (m, id) => m.layers.flatMap((l) => l.objects.map((o) => ({ o, layer
 const r = model.custom;
 assert.deepEqual(r.replaced, ['Z129']);
 assert.deepEqual([...r.added].sort(), ['N1', 'N2']);
-assert.deepEqual([...r.removed].sort(), ['C2', 'Y34cacb', 'Y707ec3']);
+assert.deepEqual([...r.removed].sort(), ['C2', 'GN1', 'GN2']);
 assert.deepEqual([...r.edited].sort(), ['Z141', 'Z161']);
 assert.deepEqual(r.warnings, []);
 
 // удалённые — ни в модели, ни в данных (по ним строятся DXF и GeoJSON)
-for (const id of ['C2', 'Y34cacb', 'Y707ec3']) assert.ok(!find(model, id), `${id} удалён из модели`);
+for (const id of ['C2', 'GN1', 'GN2']) assert.ok(!find(model, id), `${id} удалён из модели`);
 assert.ok(!data.cranes.some((c) => c.id === 'C2'), 'кран C2 удалён из данных');
 
 // замена: своей геометрии нет, контур из Blender совпадает с исходным
@@ -122,7 +122,8 @@ const bke = makeBuildingObject(editBuilding(src.find((b) => b.id === 'Z136'), { 
 assert.equal(bke.info.roof, 'barrel');
 assert.equal(bke.info.height, 31.5, 'высота до верха свода');
 assert.equal(bke.info.refined, 'по фото');
-const bar0 = src.find((b) => b.id === 'Z160');
+// Z160 по схеме генплана имеет пристройки (parts): для проверки кровли берём только основной контур
+const bar0 = { ...src.find((b) => b.id === 'Z160'), parts: undefined, partsCustom: undefined, holes: undefined };
 assert.ok(bar0.poly.length > 4, 'контур Z160 — не прямоугольник');
 const bar = makeBuildingObject(editBuilding(bar0, { roof: 'hip', roofH: 4 }));
 assert.equal(bar.info.roof, 'hip');

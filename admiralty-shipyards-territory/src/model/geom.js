@@ -321,9 +321,10 @@ export class Sink {
     return out;
   }
 
-  merge(other) {
+  // keyMap — переназначение материалов при слиянии (раскраска по назначению)
+  merge(other, keyMap = null) {
     for (const [key, ob] of other.bufs) {
-      const b = this._get(key);
+      const b = this._get(keyMap ? keyMap(key) : key);
       const base = b.pos.length / 3;
       for (let i = 0; i < ob.pos.length; i++) b.pos.push(ob.pos[i]);
       for (let i = 0; i < ob.nrm.length; i++) b.nrm.push(ob.nrm[i]);

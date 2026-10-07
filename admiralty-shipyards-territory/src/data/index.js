@@ -11,6 +11,7 @@ import { ORIGIN, pointInRing, area, centroid } from '../geo.js';
 import OSM_OVERLAY from './osm-overlay.js';
 import { applyOverlay } from './overlay.js';
 import { busRoute } from './bus.js';
+import { gpSlipways, gpChimneys, gpBridges, gpPlatforms, gpMarkers, applyMarks, busSignPoints } from './genplan-structures.js';
 
 // useOSM: подмешать свежую выгрузку OpenStreetMap, если она загружена (npm run osm:fetch).
 export function getTerritory({ useOSM = true } = {}) {
@@ -18,10 +19,13 @@ export function getTerritory({ useOSM = true } = {}) {
   const t = useOSM && OSM_OVERLAY ? applyOverlay(base, OSM_OVERLAY) : base;
   // маршрут внутризаводского автобуса — по проездам и заводским мостам
   t.bus = busRoute(t);
+  // знаки остановок на схеме, которым не соответствует остановка расписания
+  t.markers = [...(t.markers || []), ...busSignPoints(t.bus.stops)];
   return t;
 }
 
 export const hasOSM = () => !!OSM_OVERLAY;
+export let MARKS_REPORT = null;
 
 // Подпись над водой: ближайшая к желаемой точка внутри акватории.
 function inWaterNear([x0, y0]) {
@@ -58,6 +62,11 @@ const DISTRICTS = [
 
 function baseTerritory() {
   const R = realTerritory();
+  // сооружения со схемы генплана: стапели и трубы, заводские мосты, площадки, объекты без контура
+  const bridges = gpBridges(R.bridges);
+  // отметки с PDF-копии схемы: службы в зданиях, переходы, ларьки
+  const marks = applyMarks(R.buildings, { crossings: R.crossings, roads: R.internalRoads });
+  MARKS_REPORT = marks.report;
   // подписи участков — по центру крупнейшей части
   const zoneLabels = [];
   for (const z of R.zones) {
@@ -78,28 +87,30 @@ function baseTerritory() {
       source: 'overture',
       sources: R.source,
       accuracy:
-        'Граница территории, контуры и высоты зданий, вода, улицы и мосты — из открытых данных OpenStreetMap и Microsoft ML Buildings (через Overture Maps). Высоты зданий верфи в открытых данных отсутствуют и оценены по площади и типу.',
+        'Контуры зданий и сооружений верфи, их номера, инвентарные номера, литеры и назначение — по схеме генерального плана предприятия (ВЕДИ.000114.291, 2026). Граница территории, вода, улицы, мосты и окружающая застройка — из открытых данных OpenStreetMap и Microsoft ML Buildings (через Overture Maps). Высот на схеме нет: у зданий без обмеров они оценены по назначению и размерам.',
     },
     water: { real: R.water, labels: WATER_LABELS },
     zones: R.zones,
     fences: [],
     gates: R.gates,
     autoFence: true,
-    buildings: R.buildings,
-    chimneys: Y.CHIMNEYS,
+    buildings: marks.buildings,
+    chimneys: gpChimneys(Y.CHIMNEYS),
     internalRoads: R.internalRoads,
     streets: R.streets,
     areas: [...R.areas, ...Y.AREAS],
     rails: Y.RAILS,
-    slipways: Y.SLIPWAYS,
+    slipways: gpSlipways(Y.SLIPWAYS),
     cranes: Y.CRANES,
     ships: [...Y.SHIPS, ...R.ships],
     docks: Y.DOCKS,
-    bridges: R.bridges,
+    bridges,
+    platforms: gpPlatforms(),
+    markers: [...gpMarkers(bridges.usedNums), ...marks.points],
     arches: [],
     containers: Y.CONTAINERS,
     foreignAreas: R.foreignAreas,
-    crossings: R.crossings,
+    crossings: marks.crossings,
     labels: [...zoneLabels, ...DISTRICTS, ...R.streetLabels],
     frontage: false,
   };
