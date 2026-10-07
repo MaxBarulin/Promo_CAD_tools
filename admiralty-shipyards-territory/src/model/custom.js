@@ -312,6 +312,33 @@ export function editBuilding(orig, e) {
       if (fl.length) b.floors = Math.max(...fl);
     }
   }
+  // части, созданные при переносе генплана (основной объём + пристройки без номера):
+  // правки высоты, кровли и типа — основному объёму, стен, остекления и покрытия — всем частям;
+  // при новом контуре части теряют смысл
+  if (orig.partsCustom && Array.isArray(orig.parts) && orig.parts.length && !(Array.isArray(e.parts) && e.parts.length)) {
+    if (reshape) {
+      delete b.parts;
+      delete b.partsCustom;
+    } else {
+      const main = { ...b, parts: undefined, partsCustom: undefined, bodyH: undefined, walls: undefined, minH: 0 };
+      const rest = orig.parts.slice(1).map((p) => {
+        const q = { ...p, poly: tf(p.poly), ...(p.holes ? { holes: p.holes.map(tf) } : {}) };
+        if (has(e.wall)) q.wall = e.wall;
+        if (GLAZING[e.glazing]) q.glazing = e.glazing;
+        if (e.windows === false) q.windows = false;
+        else if (e.windows === true) delete q.windows;
+        if (has(e.sill)) q.sill = +e.sill;
+        if (ROOF_COLORS.includes(e.roofColor)) q.roof = { ...(q.roof || { type: 'flat' }), color: e.roofColor };
+        if (sc !== 1) {
+          q.h *= sc;
+          if (q.roof && has(q.roof.h)) q.roof = { ...q.roof, h: q.roof.h * sc };
+        }
+        return q;
+      });
+      b.parts = [main, ...rest];
+      b.partsCustom = true;
+    }
+  }
   b.edited = true;
   return b;
 }

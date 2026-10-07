@@ -504,12 +504,12 @@ function streetLabels(list) {
   return [...best.values()].filter((x) => x.L > 120).map(({ s, L }) => ({ text: s.name, at: pointAt(s.line, L / 2).p, kind: 'street' }));
 }
 
-// отчёт о переносе схемы генплана: отброшенные здания и соответствие кодов
+// отчёт о переносе генплана: отброшенные здания и соответствие кодов
 export let GENPLAN_REPORT = null;
 
 export function realTerritory() {
   const st = streets();
-  // здания верфи — по схеме генплана; прежние здания отдают коды, высоты и отделку
+  // здания верфи — по генплану; прежние здания отдают коды, высоты и отделку
   const gp = applyGenplan(yardBuildings(), { zoneOf });
   GENPLAN_REPORT = { dropped: gp.dropped, idMap: gp.idMap, notes: gp.notes };
   const yb = gp.buildings;

@@ -1,13 +1,13 @@
-// Перенос схемы генплана на здания верфи: контуры зданий берутся со схемы, прежние здания
+// Перенос генплана на здания верфи: контуры зданий берутся с генплана, прежние здания
 // модели отдают им коды, высоты, этажность и отделку там, где они совпадают по месту;
-// здания, которых на схеме нет, из модели убираются.
+// здания, которых на генплане нет, из модели убираются.
 //
 // applyGenplan(oldYard, { zoneOf }) → { buildings, dropped, idMap, notes }
 //   oldYard  — здания верфи, собранные из открытых данных (real.js, yardBuildings)
 //   zoneOf   — участок по точке
 
 import pc from 'polygon-clipping';
-import { GP_BUILDINGS, GP_TABLE, GP_MIGRATED, PURPOSE_RU, GENPLAN } from './genplan.js';
+import { GP_BUILDINGS, GP_TABLE, GP_MIGRATED, PURPOSE_RU } from './genplan.js';
 import { GP_CHIMNEY_NUMS } from './genplan-structures.js';
 import { decorate, minRect } from './decorate.js';
 import * as Y from './shipyard.js';
@@ -105,7 +105,7 @@ export function applyGenplan(oldYard, { zoneOf }) {
       }
     }
   }
-  // код прежнего здания переходит к тому контуру схемы, который накрывает его больше всего
+  // код прежнего здания переходит к тому контуру генплана, который накрывает его больше всего
   const idOf = new Map();
   const idMap = {};
   const dropped = [];
@@ -115,7 +115,7 @@ export function applyGenplan(oldYard, { zoneOf }) {
       const covered = +((O.hits.reduce((s, h) => s + h.inter, 0) / O.A).toFixed(2));
       if (!zoneOf(centroid(O.ring))) {
         // за границей участков верфи: не завода, остаётся как окружающая застройка
-        rest.push({ ...O.b, kind: 'context', zone: undefined, detail: 'full', info: [O.b.info, 'На схеме генплана предприятия не показано: за территорией завода.'].filter(Boolean).join(' ') });
+        rest.push({ ...O.b, kind: 'context', zone: undefined, detail: 'full', info: [O.b.info, 'За территорией завода.'].filter(Boolean).join(' ') });
         dropped.push({ id: O.b.id, name: O.b.name, area: Math.round(O.A), covered, kept: 'context' });
       } else dropped.push({ id: O.b.id, name: O.b.name, area: Math.round(O.A), covered });
       continue;
@@ -143,28 +143,29 @@ export function applyGenplan(oldYard, { zoneOf }) {
     const purpose = g.purpose;
     const migrated = idOf.get(G) ? GP_MIGRATED[idOf.get(G)] : null;
     const officialName = row ? clean(row.name) : `${PURPOSE_RU[purpose][0].toUpperCase()}${PURPOSE_RU[purpose].slice(1)} здание без номера`;
-    const name = row ? officialName : purpose === 'third' ? 'Объект сторонней организации' : 'Здание без номера на схеме';
+    const name = row ? officialName : purpose === 'third' ? 'Объект сторонней организации' : 'Здание без номера на генплане';
     const est = estimateGp(purpose, name, G.A, len, wid);
     // будки, бытовки, контейнеры: тип и высота — по названию, а не по прежнему (оценочному) зданию
     const lowByName = /будк|бытовк|контейнер|ларёк|ларек|киоск/i.test(name);
     const type = lowByName && purpose !== 'third' ? 'utility' : pickType(purpose, donorFits && !lowByName ? donor.type : null, name);
-    const useDonorH = donorFits && donor.h && !lowByName && (!donor.approx || (G.A >= 0.5 * area(donor.poly) && purpose !== 'engineering'));
-    const h = useDonorH ? donor.h : est.h;
-    const floors = useDonorH ? donor.floors || est.floors : est.floors;
+    // проходные и КПП — низкие павильоны: высота прежнего многоэтажного контура к ним не относится
+    const lowCheckpoint = type === 'checkpoint' && G.A < 600 && donorFits && donor.h > 9;
+    const useDonorH = donorFits && donor.h && !lowByName && !lowCheckpoint && (!donor.approx || (G.A >= 0.5 * area(donor.poly) && purpose !== 'engineering'));
+    const h = useDonorH ? donor.h : lowCheckpoint ? 4.2 : est.h;
+    const floors = useDonorH ? donor.floors || est.floors : lowCheckpoint ? 1 : est.floors;
     const idx = g.nums.length ? +g.nums[0] : unnamed + 500;
     const wall = (donorFits && donor.wall) || (type === 'office' || type === 'checkpoint' ? Y.OFFICE_WALLS[idx % Y.OFFICE_WALLS.length] : type === 'utility' ? (idx % 3 ? 'light' : 'brick_dark') : type === 'foreign' ? 'gray' : type === 'warehouse' ? (idx % 2 ? 'light' : 'panel') : Y.HALL_WALLS[idx % Y.HALL_WALLS.length]);
     const roofColor = (donorFits && donor.roof?.color) || (type === 'office' || type === 'utility' || type === 'checkpoint' ? 'r_dark' : type === 'foreign' ? 'r_gray' : Y.HALL_ROOFS[idx % Y.HALL_ROOFS.length]);
-    // описание: сведения схемы, прежнее описание и название, источник контура и высоты
+    // описание: сведения генплана, прежнее описание и название, источник контура и высоты
     const parts = [];
     const extraNums = g.nums.slice(1).flatMap((n) => (TABLE.get(n) || []).map((r) => `№ ${n} — ${clean(r.name)}${r.lit ? ` (литера ${r.lit})` : ''}`));
-    if (rows.length > 1 && rows.filter((r) => r.num === g.nums[0]).length > 1) parts.push(`В таблице схемы под этим номером несколько записей: ${rows.filter((r) => r.num === g.nums[0]).map((r) => `«${clean(r.name)}»`).join(', ')}.`);
-    if (extraNums.length) parts.push((g.nums.slice(1).every((n) => /^(Сооружение|Здание)/i.test(TABLE.get(n)?.[0]?.name || '') && /здание/i.test(TABLE.get(n)?.[0]?.name || '')) ? 'Два объекта в одном контуре, граница между ними на схеме не показана: ' : 'В том же контуре: ') + extraNums.join('; ') + '.');
+    if (rows.length > 1 && rows.filter((r) => r.num === g.nums[0]).length > 1) parts.push(`Под этим номером учтено несколько объектов: ${rows.filter((r) => r.num === g.nums[0]).map((r) => `«${clean(r.name)}»`).join(', ')}.`);
+    if (extraNums.length) parts.push((g.nums.slice(1).every((n) => /^(Сооружение|Здание)/i.test(TABLE.get(n)?.[0]?.name || '') && /здание/i.test(TABLE.get(n)?.[0]?.name || '')) ? 'Два объекта в одном контуре, граница между ними не показана: ' : 'В том же контуре: ') + extraNums.join('; ') + '.');
     if (g.fan) parts.push(`Одна из ${g.fan} построек под этим номером.`);
     const oldName = migrated?.name || donor?.name;
     if (donorFits && oldName && oldName !== name && !GENERIC.test(oldName)) parts.push(`Прежнее название в модели: «${oldName}».`);
     const prior = keepInfo(migrated?.info) || (donorFits ? keepInfo(donor.info) : '');
     if (prior) parts.push(prior);
-    parts.push(`Контур — по схеме генплана ${GENPLAN.doc} (${GENPLAN.year}).`);
     parts.push(useDonorH ? (donor.approx ? 'Высота оценена.' : donor.geomSrc === 'osm' || /OpenStreetMap/.test(donor.info || '') ? 'Высота — по OpenStreetMap.' : 'Высота — по прежним данным модели.') : 'Высота оценена по назначению и размерам.');
     const b = {
       kind: 'shipyard',

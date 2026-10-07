@@ -312,7 +312,7 @@ export function buildContainers(sink, at, angle, n, seed) {
 
 export { rect, lerp };
 
-// Площадка или плита со схемы генплана: тонкая плита по контуру (бетон / металл), яма — заглублённая
+// Площадка или плита с генплана: тонкая плита по контуру (бетон / металл), яма — заглублённая
 export function buildPlatform(sink, p) {
   const ring = ensureCCW(p.poly);
   if (p.surface === 'pit') {
@@ -324,7 +324,7 @@ export function buildPlatform(sink, p) {
   sink.prism(key, ring, 0.02, p.surface === 'metal' ? 0.22 : 0.3, { bottom: false });
 }
 
-// Отметка объекта без контура: стойка с табличкой (сам объект — набережная, пирс, эстакада — на схеме не очерчен)
+// Отметка объекта без контура: стойка с табличкой (сам объект — набережная, пирс, эстакада — контура не имеет)
 export function buildMarker(sink, m) {
   const [x, y] = m.at;
   sink.cylinder('marker_post', [x, y], 0, 2.3, 0.07, 0.07, 8, { top: true });

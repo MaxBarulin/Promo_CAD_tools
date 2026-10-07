@@ -179,7 +179,8 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
   const water = P.water;
   // стены зданий верфи (и оставленных зданий соседних участков) сами служат оградой
   const yardBuildings = data.buildings.filter((b) => b.kind === 'shipyard' || b.foreign).map((b) => ensureCCW(b.poly));
-  const nearBuilding = (p) => yardBuildings.some((r) => pointInRing(p, r) || distToRing(p, r) < 1.6);
+  // здание в 2,5 м от границы стоит на ней: его стена и есть ограда (контуры и граница — из разных источников)
+  const nearBuilding = (p) => yardBuildings.some((r) => pointInRing(p, r) || distToRing(p, r) < 2.5);
   const rivers = data.water.rivers || [];
   const out = [];
 

@@ -23,7 +23,7 @@ const TYPES = [
   { id: 'bus', name: 'Автобусы', test: (i) => i.kind === 'bus' },
 ];
 
-const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба', bus: 'Внутризаводской автобус', platform: 'Площадка, плита', marker: 'Сооружение (номер на схеме)', service: 'Отметка на схеме' };
+const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба', bus: 'Внутризаводской автобус', platform: 'Площадка, плита', marker: 'Сооружение (номер на генплане)', service: 'Отметка' };
 const LAYERS = new Set(['shipyard', 'production', 'vessels', 'bridges']);
 const WATER = 'Акватория';
 const TRANSPORT = 'Транспорт';

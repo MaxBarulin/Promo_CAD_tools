@@ -174,7 +174,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     add_('production', { id: ch.id, name: ch.name, sink: s, info: { name: ch.name, info: `${ch.info ? ch.info + ' ' : ''}Высота ≈ ${ch.h} м.`, kind: 'chimney', height: ch.h, approx: !!ch.approx, gp: ch.gp }, proxy: boxProxy(ch.at, 0, Math.max(ch.r * 2.4, 3), Math.max(ch.r * 2.4, 3), 0, ch.h) });
   }
 
-  // ---------- площадки, плиты и объекты без контура со схемы генплана ----------
+  // ---------- площадки, плиты и объекты без контура с генплана ----------
   for (const p of data.platforms || []) {
     const s = new Sink();
     buildPlatform(s, p);

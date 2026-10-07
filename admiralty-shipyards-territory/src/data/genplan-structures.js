@@ -1,9 +1,9 @@
-// Сооружения со схемы генплана ВЕДИ.000114.291 (2026): стапели, дымовые трубы, заводские мосты,
-// площадки и плиты, а также объекты, обозначенные на схеме только номером без контура
+// Сооружения с генплана предприятия: стапели, дымовые трубы, заводские мосты,
+// площадки и плиты, а также объекты, обозначенные на генплане только номером без контура
 // (набережные, причалы, пирсы, эстакады, ямы, монумент). Сведения — из таблицы объектов
-// недвижимости листа (название, инвентарный номер, литера).
+// недвижимости предприятия (название, инвентарный номер, литера).
 
-import { GP_TABLE, GP_BUILDINGS, GP_PLATFORMS, GP_POINTS, GENPLAN } from './genplan.js';
+import { GP_TABLE, GP_BUILDINGS, GP_PLATFORMS, GP_POINTS } from './genplan.js';
 import { centroid, area, dist, add, sub, mul, dot, dirOf, pointInRing, DEG } from '../geo.js';
 
 const TABLE = new Map();
@@ -12,7 +12,7 @@ for (const r of GP_TABLE) {
   TABLE.get(r.num).push(r);
 }
 
-// Названия с листа набраны с лишними пробелами («5- Ю», «в т . ч .», «( стап . место )»)
+// Названия предприятия набраны с лишними пробелами («5- Ю», «в т . ч .», «( стап . место )»)
 const clean = (s) =>
   s
     .replace(/\s*-\s*/g, '-')
@@ -26,7 +26,6 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 // «Сооружение, пожарный пирс №10» → «Пожарный пирс № 10»
 const shortName = (s) => cap(clean(s).replace(/^Сооружени[ея]\s*[,]?\s*/i, '').replace(/^\(([^)]*)\)$/, '$1'));
 
-export const SRC_NOTE = `По схеме генплана ${GENPLAN.doc} (${GENPLAN.year}).`;
 
 export function gpInfo(num) {
   const rows = TABLE.get(String(num)) || [];
@@ -40,9 +39,9 @@ export function gpInfo(num) {
 }
 const gpOf = (g) => ({ num: g.num, nums: g.nums, inv: g.inv, lit: g.lit });
 
-// Номера схемы, которые в модели — дымовые трубы (их контуры не становятся зданиями)
+// Номера генплана, которые в модели — дымовые трубы (их контуры не становятся зданиями)
 export const GP_CHIMNEY_NUMS = new Set(['179', '180']);
-// Номера, которые в модели — стапели (бетонные стапельные дорожки схемы)
+// Номера, которые в модели — стапели (бетонные стапельные дорожки генплана)
 const SLIP_NUMS = { S1: '166', S2: '165' };
 const SLIP_NAMES = { S1: 'Южный стапель 5-Ю', S2: 'Северный стапель 5-С' };
 
@@ -69,7 +68,7 @@ function orientedRect(poly) {
   return L >= W ? { cx: cu * c - cv * s, cy: cu * s + cv * c, angle: a, L, W } : { cx: cu * c - cv * s, cy: cu * s + cv * c, angle: a + 90, L: W, W: L };
 }
 
-// Стапели: ось — по бетонной стапельной дорожке схемы, названия и реквизиты — из таблицы листа;
+// Стапели: ось — по бетонной стапельной дорожке генплана, названия и реквизиты — из таблицы предприятия;
 // длина, ширина и голова стапеля (проекция прежней на новую ось) — прежние.
 export function gpSlipways(list) {
   return list.map((sw) => {
@@ -84,13 +83,13 @@ export function gpSlipways(list) {
     const g = gpInfo(num);
     const name = SLIP_NAMES[sw.id] || sw.name;
     const tbl = g.names[0] ? `${cap(g.names[0])}.` : '';
-    const info = `${tbl} Открытый наклонный стапель: длина ≈ ${Math.round(sw.length)} м, ширина ${sw.width} м (паспорт — 259×35 м, суда дедвейтом до 70 000 т). Спуск — в Большую Неву. Ось — по бетонной стапельной дорожке схемы генплана (${Math.round(r.L)} × ${Math.round(r.W)} м). ${SRC_NOTE}`.trim();
+    const info = `${tbl} Открытый наклонный стапель: длина ≈ ${Math.round(sw.length)} м, ширина ${sw.width} м (паспорт — 259×35 м, суда дедвейтом до 70 000 т). Спуск — в Большую Неву. Ось — по бетонной стапельной дорожке (${Math.round(r.L)} × ${Math.round(r.W)} м).`.trim();
     return { ...sw, head: head.map((v) => +v.toFixed(2)), angle: +angle.toFixed(2), name, info, gp: gpOf(g) };
   });
 }
 
-// Дымовые трубы со схемы: № 179 — труба цеха № 6-Ю (бетонное основание), № 180 — труба кузницы.
-// Высот на схеме нет — оценены по типу (кирпичные трубы цеха и кузницы).
+// Дымовые трубы с генплана: № 179 — труба цеха № 6-Ю (бетонное основание), № 180 — труба кузницы.
+// Высот на генплане нет — оценены по типу (кирпичные трубы цеха и кузницы).
 const CHIMNEY_H = { 179: 45, 180: 30 };
 export function gpChimneys(list) {
   const out = [...list];
@@ -110,7 +109,7 @@ export function gpChimneys(list) {
     out.push({
       id: `CH${list.length + ++k}`,
       name: shortName(g.names[0] || 'Дымовая труба'),
-      info: `Кирпичная дымовая труба; основание по схеме генплана ≈ ${dia.toFixed(1)} м в диаметре. Высота оценена по типу сооружения — требует уточнения. ${SRC_NOTE}`,
+      info: `Кирпичная дымовая труба; основание ≈ ${dia.toFixed(1).replace('.', ',')} м в диаметре. Высота оценена по типу сооружения — требует уточнения.`,
       at,
       h,
       r,
@@ -121,7 +120,7 @@ export function gpChimneys(list) {
   return out;
 }
 
-// Заводские мосты: номера схемы без контура, название с листа и реквизиты — ближайшему мосту
+// Заводские мосты: номера генплана без контура, название предприятия и реквизиты — ближайшему мосту
 export function gpBridges(list) {
   const mid = (b) => [(b.from[0] + b.to[0]) / 2, (b.from[1] + b.to[1]) / 2];
   const pts = GP_POINTS.map((p) => ({ ...p, g: gpInfo(p.num) })).filter((p) => /мост/i.test(p.g.names.join(' ')));
@@ -133,7 +132,7 @@ export function gpBridges(list) {
     const full = hit.p.g.names[0] || '';
     const q = full.match(/«([^»]+)»/);
     const name = q ? `${q[1]} мост` : b.name && b.name !== 'Мост' ? b.name : cap(full.replace(/^Сооружение\s+/i, '').replace(/^мост\s+автодорожный\s+/i, 'мост '));
-    return { ...b, name, info: `${cap(full)}. Внутризаводской мост; положение и размеры — по OpenStreetMap. ${SRC_NOTE}`, gp: gpOf(hit.p.g), yard: true };
+    return { ...b, name, info: `${cap(full)}. Внутризаводской мост; положение и размеры — по OpenStreetMap.`, gp: gpOf(hit.p.g), yard: true };
   });
   out.usedNums = used;
   return out;
@@ -159,7 +158,7 @@ export function gpPlatforms() {
     return {
       id,
       name,
-      info: `${what}, площадь ≈ ${Math.round(p.area)} м²${count[num] > 1 ? `; на схеме под № ${num} — ${count[num]} контура` : ''}. ${SRC_NOTE}`,
+      info: `${what}, площадь ≈ ${Math.round(p.area)} м²${count[num] > 1 ? `; под № ${num} — ${count[num]} контура` : ''}.`,
       poly: p.poly,
       surface: kind,
       gp: { ...gpOf(g), nums: p.nums },
@@ -167,7 +166,7 @@ export function gpPlatforms() {
   });
 }
 
-// Объекты, обозначенные на схеме номером без контура: точка — по месту подписи
+// Объекты, обозначенные на генплане номером без контура: точка — по месту подписи
 export function gpMarkers(usedNums = new Set()) {
   const skip = new Set([...usedNums, ...GP_CHIMNEY_NUMS]);
   return GP_POINTS.filter((p) => !skip.has(p.num)).map((p) => {
@@ -179,7 +178,7 @@ export function gpMarkers(usedNums = new Set()) {
     return {
       id: `M${p.num}`,
       name,
-      info: `${cap(names[0])}.${more} На схеме генплана объект обозначен номером без контура: отметка поставлена по месту подписи. ${SRC_NOTE}`,
+      info: `${cap(names[0])}.${more} Объект учтён под номером без контура: отметка поставлена условно.`,
       at: p.at,
       kind,
       gp: gpOf(g),
@@ -187,13 +186,13 @@ export function gpMarkers(usedNums = new Set()) {
   });
 }
 
-// ---------- отметки с PDF-копии схемы (условные знаки «Прочее») ----------
+// ---------- отметки служб и знаков на территории ----------
 
 import { GP_MARKS, MARK_KINDS } from './genplan-marks.js';
 
 const SERVICE = { med: 'медпункт', canteen: 'столовая', cashier: 'касса', training: 'учебный центр', atm: 'банкомат', kiosk: 'ларёк / кафе', kpp: 'КПП' };
 const NAME_FOR = { med: 'Медпункт', canteen: 'Столовая', cashier: 'Касса', training: 'Учебный центр', atm: 'Банкомат', kiosk: 'Ларёк / кафе', kpp: 'Будка КПП', bus: 'Знак автобусной остановки' };
-const PLACEHOLDER = 'Здание без номера на схеме';
+const PLACEHOLDER = 'Здание без номера на генплане';
 
 // расстояние от точки до контура (0 — внутри)
 function distToRing(p, ring) {
@@ -214,7 +213,7 @@ function distToRing(p, ring) {
 const servicePoint = (m, k) => ({
   id: `MS-${m.kind}-${k}`,
   name: NAME_FOR[m.kind] || cap(MARK_KINDS[m.kind]),
-  info: `На PDF-копии схемы генплана здесь поставлен знак «${MARK_KINDS[m.kind]}»; положение — по значку. ${SRC_NOTE}`,
+  info: `Отметка: ${MARK_KINDS[m.kind]}. Положение условное.`,
   at: m.at,
   kind: 'service',
   mark: m.kind,
@@ -244,7 +243,7 @@ export function applyMarks(buildings, { crossings = [], roads = [] } = {}) {
         nb.approx = true;
       }
     }
-    nb.info = `${nb.info ? nb.info + ' ' : ''}На PDF-копии схемы генплана отмечено: ${SERVICE[kind]}.`;
+    nb.info = `${nb.info ? nb.info + ' ' : ''}По данным предприятия: ${SERVICE[kind]}.`;
     out[i] = nb;
     report.attached.push({ id: b.id, kind });
   };
@@ -310,14 +309,14 @@ export function applyMarks(buildings, { crossings = [], roads = [] } = {}) {
   return { buildings: out, crossings: [...crossings, ...added], points, report };
 }
 
-// Знаки автобусных остановок со схемы, у которых нет остановки модели поблизости
+// Знаки автобусных остановок с генплана, у которых нет остановки модели поблизости
 export function busSignPoints(stops) {
   const out = [];
   let k = 0;
   for (const m of GP_MARKS.filter((x) => x.kind === 'bus')) {
     const d = Math.min(...stops.map((s) => dist(s.sign || s.zone?.at || s.at, m.at)));
     if (d <= 25) continue;
-    out.push({ ...servicePoint(m, ++k), id: `MS-bus-${k}`, info: `На PDF-копии схемы генплана здесь стоит знак «автобусная остановка», в расписании внутризаводского автобуса такой остановки нет (ближайшая остановка модели — в ${Math.round(d)} м). ${SRC_NOTE}` });
+    out.push({ ...servicePoint(m, ++k), id: `MS-bus-${k}`, info: `Знак автобусной остановки; в расписании внутризаводского автобуса такой остановки нет (ближайшая остановка модели — в ${Math.round(d)} м).` });
   }
   return out;
 }

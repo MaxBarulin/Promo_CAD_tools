@@ -3,7 +3,7 @@
 // Общий код для просмотрщика и для выгрузки в Node (scripts/export.mjs).
 
 import { toLatLon, centroid, area } from '../geo.js';
-import { PURPOSE_SHORT, GENPLAN } from '../data/genplan.js';
+import { PURPOSE_SHORT } from '../data/genplan.js';
 
 export const ZONE_NAMES = {
   galerny: 'Галерный остров',
@@ -41,7 +41,7 @@ export const FIELDS = [
 export const FIELD_KEYS = FIELDS.map((f) => f.key);
 
 // Состав реестра: здания верфи, стапели, краны, плавдоки, дымовые трубы, заводские мосты,
-// площадки и плиты, объекты, обозначенные на схеме генплана номером без контура.
+// площадки и плиты, объекты, учтённые номером без контура.
 const MARKER_KINDS = { quay: 'Набережная, берегоукрепление (сооружение)', pier: 'Причал, пирс (сооружение)', trestle: 'Эстакада (сооружение)', pit: 'Яма трансбордерная (сооружение)', monument: 'Монумент, памятный знак', storage: 'Открытый склад (площадка)', structure: 'Сооружение' };
 export function registryItems(model, data) {
   const yardBridges = new Set((data.bridges || []).filter((b) => b.type === 'industrial' || b.yard || b.gp).map((b) => b.id));
@@ -103,7 +103,7 @@ export function registryItems(model, data) {
         estimated: !!i.approx,
         occupants: unitList(i.units, 'occupant'),
         owners: unitList(i.units, 'owner'),
-        source: i.geomSrc === 'genplan' || (!i.geomSrc && i.gp) ? `схема генплана ${GENPLAN.doc}` : i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'уточнённый контур' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
+        source: i.geomSrc === 'genplan' || (!i.geomSrc && i.gp) ? 'данные предприятия' : i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'уточнённый контур' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
         lat: +lat.toFixed(6),
         lon: +lon.toFixed(6),
         center: c,

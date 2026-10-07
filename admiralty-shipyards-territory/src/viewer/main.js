@@ -55,8 +55,8 @@ const KIND_LABEL = {
   landmark: 'Достопримечательность',
   misc: 'Оборудование',
   platform: 'Площадка, плита',
-  marker: 'Сооружение (номер на схеме генплана)',
-  service: 'Отметка на схеме генплана',
+  marker: 'Сооружение (номер на генплане)',
+  service: 'Отметка',
 };
 
 const ZONE_LABEL = { galerny: 'Галерный остров', kolomna: 'Основная площадка (между Фонтанкой и Пряжкой)', matisov: 'Матисов остров', novo: 'Ново-Адмиралтейский остров' };
@@ -298,7 +298,7 @@ async function main() {
   }
   const hiddenLayers = {};
 
-  // раскраска зданий верфи по назначению (легенда схемы генплана)
+  // раскраска зданий верфи по назначению
   let purposeMode = false;
   const purposeMapOf = (o) => purposeKeyMap(o.info?.gp?.purpose);
   $('purposeLegend').innerHTML = [...Object.entries(PURPOSE_SHORT).map(([k, n]) => [PURPOSE_COLORS[k], n]), ['#bdbdb9', 'назначение не указано']]
