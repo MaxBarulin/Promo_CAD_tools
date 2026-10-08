@@ -1,5 +1,6 @@
 // Ограждение: ж/б забор с колючей проволокой, сетчатое ограждение, исторический
-// кирпичный забор; ворота (откатные) со столбами и шлагбаумом.
+// кирпичный забор, оштукатуренная ограда с арочными нишами (вдоль городских улиц);
+// ворота (откатные) со столбами и шлагбаумом.
 
 import { polylineLength, pointAt, project, add, mul, sub, norm, dist, pointInRing, ensureCCW } from '../geo.js';
 
@@ -68,6 +69,37 @@ export function buildFence(sink, f) {
         }
         sink.beam('steel_dark', [a[0], a[1], h], [b[0], b[1], h], 0.06, 0.06);
         sink.beam('steel_dark', [a[0], a[1], 0.15], [b[0], b[1], 0.15], 0.06, 0.06);
+      } else if (f.type === 'stucco') {
+        // оштукатуренная ограда: цоколь, пилястры с шагом около 5,5 м, в каждом пролёте арочная ниша
+        const ang = Math.atan2(dir[1], dir[0]) * 57.2958;
+        sink.beam('fence_stucco', [a[0], a[1], h / 2], [b[0], b[1], h / 2], 0.5, h);
+        sink.beam('fence_plinth', [a[0], a[1], 0.3], [b[0], b[1], 0.3], 0.64, 0.6);
+        sink.beam('trim', [a[0], a[1], h + 0.06], [b[0], b[1], h + 0.06], 0.66, 0.12);
+        const n = Math.max(1, Math.round(L / 5.5));
+        for (let k = 0; k <= n; k++) {
+          const p = add(a, mul(dir, (L * k) / n));
+          sink.box('fence_stucco', [p[0], p[1], (h + 0.3) / 2], [0.9, 0.9, h + 0.3], ang);
+          sink.box('trim', [p[0], p[1], h + 0.36], [1.06, 1.06, 0.12], ang);
+        }
+        const bay = L / n;
+        const R = Math.min(1.7, bay / 2 - 0.9);
+        if (R > 0.6) {
+          const zc = h - 0.5 - R; // центр полуокружности
+          for (let k = 0; k < n; k++) {
+            const c = add(a, mul(dir, bay * (k + 0.5)));
+            // полукруг из коротких балок, выступающих из плоскости стены
+            const seg = 8;
+            for (let i = 0; i < seg; i++) {
+              const t0 = Math.PI * (i / seg);
+              const t1 = Math.PI * ((i + 1) / seg);
+              const p0 = add(c, mul(dir, R * Math.cos(t0)));
+              const p1 = add(c, mul(dir, R * Math.cos(t1)));
+              sink.beam('trim', [p0[0], p0[1], zc + R * Math.sin(t0)], [p1[0], p1[1], zc + R * Math.sin(t1)], 0.62, 0.14);
+            }
+            // пяты арки — вертикальные тяги до цоколя
+            for (const q of [add(c, mul(dir, -R)), add(c, mul(dir, R))]) sink.beam('trim', [q[0], q[1], 0.6], [q[0], q[1], zc], 0.62, 0.14);
+          }
+        }
       } else {
         // кирпичная стена с пилястрами и белой тягой
         sink.beam('fence_wall', [a[0], a[1], h / 2], [b[0], b[1], h / 2], 0.55, h);
@@ -88,11 +120,12 @@ export function buildFence(sink, f) {
     const ang = Math.atan2(dir[1], dir[0]) * 57.2958;
     const a = add(p, mul(dir, -g.w / 2));
     const b = add(p, mul(dir, g.w / 2));
-    const postKey = f.type === 'wall' ? 'fence_wall' : 'steel_dark';
-    const ph = f.type === 'wall' ? h + 1.2 : h + 0.4;
-    const ps = f.type === 'wall' ? 1.1 : 0.35;
+    const masonry = f.type === 'wall' || f.type === 'stucco';
+    const postKey = f.type === 'wall' ? 'fence_wall' : f.type === 'stucco' ? 'fence_stucco' : 'steel_dark';
+    const ph = masonry ? h + 1.2 : h + 0.4;
+    const ps = masonry ? 1.1 : 0.35;
     for (const q of [add(a, mul(dir, -ps / 2)), add(b, mul(dir, ps / 2))]) sink.box(postKey, [q[0], q[1], ph / 2], [ps, ps, ph], ang);
-    if (f.type === 'wall') {
+    if (masonry) {
       for (const q of [add(a, mul(dir, -ps / 2)), add(b, mul(dir, ps / 2))]) sink.box('trim', [q[0], q[1], ph + 0.15], [ps + 0.2, ps + 0.2, 0.3], ang);
     }
     // створка (приоткрыта на треть)
@@ -183,11 +216,14 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
   const nearBuilding = (p) => yardBuildings.some((r) => pointInRing(p, r) || distToRing(p, r) < 2.5);
   const rivers = data.water.rivers || [];
   const out = [];
+  // улицы, вдоль которых стоит историческая оштукатуренная ограда с арочными нишами
+  const stuccoStreets = (data.streets || []).filter((s) => /Пряжки|Степана Разина|Рижский/.test(s.name || '')).map((s) => s.line);
+  const nearStucco = (p) => stuccoStreets.some((line) => project(line, p).d < 24);
 
   const classify = (p, n, zoneId) => {
     const q = add(p, mul(n, 5));
     if (inMP(q, yard)) return 'none';
-    if (!inMP(q, water)) return zoneId === 'novo' ? 'wall' : 'concrete';
+    if (!inMP(q, water)) return zoneId === 'novo' ? 'wall' : nearStucco(p) ? 'stucco' : 'concrete';
     // вода: ищем противоположный берег
     for (let d = 10; d <= 130; d += 5) {
       const r = add(p, mul(n, d));
@@ -235,12 +271,12 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
       if (runs.length > 1 && runs[0].type === runs[runs.length - 1].type) runs[0].pts = [...runs.pop().pts, ...runs[0].pts];
       for (const r of runs) {
         if (r.type === 'none' || r.pts.length * step < minRun) continue;
-        const inset = r.type === 'wall' ? 0.9 : r.type === 'mesh' ? 0.6 : 0.7;
+        const inset = r.type === 'wall' || r.type === 'stucco' ? 0.9 : r.type === 'mesh' ? 0.6 : 0.7;
         // продлеваем на полшага к соседям, чтобы не было щелей у изломов
         const pts = r.pts.map((x) => add(x.p, mul(x.n, -inset)));
         const line = simplify(pts, 0.35);
         if (polylineLength(line) < minRun) continue;
-        out.push({ id: `F-${z.id}-${out.length + 1}`, zone: z.id, type: r.type, h: r.type === 'wall' ? 3.2 : r.type === 'mesh' ? 2.2 : 2.8, line, gates: [] });
+        out.push({ id: `F-${z.id}-${out.length + 1}`, zone: z.id, type: r.type, h: r.type === 'wall' ? 3.2 : r.type === 'stucco' ? 3.3 : r.type === 'mesh' ? 2.2 : 2.8, line, gates: [] });
       }
     }
   }
@@ -299,7 +335,7 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
     ...data.streets.map((s) => ({ line: s.line, name: s.name })),
     ...rivers.map((r) => ({ line: r.line, name: r.name.startsWith('р.') || /канал/.test(r.name) ? r.name : `р. ${r.name}` })),
   ];
-  const kindName = { concrete: 'Ж/б забор', mesh: 'Ограждение по кромке набережной', wall: 'Кирпичная ограда', sheet: 'Забор соседнего участка' };
+  const kindName = { concrete: 'Ж/б забор', mesh: 'Ограждение по кромке набережной', wall: 'Кирпичная ограда', stucco: 'Оштукатуренная ограда с арочными нишами', sheet: 'Забор соседнего участка' };
   for (const f of out) {
     const mid = pointAt(f.line, polylineLength(f.line) / 2).p;
     let near = null;

@@ -83,6 +83,8 @@ export const PALETTE = {
   fence_sheet: { name: 'Забор_профлист', color: '#6d8296', roughness: 0.55, metalness: 0.35 },
   fence_wire: { name: 'Колючая_проволока', color: '#3c3f42', metalness: 0.6 },
   fence_wall: { name: 'Забор_кирпичный', color: '#8f4a37', roughness: 0.9 },
+  fence_stucco: { name: 'Ограда_штукатурка', color: '#e6c6a4', roughness: 0.9 },
+  fence_plinth: { name: 'Ограда_цоколь', color: '#9b9ea0', roughness: 0.9 },
   gate_leaf: { name: 'Ворота_откатные', color: '#3f6a52', metalness: 0.4, roughness: 0.5 },
   railing: { name: 'Ограда_чугунная', color: '#2b2d2f', metalness: 0.5, roughness: 0.5 },
   parapet: { name: 'Парапет_гранит', color: '#9a8c82', roughness: 0.85 },
