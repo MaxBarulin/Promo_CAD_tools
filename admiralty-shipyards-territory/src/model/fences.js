@@ -229,7 +229,8 @@ export function autoFences(data, P, { step = 2, minRun = 8 } = {}) {
       const r = add(p, mul(n, d));
       if (inMP(r, water)) continue;
       if (inMP(r, yard)) return 'none';
-      return zoneId === 'novo' ? 'wall' : 'mesh';
+      // у воды везде лёгкое ограждение по кромке набережной: кирпичная стена острова стоит только вдоль улиц
+      return 'mesh';
     }
     return 'none';
   };
