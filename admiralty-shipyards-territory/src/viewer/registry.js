@@ -108,7 +108,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
         const s = epbStatus(r, st.years);
         if (st.epb === 'due' ? s !== 'soon' && s !== 'overdue' : s !== st.epb) return false;
       }
-      if (q && !`${it.id} ${it.name} ${it.kind} №${it.regNum} ${it.regNums} ${it.inv} ${it.lit} ${it.purpose} ${it.marks} ${r.invNo || ''} ${r.opoReg || ''} ${r.epbNo || ''}`.toLowerCase().includes(q)) return false;
+      if (q && !`${it.id} ${it.name} ${it.kind} №${it.regNum} ${it.regNums} ${it.inv} ${it.lit} ${it.purpose} ${it.occupants} ${r.invNo || ''} ${r.opoReg || ''} ${r.epbNo || ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
     const { key, dir } = st.sort;

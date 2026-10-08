@@ -581,7 +581,6 @@ async function main() {
     if (i.footprint) rows.push(['Площадь застройки', `${i.footprint.toLocaleString('ru-RU')} м²`]);
     if (i.roof && ROOF_NAMES[i.roof]) rows.push(['Кровля', ROOF_NAMES[i.roof].toLowerCase()]);
     if (i.refined) rows.push(['Уточнено', i.refined]);
-    if (i.services?.length) rows.push(['В здании', i.services.join(', ')]);
     if (!o.live) {
       const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
       const [lat, lon] = toLatLon(c);
@@ -599,7 +598,7 @@ async function main() {
       ${i.info ? `<p>${escapeHtml(i.info)}</p>` : ''}
       ${o.live ? `<p class="card-live" id="cardLive">${escapeHtml(o.status())}</p>` : ''}
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('')}</dl>
-      ${unitsBlock(i.units)}
+      ${unitsBlock(i.units, i.services)}
       <div class="row"><button class="btn" type="button" id="cardFly">${o.live ? 'Следить' : 'Приблизить'}</button></div>`;
     card.hidden = false;
     card.querySelector('.x').addEventListener('click', () => select(null));
@@ -611,10 +610,12 @@ async function main() {
   }
 
   // подразделения в карточке: кто размещается и кто отвечает за здание
-  function unitsBlock(units) {
-    if (!units || !units.length) return '';
-    const occ = units.filter((u) => u.role !== 'owner');
-    const own = units.filter((u) => u.role === 'owner');
+  // services — службы по данным предприятия (столовая, медпункт, КПП…): показываются среди размещённых
+  function unitsBlock(units, services) {
+    const svc = (services || []).map((s) => ({ name: s[0].toUpperCase() + s.slice(1) }));
+    if ((!units || !units.length) && !svc.length) return '';
+    const occ = [...(units || []).filter((u) => u.role !== 'owner'), ...svc];
+    const own = (units || []).filter((u) => u.role === 'owner');
     const li = (u) => `<li><span class="u-name">${escapeHtml(u.name)}</span>${u.person ? `<span class="u-person">${escapeHtml(u.person)}</span>` : ''}</li>`;
     return `<div class="units">
       <h4>Подразделения</h4>
