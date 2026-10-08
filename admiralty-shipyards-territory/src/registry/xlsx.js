@@ -79,21 +79,23 @@ const colName = (i) => {
 };
 const excelDate = (d) => (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(1899, 11, 30)) / 86400000;
 
-// Стили: 0 — обычный, 1 — шапка, 2 — дата, 3 — число, 4/5/6 — статус (красный/жёлтый/зелёный), 7 — перенос строк,
-// 8 — шапка столбца для заполнения (жёлтая)
+// Стили: 0 — обычный, 1 — шапка, 2 — дата, 3 — число, 4/5/6 — заливка красная/жёлтая/зелёная, 7 — перенос строк,
+// 8 — шапка столбца для заполнения (жёлтая), 9 — строка групп столбцов, 10 — заливка синяя,
+// 11–14 — дата с заливкой (красная/жёлтая/зелёная/синяя)
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="1"><numFmt numFmtId="164" formatCode="dd.mm.yyyy"/></numFmts>
 <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
-<fills count="7"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+<fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFDCE4EC"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFF8C9C2"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFBE3B0"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFCDEBD6"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/></patternFill></fill></fills>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFCFE2F3"/></patternFill></fill></fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="9">
+<cellXfs count="15">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
 <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
@@ -103,12 +105,22 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0" applyFill="1"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
 <xf numFmtId="0" fontId="1" fillId="6" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="7" borderId="0" xfId="0" applyFill="1"/>
+<xf numFmtId="164" fontId="0" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>
+<xf numFmtId="164" fontId="0" fillId="4" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>
+<xf numFmtId="164" fontId="0" fillId="5" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>
+<xf numFmtId="164" fontId="0" fillId="7" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
+const DATE_FILL = { 4: 11, 5: 12, 6: 13, 10: 14 };
+const headerRows = (sheet) => (sheet.groups ? 2 : 1);
+
 function sheetXml(sheet) {
   const { columns, rows } = sheet;
+  const hr = headerRows(sheet);
   const out = [];
   const cell = (r, c, v, style, kind) => {
     const ref = colName(c) + (r + 1);
@@ -116,27 +128,38 @@ function sheetXml(sheet) {
     if (kind === 'n') return `<c r="${ref}"${style ? ` s="${style}"` : ''}><v>${v}</v></c>`;
     return `<c r="${ref}" t="inlineStr"${style ? ` s="${style}"` : ''}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
   };
-  out.push(`<row r="1" ht="45" customHeight="1">${columns.map((c, i) => cell(0, i, c.label, c.input ? 8 : 1)).join('')}</row>`);
+  // строка групп столбцов: объединённые ячейки над шапкой
+  const merges = [];
+  if (sheet.groups) {
+    const cells = [];
+    for (const g of sheet.groups) {
+      if (!g.label) continue;
+      cells.push(cell(0, g.from, g.label, 9));
+      if (g.to > g.from) merges.push(`${colName(g.from)}1:${colName(g.to)}1`);
+    }
+    out.push(`<row r="1" ht="20" customHeight="1">${cells.join('')}</row>`);
+  }
+  out.push(`<row r="${hr}" ht="45" customHeight="1">${columns.map((c, i) => cell(hr - 1, i, c.label, c.input ? 8 : 1)).join('')}</row>`);
   rows.forEach((row, ri) => {
     const cells = columns.map((c, ci) => {
       const v = row[c.key];
+      const fill = c.cellStyle ? c.cellStyle(v, row) || 0 : 0;
       if (c.date) {
         const d = c.parseDate ? c.parseDate(v) : null;
-        return d ? cell(ri + 1, ci, excelDate(d), 2, 'n') : cell(ri + 1, ci, v);
+        return d ? cell(ri + hr, ci, excelDate(d), fill ? DATE_FILL[fill] : 2, 'n') : cell(ri + hr, ci, v, fill);
       }
-      if (c.num && v !== '' && v !== null && Number.isFinite(Number(v))) return cell(ri + 1, ci, Number(v), Number(v) >= 1000 ? 3 : 0, 'n');
-      const st = c.statusStyle ? c.statusStyle(v) : c.wrap ? 7 : 0;
-      return cell(ri + 1, ci, v, st);
+      if (c.num && v !== '' && v !== null && Number.isFinite(Number(v))) return cell(ri + hr, ci, Number(v), Number(v) >= 1000 ? 3 : 0, 'n');
+      return cell(ri + hr, ci, v, fill || (c.wrap ? 7 : 0));
     });
-    out.push(`<row r="${ri + 2}">${cells.join('')}</row>`);
+    out.push(`<row r="${ri + hr + 1}">${cells.join('')}</row>`);
   });
-  const last = colName(columns.length - 1) + (rows.length + 1);
+  const last = colName(columns.length - 1) + (rows.length + hr);
   // проверка ввода в Excel: списки для полей с выбором, даты и целые числа в диапазоне
   const validations = [];
   if (rows.length)
     columns.forEach((c, ci) => {
       const col = colName(ci);
-      const sqref = `${col}2:${col}${rows.length + 1}`;
+      const sqref = `${col}${hr + 1}:${col}${rows.length + hr}`;
       if (c.list && c.list.length)
         validations.push(`<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="${xmlEsc('Значение не из списка')}" error="${xmlEsc('Выберите одно из значений: ' + c.list.join(', '))}" promptTitle="${xmlEsc(c.label)}" prompt="${xmlEsc('Выберите значение из списка')}" sqref="${sqref}"><formula1>${xmlEsc('"' + c.list.join(',') + '"')}</formula1></dataValidation>`);
       else if (c.date)
@@ -146,17 +169,19 @@ function sheetXml(sheet) {
     });
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetViews><sheetView workbookViewId="0">${sheet.freeze !== false ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' : ''}</sheetView></sheetViews>
+<sheetViews><sheetView workbookViewId="0">${sheet.freeze !== false ? `<pane ySplit="${hr}" topLeftCell="A${hr + 1}" activePane="bottomLeft" state="frozen"/>` : ''}</sheetView></sheetViews>
 <cols>${columns.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.w || 14}" customWidth="1"/>`).join('')}</cols>
 <sheetData>${out.join('')}</sheetData>
-${sheet.filter !== false && rows.length ? `<autoFilter ref="A1:${last}"/>` : ''}
+${sheet.filter !== false && rows.length ? `<autoFilter ref="A${hr}:${last}"/>` : ''}
+${merges.length ? `<mergeCells count="${merges.length}">${merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : ''}
 ${validations.length ? `<dataValidations count="${validations.length}">${validations.join('')}</dataValidations>` : ''}
 </worksheet>`;
 }
 
-// sheets: [{ name, columns: [{key,label,w,num,date,parseDate,statusStyle,wrap,list,range,input}], rows: [{...}] }]
+// sheets: [{ name, columns: [{key,label,w,num,date,parseDate,cellStyle,wrap,list,range,input}], rows: [{...}], groups }]
 // list — допустимые значения (выпадающий список в Excel), range — [min, max] для целых чисел,
-// input — столбец заполняет пользователь (шапка выделена жёлтым)
+// input — столбец заполняет пользователь (шапка выделена жёлтым), cellStyle(v, row) — заливка ячейки
+// (4/5/6/10), groups — [{ label, from, to }]: строка объединённых заголовков над шапкой
 export function writeXlsx(sheets) {
   const files = [
     {
@@ -180,7 +205,7 @@ ${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" Co
       data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets
         .map((s, i) => `<sheet name="${xmlEsc(s.name.slice(0, 31))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
-        .join('')}</sheets>${sheets[0].filter !== false && sheets[0].rows.length ? `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${xmlEsc(sheets[0].name.slice(0, 31))}'!$A$1:$${colName(sheets[0].columns.length - 1)}$${sheets[0].rows.length + 1}</definedName></definedNames>` : ''}</workbook>`,
+        .join('')}</sheets>${sheets[0].filter !== false && sheets[0].rows.length ? `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${xmlEsc(sheets[0].name.slice(0, 31))}'!$A$${headerRows(sheets[0])}:$${colName(sheets[0].columns.length - 1)}$${sheets[0].rows.length + headerRows(sheets[0])}</definedName></definedNames>` : ''}</workbook>`,
     },
     {
       name: 'xl/_rels/workbook.xml.rels',

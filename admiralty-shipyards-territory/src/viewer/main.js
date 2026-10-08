@@ -575,7 +575,8 @@ async function main() {
     if (i.reg?.purpose && PURPOSE_SHORT[i.reg.purpose]) rows.push(['Назначение', PURPOSE_SHORT[i.reg.purpose]]);
     if (i.zone && ZONE_LABEL[i.zone]) rows.push(['Участок', ZONE_LABEL[i.zone]]);
     if (i.dims) rows.push(['Размеры', `${i.dims[0]} × ${i.dims[1]} м`]);
-    if (i.height) rows.push(['Высота', `${i.height} м`]);
+    // высота цехов верфи без обмеров — оценка, помечается здесь, а не отдельным значком
+    if (i.height) rows.push(['Высота', `${i.height} м${i.approx && i.reg ? ' (оценка)' : ''}`]);
     // этажность один раз: здесь, с пометкой об оценке; в блоке учёта не повторяется
     if (i.floorsText || i.floors || i.floorsEst) rows.push(['Этажей', `${i.floorsText || i.floors || i.floorsEst}${i.floorsKnown || i.floorsText ? '' : ' (оценка)'}`]);
     if (i.footprint) rows.push(['Площадь застройки', `${i.footprint.toLocaleString('ru-RU')} м²`]);
@@ -594,7 +595,7 @@ async function main() {
       </div>
       <div class="kind">${KIND_LABEL[i.kind] || 'Объект'}</div>
       <h3>${escapeHtml(o.name)}</h3>
-      ${i.approx || o.generated ? `<span class="badge">${i.reg ? 'Высота оценена' : 'Положение условное'}</span>` : ''}
+      ${(i.approx && !i.reg) || o.generated ? '<span class="badge">Положение условное</span>' : ''}
       ${i.info ? `<p>${escapeHtml(i.info)}</p>` : ''}
       ${o.live ? `<p class="card-live" id="cardLive">${escapeHtml(o.status())}</p>` : ''}
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('')}</dl>

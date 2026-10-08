@@ -108,7 +108,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
         const s = epbStatus(r, st.years);
         if (st.epb === 'due' ? s !== 'soon' && s !== 'overdue' : s !== st.epb) return false;
       }
-      if (q && !`${it.id} ${it.name} ${it.kind} №${it.regNum} ${it.regNums} ${it.inv} ${it.lit} ${it.purpose} ${it.occupants} ${r.invNo || ''} ${r.opoReg || ''} ${r.epbNo || ''}`.toLowerCase().includes(q)) return false;
+      if (q && !`${it.id} ${it.name} ${it.kind} №${it.regNum} ${it.regNums} ${it.inv} ${it.lit} ${it.purpose} ${it.occupants} ${r.invNo || ''} ${r.opoReg || ''} ${r.epbNo || ''} ${r.epbReg || ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
     const { key, dir } = st.sort;
@@ -218,18 +218,19 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       <span class="reg-msg" id="regMsg" aria-live="polite"></span>
     </div>`;
 
+  // порядок как в выгрузке: здание и промэкспертиза, затем размеры, код модели — последним
   const COLS = [
-    ['id', 'Код'],
     ['name', 'Наименование'],
     ['regNum', '№ объекта'],
+    ['epbUntil', 'ЭПБ до'],
+    ['opo', 'Класс ОПО'],
     ['purpose', 'Назначение'],
     ['zone', 'Участок'],
     ['floors', 'Эт.'],
     ['height', 'H, м'],
     ['footprint', 'S застр., м²'],
     ['volume', 'V, м³'],
-    ['opo', 'Класс ОПО'],
-    ['epbUntil', 'ЭПБ до'],
+    ['id', 'Код'],
   ];
   $('regHead').innerHTML = `<tr>${COLS.map(([k, l]) => `<th data-k="${k}" scope="col"><button type="button">${l}</button></th>`).join('')}</tr>`;
   $('regHead').addEventListener('click', (e) => {
@@ -357,18 +358,19 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       .map((it) => {
         const r = recs[it.id] || {};
         const s = epbStatus(r, st.years);
+        const flags = [r.opoGas === 'да' && 'газ', r.opoCrane === 'да' && 'краны', r.conserved === 'да' && 'консервация'].filter(Boolean).join(', ');
         return `<tr data-id="${esc(it.id)}" tabindex="0">
-          <td class="mono">${esc(it.id)}</td>
           <td>${esc(it.name)}${it.kind !== it.name ? `<small>${esc(it.kind)}</small>` : ''}</td>
           <td class="mono">${esc(it.regNum === '' ? '—' : it.regNum)}${it.regNums ? `<small>${esc(it.regNums)}</small>` : ''}</td>
+          <td><span class="st ${s}">${r.epbUntil ? fmtDate(r.epbUntil) : STATUS_NAMES.none}</span>${r.epbNo ? `<small>${esc(r.epbNo)}</small>` : ''}</td>
+          <td>${esc(r.opo || '—')}${flags ? `<small>${esc(flags)}</small>` : ''}</td>
           <td>${esc(it.purpose || '—')}${r.invNo || it.inv ? `<small>инв. ${esc(r.invNo || it.inv)}${it.lit ? `, лит. ${esc(it.lit)}` : ''}</small>` : ''}</td>
           <td>${esc(it.zone)}</td>
           <td class="n">${it.floors ?? '—'}</td>
           <td class="n">${num(it.height)}</td>
           <td class="n">${num(it.footprint)}</td>
           <td class="n">${num(it.volume)}</td>
-          <td>${esc(r.opo || '—')}</td>
-          <td><span class="st ${s}">${r.epbUntil ? fmtDate(r.epbUntil) : STATUS_NAMES.none}</span></td>
+          <td class="mono">${esc(it.id)}</td>
         </tr>`;
       })
       .join('');
@@ -440,6 +442,8 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     const box = document.createElement('div');
     box.className = 'reg-card';
     const rows = [
+      // у объектов с заданными размерами они уже есть в карточке («Размеры»)
+      ['Габариты по контуру', it.length && !o.info?.dims ? `${it.length} × ${it.width} м` : null],
       ['Общая площадь', it.totalArea ? `${num(it.totalArea)} м² (оценка)` : null],
       ['Строительный объём', it.volume ? `${num(it.volume)} м³${it.estimated ? ' (оценка)' : ''}` : null],
       // инвентарный номер по умолчанию — из данных модели

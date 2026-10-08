@@ -12,7 +12,7 @@ import { straighten } from '../src/model/straighten.js';
 import { mergeGlb, placementTRS } from '../src/export/glb-merge.js';
 import { centroid, area } from '../src/geo.js';
 import { readCustomDir } from '../scripts/custom-files.mjs';
-import { registryItems, rowsToRecords } from '../src/registry/core.js';
+import { registryItems, rowsToRecords, minRect, COLUMNS, columnGroups } from '../src/registry/core.js';
 
 assert.equal(customIdFromFile('Z129 Корпусосборочный цех (предстап.glb'), 'Z129');
 assert.equal(customIdFromFile('F-galerny-1.GLB'), 'F-galerny-1');
@@ -83,9 +83,20 @@ const recs = rowsToRecords([['Код в модели', 'Техническое �
 assert.deepEqual(recs.Z141, { opo: 'IV', year: 1890 });
 assert.deepEqual(recs.Z161, { state: 'аварийное', opo: 'не ОПО' });
 assert.deepEqual(problems.map((p) => `${p.id}:${p.label}`), ['Z141:Техническое состояние', 'Z141:Дата обследования', 'Z161:Год постройки']);
+// строка групп над шапкой (как в выгрузке) и обозначения «да/нет» в полях-признаках
+const recs2 = rowsToRecords([['Здание', '', 'ОПО'], ['Наименование', 'ОПО: краны', 'Консервация', 'Код в модели'], ['Цех', '+', 'Нет', 'Z141']]);
+assert.deepEqual(recs2.Z141, { opoCrane: 'да', conserved: 'нет' });
 const reg = registryItems(model, data).find((i) => i.id === 'Z141');
 assert.equal(reg.occupants, 'Отдел главного механика (Иванов И. И.)');
 assert.equal(reg.owners, 'Административно-хозяйственная служба');
+assert.ok(reg.length > reg.width && reg.width > 0, 'габариты по контуру');
+// код в модели — последний столбец, группы идут подряд
+assert.equal(COLUMNS[COLUMNS.length - 1].key, 'id');
+assert.deepEqual(columnGroups().map((g) => g.label), ['Здание', 'Промэкспертиза', 'ОПО', 'Состояние', 'Размеры по модели', 'Размещение', 'Модель']);
+// наименьший прямоугольник: повёрнутый 40 × 20 и Г-образный контур
+const turn = (p, a) => [p[0] * Math.cos(a) - p[1] * Math.sin(a), p[0] * Math.sin(a) + p[1] * Math.cos(a)];
+assert.deepEqual(minRect([[0, 0], [40, 0], [40, 20], [0, 20]].map((p) => turn(p, 0.6))), [40, 20]);
+assert.deepEqual(minRect([[0, 0], [30, 0], [30, 10], [10, 10], [10, 25], [0, 25]]), [30, 25]);
 
 // к чему относится новый объект: явно, по слою (судно на воде — всё равно верфь), иначе по месту
 assert.equal(newObjectInYard({ layer: 'vessels' }, false), true);

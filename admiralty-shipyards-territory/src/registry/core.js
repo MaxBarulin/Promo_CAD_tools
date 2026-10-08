@@ -25,17 +25,27 @@ const TYPE_NAMES = {
 };
 
 // Поля технического учёта, заполняемые службой эксплуатации зданий.
+// Порядок — как в таблице службы: здание, промэкспертиза, ОПО, состояние.
+// alt — прежние заголовки столбца: старые выгрузки загружаются без правки.
+// aliases — что ещё принимать при загрузке за значение из списка («+» → «да»).
+const YES_NO = { options: ['', 'да', 'нет'], aliases: { да: ['+', 'есть', 'yes', '1', 'true', 'v', 'x', 'х'], нет: ['-', '—', '–', 'no', '0', 'false'] } };
 export const FIELDS = [
   { key: 'invNo', label: 'Инвентарный №', type: 'text' },
   { key: 'year', label: 'Год постройки', type: 'number' },
-  // alt — прежние заголовки столбца: старые выгрузки загружаются без правки
-  { key: 'opo', label: 'Класс ОПО', alt: ['Класс опасности ОПО'], type: 'select', options: ['', 'I', 'II', 'III', 'IV', 'не ОПО'] },
-  { key: 'opoReg', label: 'Рег. № ОПО', type: 'text' },
+  // промэкспертиза: номер заключения, его регистрационный номер в Ростехнадзоре, даты
   { key: 'epbNo', label: '№ заключения ЭПБ', type: 'text' },
+  { key: 'epbReg', label: 'Рег. № заключения ЭПБ', type: 'text' },
   { key: 'epbDate', label: 'Дата заключения ЭПБ', type: 'date' },
   { key: 'epbUntil', label: 'Срок безопасной эксплуатации до', type: 'date' },
+  // ОПО: класс, регистрационный номер объекта, по каким признакам здание в составе ОПО
+  { key: 'opo', label: 'Класс ОПО', alt: ['Класс опасности ОПО'], type: 'select', options: ['', 'I', 'II', 'III', 'IV', 'не ОПО'] },
+  { key: 'opoReg', label: 'Рег. № ОПО', type: 'text' },
+  { key: 'opoGas', label: 'ОПО: газ', alt: ['ОПО ГАЗ'], type: 'select', flag: true, ...YES_NO },
+  { key: 'opoCrane', label: 'ОПО: краны', alt: ['ОПО КРАН', 'ОПО: краны (ПС)'], type: 'select', flag: true, ...YES_NO },
+  // состояние
   { key: 'state', label: 'Техническое состояние', type: 'select', options: ['', 'нормативное', 'работоспособное', 'ограниченно работоспособное', 'аварийное'] },
   { key: 'surveyDate', label: 'Дата обследования', type: 'date' },
+  { key: 'conserved', label: 'Консервация', alt: ['Консерва', 'Законсервировано'], type: 'select', flag: true, ...YES_NO },
   { key: 'note', label: 'Примечание', type: 'text' },
 ];
 export const FIELD_KEYS = FIELDS.map((f) => f.key);
@@ -81,6 +91,8 @@ export function registryItems(model, data) {
       const c = poly ? centroid(poly) : o.proxy.line[0];
       const [lat, lon] = toLatLon(c);
       const footprint = cat === 'building' ? i.footprint : i.dims && cat === 'structure' ? Math.round(i.dims[0] * i.dims[1]) : poly && cat === 'structure' ? Math.round(area(poly)) : null;
+      // габариты: заданные размеры, иначе стороны наименьшего прямоугольника вокруг контура
+      const dims = i.dims ? [Math.max(...i.dims.slice(0, 2)), Math.min(...i.dims.slice(0, 2))] : poly && cat !== 'device' ? minRect(poly) : null;
       items.push({
         id: o.id,
         name: o.name,
@@ -97,6 +109,8 @@ export function registryItems(model, data) {
         floorsText: cat === 'building' ? i.floorsText : null,
         height: i.height ?? (o.proxy.z1 ? Math.round(o.proxy.z1) : null),
         footprint,
+        length: dims ? dims[0] : null,
+        width: dims ? dims[1] : null,
         totalArea: cat === 'building' ? i.totalArea : null,
         volume: cat === 'building' ? i.volume : null,
         estimated: !!i.approx,
@@ -111,6 +125,62 @@ export function registryItems(model, data) {
   }
   const order = { building: 0, structure: 1, device: 2 };
   return items.sort((a, b) => order[a.cat] - order[b.cat] || a.zone.localeCompare(b.zone, 'ru') || (b.footprint || 0) - (a.footprint || 0));
+}
+
+// Стороны наименьшего по площади прямоугольника, описанного вокруг контура: [длина, ширина], м.
+// Для Г-образных и сложных контуров — габариты по внешним граням.
+export function minRect(ring) {
+  const pts = ring.filter((p, i) => i === 0 || p[0] !== ring[i - 1][0] || p[1] !== ring[i - 1][1]);
+  if (pts.length < 2) return null;
+  const hull = convexHull(pts);
+  let best = null;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (d < 1e-9) continue;
+    const ux = (b[0] - a[0]) / d;
+    const uy = (b[1] - a[1]) / d;
+    let lo1 = Infinity;
+    let hi1 = -Infinity;
+    let lo2 = Infinity;
+    let hi2 = -Infinity;
+    for (const p of hull) {
+      const s1 = p[0] * ux + p[1] * uy;
+      const s2 = -p[0] * uy + p[1] * ux;
+      if (s1 < lo1) lo1 = s1;
+      if (s1 > hi1) hi1 = s1;
+      if (s2 < lo2) lo2 = s2;
+      if (s2 > hi2) hi2 = s2;
+    }
+    const w = hi1 - lo1;
+    const h = hi2 - lo2;
+    if (!best || w * h < best[0] * best[1]) best = [w, h];
+  }
+  if (!best) return null;
+  const r = (v) => Math.round(v * 10) / 10;
+  return [r(Math.max(best[0], best[1])), r(Math.min(best[0], best[1]))];
+}
+
+// Выпуклая оболочка (Эндрю), точки против часовой стрелки
+function convexHull(points) {
+  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
 }
 
 // Подразделения строкой: «Отдел главного механика (Иванов И. И.); Бюро …»
@@ -170,29 +240,59 @@ export const STATUS_NAMES = { overdue: 'Срок истёк', soon: 'Истек�
 
 // ---------- табличное представление ----------
 
+// Столбцы таблицы и выгрузки. Порядок — как в таблице службы эксплуатации: сначала здание
+// и промэкспертиза, расчётные размеры и сведения модели — в конце. group — заголовок группы
+// (вторая строка шапки в Excel), field — заполняет служба, list/range — проверка ввода.
+const fieldCol = (key, group, extra = {}) => {
+  const f = FIELDS.find((x) => x.key === key);
+  return { key, label: f.label, w: f.type === 'date' ? 16 : f.flag ? 10 : key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true, flag: !!f.flag, list: f.type === 'select' ? f.options.filter(Boolean) : undefined, range: key === 'year' ? [1700, 2100] : undefined, group, ...extra };
+};
 export const COLUMNS = [
-  { key: 'id', label: 'Код в модели', w: 12 },
-  { key: 'name', label: 'Наименование', w: 42 },
-  { key: 'regNum', label: '№ объекта', w: 10 },
+  { key: 'name', label: 'Наименование', w: 42, group: 'Здание' },
+  { key: 'regNum', label: '№ объекта', w: 10, group: 'Здание' },
+  { key: 'lit', label: 'Литера', w: 8, group: 'Здание' },
   // инвентарный номер один: из данных модели, служба эксплуатации может уточнить
-  { key: 'invNo', label: 'Инвентарный №', w: 14, field: true, fallback: (it) => it.inv },
-  { key: 'lit', label: 'Литера', w: 8 },
-  { key: 'purpose', label: 'Назначение', w: 24 },
-  { key: 'kind', label: 'Тип в модели', w: 26 },
-  { key: 'zone', label: 'Участок', w: 24 },
-  { key: 'floors', label: 'Этажность', w: 10, num: true },
-  { key: 'height', label: 'Высота, м', w: 10, num: true },
-  { key: 'footprint', label: 'Площадь застройки, м²', w: 14, num: true },
-  { key: 'totalArea', label: 'Общая площадь (оценка), м²', w: 16, num: true },
-  { key: 'volume', label: 'Строительный объём (оценка), м³', w: 18, num: true },
-  { key: 'occupants', label: 'Подразделения в здании', w: 36 },
-  { key: 'owners', label: 'Отвечает за здание', w: 30 },
-  ...FIELDS.filter((f) => f.key !== 'invNo').map((f) => ({ key: f.key, label: f.label, w: f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true, list: f.type === 'select' ? f.options.filter(Boolean) : undefined, range: f.key === 'year' ? [1700, 2100] : undefined })),
-  { key: 'epbStatus', label: 'Статус ЭПБ', w: 14 },
-  { key: 'estimated', label: 'Высота оценена', w: 12 },
-  { key: 'lat', label: 'Широта', w: 11, num: true },
-  { key: 'lon', label: 'Долгота', w: 11, num: true },
+  fieldCol('invNo', 'Здание', { w: 14, fallback: (it) => it.inv }),
+  { key: 'purpose', label: 'Назначение', w: 24, group: 'Здание' },
+  fieldCol('year', 'Здание', { w: 12 }),
+  fieldCol('epbNo', 'Промэкспертиза'),
+  fieldCol('epbReg', 'Промэкспертиза'),
+  fieldCol('epbDate', 'Промэкспертиза'),
+  fieldCol('epbUntil', 'Промэкспертиза', { w: 20 }),
+  { key: 'epbStatus', label: 'Статус ЭПБ', w: 13, group: 'Промэкспертиза' },
+  fieldCol('opo', 'ОПО', { w: 11 }),
+  fieldCol('opoReg', 'ОПО'),
+  fieldCol('opoGas', 'ОПО'),
+  fieldCol('opoCrane', 'ОПО'),
+  fieldCol('state', 'Состояние', { w: 22 }),
+  fieldCol('surveyDate', 'Состояние'),
+  fieldCol('conserved', 'Состояние', { w: 12 }),
+  fieldCol('note', 'Состояние'),
+  { key: 'length', label: 'Длина, м', w: 11, num: true, group: 'Размеры по модели' },
+  { key: 'width', label: 'Ширина, м', w: 11, num: true, group: 'Размеры по модели' },
+  { key: 'height', label: 'Высота, м', w: 11, num: true, group: 'Размеры по модели' },
+  { key: 'floors', label: 'Этажность', w: 10, num: true, group: 'Размеры по модели' },
+  { key: 'footprint', label: 'Площадь застройки, м²', w: 14, num: true, group: 'Размеры по модели' },
+  { key: 'totalArea', label: 'Общая площадь (оценка), м²', w: 16, num: true, group: 'Размеры по модели' },
+  { key: 'volume', label: 'Строительный объём (оценка), м³', w: 18, num: true, group: 'Размеры по модели' },
+  { key: 'zone', label: 'Участок', w: 24, group: 'Размещение' },
+  { key: 'occupants', label: 'Подразделения в здании', w: 36, group: 'Размещение' },
+  { key: 'owners', label: 'Отвечает за здание', w: 30, group: 'Размещение' },
+  { key: 'kind', label: 'Тип в модели', w: 26, group: 'Модель' },
+  { key: 'lat', label: 'Широта', w: 11, num: true, group: 'Модель' },
+  { key: 'lon', label: 'Долгота', w: 11, num: true, group: 'Модель' },
+  { key: 'id', label: 'Код в модели', w: 12, group: 'Модель' },
 ];
+// Группы столбцов подряд: [{ label, from, to }] (индексы столбцов)
+export function columnGroups(columns = COLUMNS) {
+  const out = [];
+  columns.forEach((c, i) => {
+    const last = out[out.length - 1];
+    if (last && last.label === (c.group || '') && last.to === i - 1) last.to = i;
+    else out.push({ label: c.group || '', from: i, to: i });
+  });
+  return out;
+}
 
 export function toRows(items, records, years) {
   return items.map((it) => {
@@ -201,7 +301,6 @@ export function toRows(items, records, years) {
     for (const c of COLUMNS) {
       if (c.field) row[c.key] = (r[c.key] ?? '') !== '' ? r[c.key] : c.fallback ? c.fallback(it) ?? '' : '';
       else if (c.key === 'epbStatus') row[c.key] = STATUS_NAMES[epbStatus(r, years)];
-      else if (c.key === 'estimated') row[c.key] = it.estimated ? 'да' : '';
       else row[c.key] = it[c.key] ?? '';
     }
     return row;
@@ -224,14 +323,16 @@ export function toCSV(rows) {
 const YEAR_RANGE = [1700, 2100];
 const latinRoman = (s) => s.replace(/[Іі]/g, 'I').replace(/[Vv]/g, 'V');
 export function rowsToRecords(table, problems = []) {
-  if (!table.length) return {};
-  const head = table[0].map((h) => String(h ?? '').trim().toLowerCase());
+  const norm = (h) => String(h ?? '').trim().toLowerCase();
+  // строка заголовков — та, где есть «Код в модели» (в выгрузке над ней строка групп)
+  const headIdx = table.slice(0, 5).findIndex((r) => (r || []).some((h) => norm(h) === 'код в модели'));
+  if (headIdx < 0) throw new Error('В таблице нет столбца «Код в модели» — используйте выгрузку из реестра как шаблон.');
+  const head = table[headIdx].map(norm);
   const col = (label) => head.indexOf(label.toLowerCase());
   const idCol = col('Код в модели');
-  if (idCol < 0) throw new Error('В таблице нет столбца «Код в модели» — используйте выгрузку из реестра как шаблон.');
   const map = FIELDS.map((f) => ({ f, i: [f.label, ...(f.alt || [])].map(col).find((i) => i >= 0) ?? -1 })).filter((x) => x.i >= 0);
   const out = {};
-  for (const row of table.slice(1)) {
+  for (const row of table.slice(headIdx + 1)) {
     const id = String(row[idCol] ?? '').trim();
     if (!id) continue;
     const rec = {};
@@ -255,9 +356,10 @@ export function rowsToRecords(table, problems = []) {
         }
         v = n;
       } else if (f.type === 'select') {
-        // значение из списка, без учёта регистра и латиницы/кириллицы в римских цифрах
+        // значение из списка, без учёта регистра и латиницы/кириллицы в римских цифрах;
+        // у полей «да/нет» принимаются и обозначения вроде «+», «есть»
         const key = latinRoman(String(v).trim()).toLowerCase();
-        const opt = f.options.find((o) => o && latinRoman(o).toLowerCase() === key);
+        const opt = f.options.find((o) => o && (latinRoman(o).toLowerCase() === key || (f.aliases?.[o] || []).includes(key)));
         if (!opt) {
           bad('нет в списке: ' + f.options.filter(Boolean).join(', '));
           continue;
@@ -282,12 +384,18 @@ export function demoRecords(items) {
     const until = new Date(Date.UTC(now.getUTCFullYear() - 1 + Math.floor(rnd() * 8), Math.floor(rnd() * 12), 1 + Math.floor(rnd() * 27)));
     const date = new Date(until);
     date.setUTCFullYear(date.getUTCFullYear() - (it.cat === 'device' ? 3 : 5));
+    const no = Math.floor(rnd() * 9000) + 1000;
+    const hall = /Производственный|Эллинг/.test(it.kind);
     out[it.id] = {
       opo: it.cat === 'device' ? 'IV' : it.cat === 'structure' ? 'III' : rnd() < 0.5 ? 'III' : rnd() < 0.5 ? 'IV' : 'не ОПО',
-      epbNo: `ДЕМО-${String(Math.floor(rnd() * 9000) + 1000)}`,
+      epbNo: `ДЕМО-${no}`,
+      epbReg: `ДЕМО-19-${no}-${until.getUTCFullYear() - 5}`,
       epbDate: date.toISOString().slice(0, 10),
       epbUntil: until.toISOString().slice(0, 10),
+      opoGas: rnd() < 0.15 ? 'да' : 'нет',
+      opoCrane: hall && rnd() < 0.7 ? 'да' : 'нет',
       state: ['работоспособное', 'работоспособное', 'ограниченно работоспособное', 'нормативное'][Math.floor(rnd() * 4)],
+      conserved: rnd() < 0.08 ? 'да' : 'нет',
       note: 'ДЕМО — условные данные',
     };
   }
