@@ -1,4 +1,4 @@
-// Экспорт генплана в DXF (формат R12, ASCII) для AutoCAD / nanoCAD / КОМПАС / LibreCAD.
+// Экспорт плана территории в DXF (формат R12, ASCII) для AutoCAD / nanoCAD / КОМПАС / LibreCAD.
 // Единицы — метры, локальная система координат модели (x — восток, y — север,
 // начало — площадь Репина, WGS84 59.91694 N, 30.27948 E). Контуры зданий — замкнутые
 // полилинии с «высотой» (thickness), поэтому в 3D-виде они показываются как объёмы.
@@ -176,11 +176,11 @@ export function buildDXF(data, model) {
   }
   for (const p of data.platforms || []) {
     poly('PLATFORMS', p.poly);
-    text('LABELS', p.poly[0], 1.5, `${p.gp?.num ? p.gp.num + ' ' : ''}${p.name}`);
+    text('LABELS', p.poly[0], 1.5, `${p.reg?.num ? p.reg.num + ' ' : ''}${p.name}`);
   }
   for (const m of data.markers || []) {
-    circle('GENPLAN_POINTS', m.at, 1.5);
-    text('LABELS', [m.at[0] + 2, m.at[1]], 1.5, `${m.gp?.num ? m.gp.num + ' ' : ''}${m.name}`);
+    circle('OBJECT_POINTS', m.at, 1.5);
+    text('LABELS', [m.at[0] + 2, m.at[1]], 1.5, `${m.reg?.num ? m.reg.num + ' ' : ''}${m.name}`);
   }
   for (const c of data.cranes) {
     circle('CRANES', c.at, c.type === 'gantry' ? 2 : 6);
@@ -217,7 +217,7 @@ export function buildDXF(data, model) {
     text('LABELS', c, 2.5, d.name);
   }
   for (const l of [...data.labels, ...data.water.labels]) text('LABELS', l.at, l.kind === 'island' ? 12 : 6, l.text);
-  text('LABELS', [data.meta.bounds.minX + 20, data.meta.bounds.minY + 20], 6, `АО «Адмиралтейские верфи» — генплан (схема). Начало координат: ${ORIGIN.name}, ${ORIGIN.lat} N, ${ORIGIN.lon} E. Единицы: м.`);
+  text('LABELS', [data.meta.bounds.minX + 20, data.meta.bounds.minY + 20], 6, `АО «Адмиралтейские верфи» — план территории. Начало координат: ${ORIGIN.name}, ${ORIGIN.lat} N, ${ORIGIN.lon} E. Единицы: м.`);
 
   g(0, 'ENDSEC');
   g(0, 'EOF');

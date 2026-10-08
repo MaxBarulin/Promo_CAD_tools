@@ -1,6 +1,6 @@
 // Экспорт модели в файлы без браузера:
 //   dist/admiralty-shipyards.glb           — 3D (glTF 2.0, бинарный): слои → объекты, материалы по палитре
-//   dist/admiralty-shipyards-plan.dxf      — генплан DXF R12 (м, локальные координаты)
+//   dist/admiralty-shipyards-plan.dxf      — план территории DXF R12 (м, локальные координаты)
 //   dist/admiralty-shipyards.geojson       — слои в WGS84
 //   dist/admiralty-shipyards-registry.xlsx — реестр зданий и сооружений (шаблон для заполнения полей технического учёта)
 // Запуск: npm run export [-- --full | --no-context]

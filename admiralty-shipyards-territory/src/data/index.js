@@ -11,7 +11,7 @@ import { ORIGIN, pointInRing, area, centroid } from '../geo.js';
 import OSM_OVERLAY from './osm-overlay.js';
 import { applyOverlay } from './overlay.js';
 import { busRoute } from './bus.js';
-import { gpSlipways, gpChimneys, gpBridges, gpPlatforms, gpMarkers, applyMarks, busSignPoints } from './genplan-structures.js';
+import { plantSlipways, plantChimneys, plantBridges, plantPlatforms, plantMarkers, applyMarks, busSignPoints } from './plant-structures.js';
 
 // useOSM: подмешать свежую выгрузку OpenStreetMap, если она загружена (npm run osm:fetch).
 export function getTerritory({ useOSM = true } = {}) {
@@ -63,7 +63,7 @@ const DISTRICTS = [
 function baseTerritory() {
   const R = realTerritory();
   // сооружения по данным предприятия: стапели и трубы, заводские мосты, площадки, объекты без контура
-  const bridges = gpBridges(R.bridges);
+  const bridges = plantBridges(R.bridges);
   // отметки служб: столовые, медпункт, КПП, переходы, ларьки
   const marks = applyMarks(R.buildings, { crossings: R.crossings, roads: R.internalRoads });
   MARKS_REPORT = marks.report;
@@ -95,18 +95,18 @@ function baseTerritory() {
     gates: R.gates,
     autoFence: true,
     buildings: marks.buildings,
-    chimneys: gpChimneys(Y.CHIMNEYS),
+    chimneys: plantChimneys(Y.CHIMNEYS),
     internalRoads: R.internalRoads,
     streets: R.streets,
     areas: [...R.areas, ...Y.AREAS],
     rails: Y.RAILS,
-    slipways: gpSlipways(Y.SLIPWAYS),
+    slipways: plantSlipways(Y.SLIPWAYS),
     cranes: Y.CRANES,
     ships: [...Y.SHIPS, ...R.ships],
     docks: Y.DOCKS,
     bridges,
-    platforms: gpPlatforms(),
-    markers: [...gpMarkers(bridges.usedNums), ...marks.points],
+    platforms: plantPlatforms(),
+    markers: [...plantMarkers(bridges.usedNums), ...marks.points],
     arches: [],
     containers: Y.CONTAINERS,
     foreignAreas: R.foreignAreas,

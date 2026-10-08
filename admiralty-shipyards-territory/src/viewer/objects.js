@@ -23,7 +23,7 @@ const TYPES = [
   { id: 'bus', name: 'Автобусы', test: (i) => i.kind === 'bus' },
 ];
 
-const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба', bus: 'Внутризаводской автобус', platform: 'Площадка, плита', marker: 'Сооружение (номер на генплане)', service: 'Отметка' };
+const KIND_NAMES = { vessel: 'Судно', dock: 'Плавучий док', crane: 'Кран', slipway: 'Стапель', bridge: 'Заводской мост', chimney: 'Дымовая труба', bus: 'Внутризаводской автобус', platform: 'Площадка, плита', marker: 'Сооружение без контура', service: 'Отметка' };
 const LAYERS = new Set(['shipyard', 'production', 'vessels', 'bridges']);
 const WATER = 'Акватория';
 const TRANSPORT = 'Транспорт';
@@ -50,7 +50,7 @@ export function setupObjectList({ $, data, pickMesh, registryItems, onPick, onSh
         kind: kind.replace(/ \(сооружение\)$/, ''),
         zone: r?.zone || ZONE_NAMES[o.info.zone] || zoneByPoint(c, data) || WATER,
         size: r?.footprint ?? (o.proxy.poly ? Math.round(area(o.proxy.poly)) : 0),
-        text: `${o.id} ${o.name} ${kind} ${o.info.gp?.num ? `№${o.info.gp.num} ${(o.info.gp.nums || []).join(' ')} ${o.info.gp.inv || ''} ${o.info.gp.lit || ''}` : ''} ${(o.info.units || []).map((u) => `${u.name} ${u.person || ''}`).join(' ')} ${(o.info.services || []).join(' ')}`.toLowerCase(),
+        text: `${o.id} ${o.name} ${kind} ${o.info.reg?.num ? `№${o.info.reg.num} ${(o.info.reg.nums || []).join(' ')} ${o.info.reg.inv || ''} ${o.info.reg.lit || ''}` : ''} ${(o.info.units || []).map((u) => `${u.name} ${u.person || ''}`).join(' ')} ${(o.info.services || []).join(' ')}`.toLowerCase(),
       });
     }
     for (const o of extra()) {

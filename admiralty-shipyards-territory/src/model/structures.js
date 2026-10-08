@@ -312,7 +312,7 @@ export function buildContainers(sink, at, angle, n, seed) {
 
 export { rect, lerp };
 
-// Площадка или плита с генплана: тонкая плита по контуру (бетон / металл), яма — заглублённая
+// Площадка или плита по данным предприятия: тонкая плита по контуру (бетон / металл), яма — заглублённая
 export function buildPlatform(sink, p) {
   const ring = ensureCCW(p.poly);
   if (p.surface === 'pit') {

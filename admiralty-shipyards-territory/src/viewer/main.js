@@ -1,7 +1,7 @@
 // Интерактивный просмотр модели территории АО «Адмиралтейские верфи».
 
 import * as THREE from 'three';
-import { PURPOSE_SHORT, PURPOSE_COLORS } from '../data/genplan.js';
+import { PURPOSE_SHORT, PURPOSE_COLORS } from '../data/plant.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import CUSTOM from 'custom:files';
@@ -55,7 +55,7 @@ const KIND_LABEL = {
   landmark: 'Достопримечательность',
   misc: 'Оборудование',
   platform: 'Площадка, плита',
-  marker: 'Сооружение (номер на генплане)',
+  marker: 'Сооружение без контура',
   service: 'Отметка',
 };
 
@@ -300,7 +300,7 @@ async function main() {
 
   // раскраска зданий верфи по назначению
   let purposeMode = false;
-  const purposeMapOf = (o) => purposeKeyMap(o.info?.gp?.purpose);
+  const purposeMapOf = (o) => purposeKeyMap(o.info?.reg?.purpose);
   $('purposeLegend').innerHTML = [...Object.entries(PURPOSE_SHORT).map(([k, n]) => [PURPOSE_COLORS[k], n]), ['#bdbdb9', 'назначение не указано']]
     .map(([c, n]) => `<span class="chip"><i style="background:${c}"></i>${n}</span>`)
     .join('');
@@ -419,7 +419,7 @@ async function main() {
 
   if (__ARTIFACT_BUILD__) {
     $('exportGroup').innerHTML =
-      '<p class="fly-text">GLB (3D), DXF (генплан) и GeoJSON лежат в репозитории в папке <code>admiralty-shipyards-territory/dist</code>; там же локальная версия этой страницы с кнопками выгрузки.</p>';
+      '<p class="fly-text">GLB (3D), DXF (план территории) и GeoJSON лежат в репозитории в папке <code>admiralty-shipyards-territory/dist</code>; там же локальная версия этой страницы с кнопками выгрузки.</p>';
   } else {
     // модели из custom/ и из редактора вклеиваются в GLB вместе с текстурами
     setupExports({
@@ -570,9 +570,9 @@ async function main() {
     const i = o.info;
     const rows = [];
     rows.push(['Код', o.id]);
-    if (i.gp?.num) rows.push(['№ на генплане', i.gp.nums?.length > 1 ? i.gp.nums.join(', ') : i.gp.num]);
-    if (i.gp?.lit) rows.push(['Литера', i.gp.lit]);
-    if (i.gp?.purpose && PURPOSE_SHORT[i.gp.purpose]) rows.push(['Назначение', PURPOSE_SHORT[i.gp.purpose]]);
+    if (i.reg?.num) rows.push(['№ объекта', i.reg.nums?.length > 1 ? i.reg.nums.join(', ') : i.reg.num]);
+    if (i.reg?.lit) rows.push(['Литера', i.reg.lit]);
+    if (i.reg?.purpose && PURPOSE_SHORT[i.reg.purpose]) rows.push(['Назначение', PURPOSE_SHORT[i.reg.purpose]]);
     if (i.zone && ZONE_LABEL[i.zone]) rows.push(['Участок', ZONE_LABEL[i.zone]]);
     if (i.dims) rows.push(['Размеры', `${i.dims[0]} × ${i.dims[1]} м`]);
     if (i.height) rows.push(['Высота', `${i.height} м`]);
@@ -595,7 +595,7 @@ async function main() {
       </div>
       <div class="kind">${KIND_LABEL[i.kind] || 'Объект'}</div>
       <h3>${escapeHtml(o.name)}</h3>
-      ${i.approx || o.generated ? `<span class="badge">${i.gp ? 'Высота оценена' : 'Положение условное'}</span>` : ''}
+      ${i.approx || o.generated ? `<span class="badge">${i.reg ? 'Высота оценена' : 'Положение условное'}</span>` : ''}
       ${i.info ? `<p>${escapeHtml(i.info)}</p>` : ''}
       ${o.live ? `<p class="card-live" id="cardLive">${escapeHtml(o.status())}</p>` : ''}
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join('')}</dl>

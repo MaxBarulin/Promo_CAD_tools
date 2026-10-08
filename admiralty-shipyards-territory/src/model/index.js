@@ -13,7 +13,7 @@ import { BUS_DIRS, stopTimes, busStopTimes } from '../data/bus.js';
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, area, DEG } from '../geo.js';
 import { PALETTE } from './materials.js';
-import { PURPOSE_RU } from '../data/genplan.js';
+import { PURPOSE_RU } from '../data/plant.js';
 import { removeFromData, applyCustom, editBuildingsData } from './custom.js';
 
 export const LAYERS = [
@@ -145,7 +145,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
       id: sw.id,
       name: sw.name,
       sink: s,
-      info: { name: sw.name, info: sw.info, kind: 'slipway', dims: [+sw.length.toFixed(1), sw.width], gp: sw.gp },
+      info: { name: sw.name, info: sw.info, kind: 'slipway', dims: [+sw.length.toFixed(1), sw.width], reg: sw.reg },
       proxy: prismProxy(bufferPolyline([sw.head, end], sw.width / 2), 0, 6),
     });
   }
@@ -171,19 +171,19 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   for (const ch of data.chimneys) {
     const s = new Sink();
     buildChimney(s, ch);
-    add_('production', { id: ch.id, name: ch.name, sink: s, info: { name: ch.name, info: `${ch.info ? ch.info + ' ' : ''}Высота ≈ ${ch.h} м.`, kind: 'chimney', height: ch.h, approx: !!ch.approx, gp: ch.gp }, proxy: boxProxy(ch.at, 0, Math.max(ch.r * 2.4, 3), Math.max(ch.r * 2.4, 3), 0, ch.h) });
+    add_('production', { id: ch.id, name: ch.name, sink: s, info: { name: ch.name, info: `${ch.info ? ch.info + ' ' : ''}Высота ≈ ${ch.h} м.`, kind: 'chimney', height: ch.h, approx: !!ch.approx, reg: ch.reg }, proxy: boxProxy(ch.at, 0, Math.max(ch.r * 2.4, 3), Math.max(ch.r * 2.4, 3), 0, ch.h) });
   }
 
-  // ---------- площадки, плиты и объекты без контура с генплана ----------
+  // ---------- площадки, плиты и объекты без контура по данным предприятия ----------
   for (const p of data.platforms || []) {
     const s = new Sink();
     buildPlatform(s, p);
-    add_('production', { id: p.id, name: p.name, sink: s, info: { name: p.name, info: p.info, kind: 'platform', surface: p.surface, footprint: Math.round(area(p.poly)), gp: p.gp }, proxy: prismProxy(p.poly, -0.1, 0.6) });
+    add_('production', { id: p.id, name: p.name, sink: s, info: { name: p.name, info: p.info, kind: 'platform', surface: p.surface, footprint: Math.round(area(p.poly)), reg: p.reg }, proxy: prismProxy(p.poly, -0.1, 0.6) });
   }
   for (const m of data.markers || []) {
     const s = new Sink();
     buildMarker(s, m);
-    add_('production', { id: m.id, name: m.name, sink: s, info: { name: m.name, info: m.info, kind: m.kind === 'service' ? 'service' : 'marker', markerKind: m.kind, mark: m.mark, gp: m.gp }, proxy: boxProxy(m.at, 0, 2.6, 2.6, 0, 2.6) });
+    add_('production', { id: m.id, name: m.name, sink: s, info: { name: m.name, info: m.info, kind: m.kind === 'service' ? 'service' : 'marker', markerKind: m.kind, mark: m.mark, reg: m.reg }, proxy: boxProxy(m.at, 0, 2.6, 2.6, 0, 2.6) });
   }
 
   // укрупнённые секции корпуса на предстапельной площадке и контейнеры — каждый объект
@@ -305,7 +305,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
   for (const br of data.bridges) {
     const s = new Sink();
     buildBridge(s, br);
-    add_('bridges', { id: br.id, name: br.name, sink: s, scope: br.type === 'industrial' || br.yard ? 'yard' : 'city', info: { name: br.name, info: br.info, kind: 'bridge', gp: br.gp }, proxy: prismProxy(bufferPolyline([br.from, br.to], br.w / 2, { capExtend: 3 }), -1, br.type === 'kalinkin' ? 10 : 2.5) });
+    add_('bridges', { id: br.id, name: br.name, sink: s, scope: br.type === 'industrial' || br.yard ? 'yard' : 'city', info: { name: br.name, info: br.info, kind: 'bridge', reg: br.reg }, proxy: prismProxy(bufferPolyline([br.from, br.to], br.w / 2, { capExtend: 3 }), -1, br.type === 'kalinkin' ? 10 : 2.5) });
   }
   for (const a of data.arches) {
     const s = new Sink();
@@ -464,12 +464,12 @@ export function cleanUserData(info) {
   const out = {};
   for (const [k, v] of Object.entries(info)) if (v != null && typeof v !== 'object') out[k] = v;
   if (info.dims) out.dims = info.dims.join(' × ');
-  if (info.gp) {
-    if (info.gp.num != null) out.gpNum = info.gp.num;
-    if (info.gp.nums?.length > 1) out.gpNums = info.gp.nums.join(', ');
-    if (info.gp.inv) out.inv = info.gp.inv;
-    if (info.gp.lit) out.lit = info.gp.lit;
-    if (info.gp.purpose) out.purpose = PURPOSE_RU[info.gp.purpose] || info.gp.purpose;
+  if (info.reg) {
+    if (info.reg.num != null) out.objectNo = info.reg.num;
+    if (info.reg.nums?.length > 1) out.objectNos = info.reg.nums.join(', ');
+    if (info.reg.inv) out.inv = info.reg.inv;
+    if (info.reg.lit) out.lit = info.reg.lit;
+    if (info.reg.purpose) out.purpose = PURPOSE_RU[info.reg.purpose] || info.reg.purpose;
   }
   return out;
 }

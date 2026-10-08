@@ -138,7 +138,7 @@ export const PALETTE = {
   marker_sign: { name: 'Отметка_табличка', color: '#1f5fae', roughness: 0.5 },
   marker_service: { name: 'Отметка_служба', color: '#e07a2f', roughness: 0.5 },
 
-  // --- раскраска зданий верфи по назначению (цвета условных обозначений генплана) ---
+  // --- раскраска зданий верфи по назначению (цвета назначения) ---
   p_production: { name: 'Назначение_производственное', color: '#a0c7ee', roughness: 0.9 },
   p_production_r: { name: 'Назначение_производственное_кровля', color: '#84aed9', roughness: 0.9 },
   p_admin: { name: 'Назначение_административно-бытовое', color: '#eda5a6', roughness: 0.9 },

@@ -122,7 +122,7 @@ const bke = makeBuildingObject(editBuilding(src.find((b) => b.id === 'Z136'), { 
 assert.equal(bke.info.roof, 'barrel');
 assert.equal(bke.info.height, 31.5, 'высота до верха свода');
 assert.equal(bke.info.refined, 'по фото');
-// Z160 по генплану имеет пристройки (parts): для проверки кровли берём только основной контур
+// Z160 по данным предприятия имеет пристройки (parts): для проверки кровли берём только основной контур
 const bar0 = { ...src.find((b) => b.id === 'Z160'), parts: undefined, partsCustom: undefined, holes: undefined };
 assert.ok(bar0.poly.length > 4, 'контур Z160 — не прямоугольник');
 const bar = makeBuildingObject(editBuilding(bar0, { roof: 'hip', roofH: 4 }));

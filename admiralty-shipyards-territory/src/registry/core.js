@@ -3,7 +3,7 @@
 // Общий код для просмотрщика и для выгрузки в Node (scripts/export.mjs).
 
 import { toLatLon, centroid, area } from '../geo.js';
-import { PURPOSE_SHORT } from '../data/genplan.js';
+import { PURPOSE_SHORT } from '../data/plant.js';
 
 export const ZONE_NAMES = {
   galerny: 'Галерный остров',
@@ -44,7 +44,7 @@ export const FIELD_KEYS = FIELDS.map((f) => f.key);
 // площадки и плиты, объекты, учтённые номером без контура.
 const MARKER_KINDS = { quay: 'Набережная, берегоукрепление (сооружение)', pier: 'Причал, пирс (сооружение)', trestle: 'Эстакада (сооружение)', pit: 'Яма трансбордерная (сооружение)', monument: 'Монумент, памятный знак', storage: 'Открытый склад (площадка)', structure: 'Сооружение' };
 export function registryItems(model, data) {
-  const yardBridges = new Set((data.bridges || []).filter((b) => b.type === 'industrial' || b.yard || b.gp).map((b) => b.id));
+  const yardBridges = new Set((data.bridges || []).filter((b) => b.type === 'industrial' || b.yard || b.reg).map((b) => b.id));
   const items = [];
   for (const layer of model.layers) {
     for (const o of layer.objects) {
@@ -84,11 +84,11 @@ export function registryItems(model, data) {
       items.push({
         id: o.id,
         name: o.name,
-        gpNum: i.gp?.num ?? '',
-        gpNums: i.gp?.nums?.length > 1 ? i.gp.nums.join(', ') : '',
-        inv: i.gp?.inv || '',
-        lit: i.gp?.lit || '',
-        purpose: i.gp ? PURPOSE_SHORT[i.gp.purpose] || '' : '',
+        regNum: i.reg?.num ?? '',
+        regNums: i.reg?.nums?.length > 1 ? i.reg.nums.join(', ') : '',
+        inv: i.reg?.inv || '',
+        lit: i.reg?.lit || '',
+        purpose: i.reg ? PURPOSE_SHORT[i.reg.purpose] || '' : '',
         marks: (i.services || []).join(', '),
         cat,
         kind,
@@ -103,7 +103,7 @@ export function registryItems(model, data) {
         estimated: !!i.approx,
         occupants: unitList(i.units, 'occupant'),
         owners: unitList(i.units, 'owner'),
-        source: i.geomSrc === 'genplan' || (!i.geomSrc && i.gp) ? 'данные предприятия' : i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'уточнённый контур' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
+        source: i.geomSrc === 'plant' || (!i.geomSrc && i.reg) ? 'данные предприятия' : i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'уточнённый контур' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
         lat: +lat.toFixed(6),
         lon: +lon.toFixed(6),
         center: c,
@@ -169,7 +169,7 @@ export const STATUS_NAMES = { overdue: 'Срок истёк', soon: 'Истек�
 export const COLUMNS = [
   { key: 'id', label: 'Код в модели', w: 12 },
   { key: 'name', label: 'Наименование', w: 42 },
-  { key: 'gpNum', label: '№ на генплане', w: 10 },
+  { key: 'regNum', label: '№ объекта', w: 10 },
   // инвентарный номер один: по данным предприятия, служба эксплуатации может уточнить
   { key: 'invNo', label: 'Инвентарный №', w: 14, field: true, fallback: (it) => it.inv },
   { key: 'lit', label: 'Литера', w: 8 },
@@ -187,7 +187,6 @@ export const COLUMNS = [
   ...FIELDS.filter((f) => f.key !== 'invNo').map((f) => ({ key: f.key, label: f.label, w: f.type === 'date' ? 14 : f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true })),
   { key: 'epbStatus', label: 'Статус ЭПБ', w: 14 },
   { key: 'estimated', label: 'Высота оценена', w: 12 },
-  { key: 'source', label: 'Источник контура', w: 22 },
   { key: 'lat', label: 'Широта', w: 11, num: true },
   { key: 'lon', label: 'Долгота', w: 11, num: true },
 ];
