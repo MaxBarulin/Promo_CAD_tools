@@ -187,7 +187,7 @@ export const COLUMNS = [
   { key: 'volume', label: 'Строительный объём (оценка), м³', w: 18, num: true },
   { key: 'occupants', label: 'Подразделения в здании', w: 36 },
   { key: 'owners', label: 'Отвечает за здание', w: 30 },
-  ...FIELDS.filter((f) => f.key !== 'invNo').map((f) => ({ key: f.key, label: f.label, w: f.type === 'date' ? 14 : f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true, list: f.type === 'select' ? f.options.filter(Boolean) : undefined, range: f.key === 'year' ? [1700, 2100] : undefined })),
+  ...FIELDS.filter((f) => f.key !== 'invNo').map((f) => ({ key: f.key, label: f.label, w: f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true, list: f.type === 'select' ? f.options.filter(Boolean) : undefined, range: f.key === 'year' ? [1700, 2100] : undefined })),
   { key: 'epbStatus', label: 'Статус ЭПБ', w: 14 },
   { key: 'estimated', label: 'Высота оценена', w: 12 },
   { key: 'lat', label: 'Широта', w: 11, num: true },

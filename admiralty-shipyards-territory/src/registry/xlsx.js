@@ -79,19 +79,21 @@ const colName = (i) => {
 };
 const excelDate = (d) => (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(1899, 11, 30)) / 86400000;
 
-// Стили: 0 — обычный, 1 — шапка, 2 — дата, 3 — число, 4/5/6 — статус (красный/жёлтый/зелёный), 7 — перенос строк
+// Стили: 0 — обычный, 1 — шапка, 2 — дата, 3 — число, 4/5/6 — статус (красный/жёлтый/зелёный), 7 — перенос строк,
+// 8 — шапка столбца для заполнения (жёлтая)
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="1"><numFmt numFmtId="164" formatCode="dd.mm.yyyy"/></numFmts>
 <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
-<fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+<fills count="7"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFDCE4EC"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFF8C9C2"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFBE3B0"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFCDEBD6"/></patternFill></fill></fills>
+<fill><patternFill patternType="solid"><fgColor rgb="FFCDEBD6"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/></patternFill></fill></fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="8">
+<cellXfs count="9">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
 <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
@@ -100,6 +102,7 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>
 <xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0" applyFill="1"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+<xf numFmtId="0" fontId="1" fillId="6" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -113,7 +116,7 @@ function sheetXml(sheet) {
     if (kind === 'n') return `<c r="${ref}"${style ? ` s="${style}"` : ''}><v>${v}</v></c>`;
     return `<c r="${ref}" t="inlineStr"${style ? ` s="${style}"` : ''}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
   };
-  out.push(`<row r="1" ht="32" customHeight="1">${columns.map((c, i) => cell(0, i, c.label, 1)).join('')}</row>`);
+  out.push(`<row r="1" ht="45" customHeight="1">${columns.map((c, i) => cell(0, i, c.label, c.input ? 8 : 1)).join('')}</row>`);
   rows.forEach((row, ri) => {
     const cells = columns.map((c, ci) => {
       const v = row[c.key];
@@ -151,8 +154,9 @@ ${validations.length ? `<dataValidations count="${validations.length}">${validat
 </worksheet>`;
 }
 
-// sheets: [{ name, columns: [{key,label,w,num,date,parseDate,statusStyle,wrap,list,range}], rows: [{...}] }]
-// list — допустимые значения (выпадающий список в Excel), range — [min, max] для целых чисел
+// sheets: [{ name, columns: [{key,label,w,num,date,parseDate,statusStyle,wrap,list,range,input}], rows: [{...}] }]
+// list — допустимые значения (выпадающий список в Excel), range — [min, max] для целых чисел,
+// input — столбец заполняет пользователь (шапка выделена жёлтым)
 export function writeXlsx(sheets) {
   const files = [
     {
