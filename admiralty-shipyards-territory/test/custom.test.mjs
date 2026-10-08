@@ -12,7 +12,7 @@ import { straighten } from '../src/model/straighten.js';
 import { mergeGlb, placementTRS } from '../src/export/glb-merge.js';
 import { centroid, area } from '../src/geo.js';
 import { readCustomDir } from '../scripts/custom-files.mjs';
-import { registryItems } from '../src/registry/core.js';
+import { registryItems, rowsToRecords } from '../src/registry/core.js';
 
 assert.equal(customIdFromFile('Z129 Корпусосборочный цех (предстап.glb'), 'Z129');
 assert.equal(customIdFromFile('F-galerny-1.GLB'), 'F-galerny-1');
@@ -77,6 +77,12 @@ assert.deepEqual(e1.info.units, [
   { name: 'Отдел главного механика', role: 'occupant', person: 'Иванов И. И.' },
   { name: 'Административно-хозяйственная служба', role: 'owner' },
 ]);
+// загрузка таблицы: значения из списка принимаются в любом регистре, прочие пропускаются с пояснением
+const problems = [];
+const recs = rowsToRecords([['Код в модели', 'Техническое состояние', 'Класс ОПО', 'Год постройки', 'Дата обследования'], ['Z141', 'хорошее', 'iv', '1890', '31.02.2025'], ['Z161', 'Аварийное', 'не опо', '2900', '']], problems);
+assert.deepEqual(recs.Z141, { opo: 'IV', year: 1890 });
+assert.deepEqual(recs.Z161, { state: 'аварийное', opo: 'не ОПО' });
+assert.deepEqual(problems.map((p) => `${p.id}:${p.label}`), ['Z141:Техническое состояние', 'Z141:Дата обследования', 'Z161:Год постройки']);
 const reg = registryItems(model, data).find((i) => i.id === 'Z141');
 assert.equal(reg.occupants, 'Отдел главного механика (Иванов И. И.)');
 assert.equal(reg.owners, 'Административно-хозяйственная служба');

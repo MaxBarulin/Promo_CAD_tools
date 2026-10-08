@@ -318,7 +318,8 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     if (!canWrite) return msg('У вас доступ только для просмотра реестра.');
     try {
       const table = /\.csv$/i.test(f.name) ? readCsv(await f.text()) : await readXlsx(new Uint8Array(await f.arrayBuffer()), inflateRaw);
-      const recs = rowsToRecords(table);
+      const problems = [];
+      const recs = rowsToRecords(table, problems);
       const ids = Object.keys(recs).filter((id) => byId.has(id));
       const unknown = Object.keys(recs).length - ids.length;
       let n = 0;
@@ -331,17 +332,18 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
         n++;
         if (n % 10 === 0) msg(`Загружено ${n} из ${ids.length}…`);
       }
-      msg(`Обновлено объектов: ${n}${unknown ? `; не найдено в модели: ${unknown}` : ''}.`);
+      const bad = problems.length ? `; пропущено значений с ошибкой: ${problems.length} (${problems.slice(0, 4).map((p) => `${p.id}, «${p.label}»: «${p.value}» — ${p.why}`).join('; ')}${problems.length > 4 ? '; …' : ''})` : '';
+      msg(`Обновлено объектов: ${n}${unknown ? `; не найдено в модели: ${unknown}` : ''}${bad}.`, problems.length ? 40000 : 8000);
     } catch (err) {
       msg(err && err.message ? err.message : 'Не удалось прочитать файл.');
     }
   });
 
   let msgTimer = null;
-  function msg(t) {
+  function msg(t, ms = 8000) {
     $('regMsg').textContent = t;
     clearTimeout(msgTimer);
-    msgTimer = setTimeout(() => ($('regMsg').textContent = ''), 8000);
+    msgTimer = setTimeout(() => ($('regMsg').textContent = ''), ms);
   }
 
   function renderTable() {

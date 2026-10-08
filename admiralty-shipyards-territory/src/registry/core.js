@@ -139,10 +139,15 @@ export function parseDate(s) {
   if (!s) return null;
   if (s instanceof Date) return Number.isNaN(+s) ? null : s;
   const t = String(s).trim();
+  // несуществующая дата (31.02.2025) — не дата, а не «3 марта»
+  const ymd = (y, mo, d) => {
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? dt : null;
+  };
   let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (m) return ymd(+m[1], +m[2], +m[3]);
   m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (m) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+  if (m) return ymd(+m[3], +m[2], +m[1]);
   return null;
 }
 
@@ -182,7 +187,7 @@ export const COLUMNS = [
   { key: 'volume', label: 'Строительный объём (оценка), м³', w: 18, num: true },
   { key: 'occupants', label: 'Подразделения в здании', w: 36 },
   { key: 'owners', label: 'Отвечает за здание', w: 30 },
-  ...FIELDS.filter((f) => f.key !== 'invNo').map((f) => ({ key: f.key, label: f.label, w: f.type === 'date' ? 14 : f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true })),
+  ...FIELDS.filter((f) => f.key !== 'invNo').map((f) => ({ key: f.key, label: f.label, w: f.type === 'date' ? 14 : f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true, list: f.type === 'select' ? f.options.filter(Boolean) : undefined, range: f.key === 'year' ? [1700, 2100] : undefined })),
   { key: 'epbStatus', label: 'Статус ЭПБ', w: 14 },
   { key: 'estimated', label: 'Высота оценена', w: 12 },
   { key: 'lat', label: 'Широта', w: 11, num: true },
@@ -214,7 +219,11 @@ export function toCSV(rows) {
 }
 
 // Разбор загруженной таблицы (строки — массивы ячеек): сопоставление по заголовкам.
-export function rowsToRecords(table) {
+// problems — сюда попадают пропущенные значения: не из списка, неверная дата или число
+// ({ id, label, value, why }).
+const YEAR_RANGE = [1700, 2100];
+const latinRoman = (s) => s.replace(/[Іі]/g, 'I').replace(/[Vv]/g, 'V');
+export function rowsToRecords(table, problems = []) {
   if (!table.length) return {};
   const head = table[0].map((h) => String(h ?? '').trim().toLowerCase());
   const col = (label) => head.indexOf(label.toLowerCase());
@@ -229,13 +238,31 @@ export function rowsToRecords(table) {
     for (const { f, i } of map) {
       let v = row[i];
       if (v === undefined || v === null || v === '') continue;
+      const bad = (why) => problems.push({ id, label: f.label, value: String(v).trim(), why });
       if (f.type === 'date') {
         const d = typeof v === 'number' ? new Date(Date.UTC(1899, 11, 30) + v * 86400000) : parseDate(v);
-        if (!d) continue;
+        if (!d) {
+          bad('не дата');
+          continue;
+        }
         v = d.toISOString().slice(0, 10);
       } else if (f.type === 'number') {
-        v = Number(String(v).replace(',', '.'));
-        if (!Number.isFinite(v)) continue;
+        const n = Number(String(v).replace(',', '.'));
+        const [lo, hi] = f.key === 'year' ? YEAR_RANGE : [-Infinity, Infinity];
+        if (!Number.isFinite(n) || n < lo || n > hi) {
+          bad(Number.isFinite(n) ? `вне диапазона ${lo}–${hi}` : 'не число');
+          continue;
+        }
+        v = n;
+      } else if (f.type === 'select') {
+        // значение из списка, без учёта регистра и латиницы/кириллицы в римских цифрах
+        const key = latinRoman(String(v).trim()).toLowerCase();
+        const opt = f.options.find((o) => o && latinRoman(o).toLowerCase() === key);
+        if (!opt) {
+          bad('нет в списке: ' + f.options.filter(Boolean).join(', '));
+          continue;
+        }
+        v = opt;
       } else v = String(v).trim();
       rec[f.key] = v;
     }

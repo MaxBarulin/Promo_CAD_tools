@@ -128,16 +128,31 @@ function sheetXml(sheet) {
     out.push(`<row r="${ri + 2}">${cells.join('')}</row>`);
   });
   const last = colName(columns.length - 1) + (rows.length + 1);
+  // проверка ввода в Excel: списки для полей с выбором, даты и целые числа в диапазоне
+  const validations = [];
+  if (rows.length)
+    columns.forEach((c, ci) => {
+      const col = colName(ci);
+      const sqref = `${col}2:${col}${rows.length + 1}`;
+      if (c.list && c.list.length)
+        validations.push(`<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="${xmlEsc('Значение не из списка')}" error="${xmlEsc('Выберите одно из значений: ' + c.list.join(', '))}" promptTitle="${xmlEsc(c.label)}" prompt="${xmlEsc('Выберите значение из списка')}" sqref="${sqref}"><formula1>${xmlEsc('"' + c.list.join(',') + '"')}</formula1></dataValidation>`);
+      else if (c.date)
+        validations.push(`<dataValidation type="date" operator="between" allowBlank="1" showErrorMessage="1" errorTitle="${xmlEsc('Дата')}" error="${xmlEsc('Введите дату в формате ДД.ММ.ГГГГ')}" sqref="${sqref}"><formula1>1</formula1><formula2>73050</formula2></dataValidation>`);
+      else if (c.range)
+        validations.push(`<dataValidation type="whole" operator="between" allowBlank="1" showErrorMessage="1" errorTitle="${xmlEsc('Число')}" error="${xmlEsc(`Введите целое число от ${c.range[0]} до ${c.range[1]}`)}" sqref="${sqref}"><formula1>${c.range[0]}</formula1><formula2>${c.range[1]}</formula2></dataValidation>`);
+    });
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheetViews><sheetView workbookViewId="0">${sheet.freeze !== false ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' : ''}</sheetView></sheetViews>
 <cols>${columns.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.w || 14}" customWidth="1"/>`).join('')}</cols>
 <sheetData>${out.join('')}</sheetData>
 ${sheet.filter !== false && rows.length ? `<autoFilter ref="A1:${last}"/>` : ''}
+${validations.length ? `<dataValidations count="${validations.length}">${validations.join('')}</dataValidations>` : ''}
 </worksheet>`;
 }
 
-// sheets: [{ name, columns: [{key,label,w,num,date,parseDate,statusStyle,wrap}], rows: [{...}] }]
+// sheets: [{ name, columns: [{key,label,w,num,date,parseDate,statusStyle,wrap,list,range}], rows: [{...}] }]
+// list — допустимые значения (выпадающий список в Excel), range — [min, max] для целых чисел
 export function writeXlsx(sheets) {
   const files = [
     {
