@@ -11,7 +11,7 @@ import * as Y from './shipyard.js';
 import { MAP_BUILDINGS_RAW, MAP_PIECES, px } from './mapdata.js';
 import { minRect, hash, decorate } from './decorate.js';
 import { straighten } from '../model/straighten.js';
-import { applyPlantData } from './plant-apply.js';
+import { applySiteData } from './site-apply.js';
 import { PALETTE } from '../model/materials.js';
 import { ensureCCW, area, centroid, dist, sub, norm, add, mul, pointInRing, bbox, angleOf, polylineLength, pointAt } from '../geo.js';
 
@@ -504,14 +504,14 @@ function streetLabels(list) {
   return [...best.values()].filter((x) => x.L > 120).map(({ s, L }) => ({ text: s.name, at: pointAt(s.line, L / 2).p, kind: 'street' }));
 }
 
-// отчёт о переносе данных предприятия: отброшенные здания и соответствие кодов
-export let PLANT_REPORT = null;
+// отчёт о замене контуров: отброшенные здания и соответствие кодов
+export let SITE_REPORT = null;
 
 export function realTerritory() {
   const st = streets();
-  // здания верфи — по данным предприятия; прежние здания отдают коды, высоты и отделку
-  const reg = applyPlantData(yardBuildings(), { zoneOf });
-  PLANT_REPORT = { dropped: reg.dropped, idMap: reg.idMap, notes: reg.notes };
+  // здания верфи — по контурам site.js; прежние здания отдают коды, высоты и отделку
+  const reg = applySiteData(yardBuildings(), { zoneOf });
+  SITE_REPORT = { dropped: reg.dropped, idMap: reg.idMap, notes: reg.notes };
   const yb = reg.buildings;
   return {
     zones: YARD_ZONES,

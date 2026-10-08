@@ -11,7 +11,7 @@ import { ORIGIN, pointInRing, area, centroid } from '../geo.js';
 import OSM_OVERLAY from './osm-overlay.js';
 import { applyOverlay } from './overlay.js';
 import { busRoute } from './bus.js';
-import { plantSlipways, plantChimneys, plantBridges, plantPlatforms, plantMarkers, applyMarks, busSignPoints } from './plant-structures.js';
+import { siteSlipways, siteChimneys, siteBridges, sitePlatforms, siteMarkers, applyMarks, busSignPoints } from './site-structures.js';
 
 // useOSM: подмешать свежую выгрузку OpenStreetMap, если она загружена (npm run osm:fetch).
 export function getTerritory({ useOSM = true } = {}) {
@@ -62,8 +62,8 @@ const DISTRICTS = [
 
 function baseTerritory() {
   const R = realTerritory();
-  // сооружения по данным предприятия: стапели и трубы, заводские мосты, площадки, объекты без контура
-  const bridges = plantBridges(R.bridges);
+  // сооружения: стапели и трубы, заводские мосты, площадки, объекты без контура
+  const bridges = siteBridges(R.bridges);
   // отметки служб: столовые, медпункт, КПП, переходы, ларьки
   const marks = applyMarks(R.buildings, { crossings: R.crossings, roads: R.internalRoads });
   MARKS_REPORT = marks.report;
@@ -87,7 +87,7 @@ function baseTerritory() {
       source: 'overture',
       sources: R.source,
       accuracy:
-        'Контуры зданий и сооружений верфи, их номера, инвентарные номера, литеры и назначение — по данным предприятия. Граница территории, вода, улицы, мосты и окружающая застройка — из открытых данных OpenStreetMap и Microsoft ML Buildings (через Overture Maps). Высоты зданий верфи без обмеров оценены по назначению и размерам.',
+        'Граница территории, вода, улицы, мосты и окружающая застройка — из открытых данных OpenStreetMap и Microsoft ML Buildings (через Overture Maps). Высоты зданий верфи без обмеров оценены по назначению и размерам.',
     },
     water: { real: R.water, labels: WATER_LABELS },
     zones: R.zones,
@@ -95,18 +95,18 @@ function baseTerritory() {
     gates: R.gates,
     autoFence: true,
     buildings: marks.buildings,
-    chimneys: plantChimneys(Y.CHIMNEYS),
+    chimneys: siteChimneys(Y.CHIMNEYS),
     internalRoads: R.internalRoads,
     streets: R.streets,
     areas: [...R.areas, ...Y.AREAS],
     rails: Y.RAILS,
-    slipways: plantSlipways(Y.SLIPWAYS),
+    slipways: siteSlipways(Y.SLIPWAYS),
     cranes: Y.CRANES,
     ships: [...Y.SHIPS, ...R.ships],
     docks: Y.DOCKS,
     bridges,
-    platforms: plantPlatforms(),
-    markers: [...plantMarkers(bridges.usedNums), ...marks.points],
+    platforms: sitePlatforms(),
+    markers: [...siteMarkers(bridges.usedNums), ...marks.points],
     arches: [],
     containers: Y.CONTAINERS,
     foreignAreas: R.foreignAreas,

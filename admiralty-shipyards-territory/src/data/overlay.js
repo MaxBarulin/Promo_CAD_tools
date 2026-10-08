@@ -1,6 +1,6 @@
 // Подмешивание данных OpenStreetMap к схеме.
 // Геометрия воды, улиц, ограждений и городской застройки берётся из OSM. Здания верфи
-// с контурами по данным предприятия сохраняются; для прочих зданий верфи названия, описания
+// с контурами из site.js сохраняются; для прочих зданий верфи названия, описания
 // и оформление переносятся на совпавшие OSM-контуры.
 // Стапели, краны, суда, доки и мосты остаются из схемы.
 
@@ -11,16 +11,16 @@ export function applyOverlay(data, ov) {
   const report = { matched: [], unmatched: [] };
   const out = { ...data, meta: { ...data.meta, source: 'osm', osm: { fetched: ov.fetched, attribution: ov.source } } };
 
-  // здания верфи по данным предприятия остаются как есть: OSM-контуры внутри территории не используются;
+  // здания верфи с контурами из site.js остаются как есть: OSM-контуры внутри территории не используются;
   // для остальных зданий верфи имена схемы переносятся на совпавшие OSM-контуры
   const yardZones = (data.zones || []).filter((z) => z.kind === 'shipyard').map((z) => z.polygon);
-  const plantYard = data.buildings.filter((b) => b.kind === 'shipyard' && b.geomSrc === 'plant');
+  const siteYard = data.buildings.filter((b) => b.kind === 'shipyard' && b.geomSrc === 'site');
   const osmB = ov.buildings
-    .filter((b) => !plantYard.length || !(b.kind === 'shipyard' || yardZones.some((z) => pointInRing(centroid(b.poly), z))))
+    .filter((b) => !siteYard.length || !(b.kind === 'shipyard' || yardZones.some((z) => pointInRing(centroid(b.poly), z))))
     .map((b) => ({ ...b }));
   const schemaYard = data.buildings.filter((b) => b.kind === 'shipyard');
   for (const sb of schemaYard) {
-    if (sb.geomSrc === 'plant') {
+    if (sb.geomSrc === 'site') {
       report.matched.push(sb.id);
       continue;
     }
@@ -48,7 +48,7 @@ export function applyOverlay(data, ov) {
   }
   // знаковые здания окружения из схемы, не совпавшие ни с одним OSM-контуром, сохраняем
   const keepContext = data.buildings.filter((b) => b.kind === 'context' && !osmB.some((o) => pointInRing(centroid(b.poly), o.poly)));
-  out.buildings = [...plantYard, ...osmB, ...keepContext];
+  out.buildings = [...siteYard, ...osmB, ...keepContext];
   out.frontage = false;
 
   if (ov.water && ov.water.length) out.water = { ...data.water, osmPolygons: ov.water };

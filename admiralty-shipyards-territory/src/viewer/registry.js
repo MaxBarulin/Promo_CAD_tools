@@ -198,7 +198,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       <button class="icon-btn fold" type="button" id="regMin" aria-expanded="true" title="Свернуть реестр" aria-label="Свернуть реестр"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
       <button class="x" type="button" id="regClose" aria-label="Закрыть реестр" title="Закрыть реестр">×</button>
     </div>
-    <div class="reg-demo" id="regDemo" hidden>Демо-режим: поля ОПО, ЭПБ и технического состояния заполнены условными значениями для показа возможностей. Это не данные предприятия, они не сохраняются.</div>
+    <div class="reg-demo" id="regDemo" hidden>Демо-режим: поля ОПО, ЭПБ и технического состояния заполнены условными значениями для показа возможностей. Это условные значения, они не сохраняются.</div>
     <div class="reg-filters">
       <input type="search" id="regQ" placeholder="Поиск: название, код, № объекта, инв. №, № ЭПБ" aria-label="Поиск" />
       <select id="regCat" aria-label="Вид объекта"><option value="">Все объекты</option><option value="building">Здания</option><option value="structure">Сооружения</option><option value="device">Краны</option></select>
@@ -324,7 +324,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       let n = 0;
       for (const id of ids) {
         const rec = { ...recs[id] };
-        // инвентарный номер из выгрузки, совпадающий с данными предприятия, — не правка
+        // инвентарный номер из выгрузки, совпадающий с исходным, — не правка
         if (rec.invNo && rec.invNo === (byId.get(id)?.inv || '')) delete rec.invNo;
         if (!Object.keys(rec).length) continue;
         await saveRecord(id, { ...(saved[id] || {}), ...rec });
@@ -440,7 +440,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     const rows = [
       ['Общая площадь', it.totalArea ? `${num(it.totalArea)} м² (оценка)` : null],
       ['Строительный объём', it.volume ? `${num(it.volume)} м³${it.estimated ? ' (оценка)' : ''}` : null],
-      // инвентарный номер по умолчанию — по данным предприятия
+      // инвентарный номер по умолчанию — из данных модели
       ...FIELDS.map((f) => [f.label, f.type === 'date' ? fmtDate(r[f.key]) : r[f.key] ?? (f.key === 'invNo' ? it.inv || undefined : undefined)]),
     ].filter(([, v]) => v !== null);
     box.innerHTML = `<h4>Технический учёт <span class="st ${s}">${STATUS_NAMES[s]}</span></h4>
@@ -477,7 +477,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
         if (f.type === 'number' && v !== '') v = Number(v);
         rec[f.key] = v;
       }
-      // совпадает с данными предприятия — отдельно не хранится
+      // совпадает с исходным — отдельно не хранится
       if (rec.invNo === (byId.get(o.id)?.inv || '')) rec.invNo = '';
       form.querySelector('[type="submit"]').disabled = true;
       try {

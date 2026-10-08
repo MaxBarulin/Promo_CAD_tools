@@ -22,8 +22,8 @@ const data = applyOverlay(base, ov);
 assert.ok(data.overlayReport.matched.includes('Z136'), 'эллинг Z136 сохранён при подмешивании OSM');
 const z136 = data.buildings.find((b) => b.id === 'Z136');
 assert.equal(z136.name, base.buildings.find((b) => b.id === 'Z136').name);
-assert.equal(z136.geomSrc, 'plant', 'контур эллинга — по данным предприятия, а не OSM');
-assert.equal(data.buildings.filter((b) => b.kind === 'shipyard' && b.geomSrc !== 'plant').length, 0, 'OSM-контуры внутри территории верфи не добавляются');
+assert.equal(z136.geomSrc, 'site', 'контур эллинга — свой, а не OSM');
+assert.equal(data.buildings.filter((b) => b.kind === 'shipyard' && b.geomSrc !== 'site').length, 0, 'OSM-контуры внутри территории верфи не добавляются');
 
 initModel(THREE);
 const model = buildModel(data);

@@ -13,7 +13,7 @@ import { BUS_DIRS, stopTimes, busStopTimes } from '../data/bus.js';
 import { generateFrontage } from './frontage.js';
 import { rect, dirOf, add, mul, perp, rng, ensureCCW, bufferPolyline, polylineLength, pointAt, pointInRing, area, DEG } from '../geo.js';
 import { PALETTE } from './materials.js';
-import { PURPOSE_RU } from '../data/plant.js';
+import { PURPOSE_RU } from '../data/site.js';
 import { removeFromData, applyCustom, editBuildingsData } from './custom.js';
 
 export const LAYERS = [
@@ -174,7 +174,7 @@ export function buildModel(data, { frontage = true, contextDetail = 'auto', cust
     add_('production', { id: ch.id, name: ch.name, sink: s, info: { name: ch.name, info: `${ch.info ? ch.info + ' ' : ''}Высота ≈ ${ch.h} м.`, kind: 'chimney', height: ch.h, approx: !!ch.approx, reg: ch.reg }, proxy: boxProxy(ch.at, 0, Math.max(ch.r * 2.4, 3), Math.max(ch.r * 2.4, 3), 0, ch.h) });
   }
 
-  // ---------- площадки, плиты и объекты без контура по данным предприятия ----------
+  // ---------- площадки, плиты и объекты без контура ----------
   for (const p of data.platforms || []) {
     const s = new Sink();
     buildPlatform(s, p);

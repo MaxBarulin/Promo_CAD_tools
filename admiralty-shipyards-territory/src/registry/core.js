@@ -3,7 +3,7 @@
 // Общий код для просмотрщика и для выгрузки в Node (scripts/export.mjs).
 
 import { toLatLon, centroid, area } from '../geo.js';
-import { PURPOSE_SHORT } from '../data/plant.js';
+import { PURPOSE_SHORT } from '../data/site.js';
 
 export const ZONE_NAMES = {
   galerny: 'Галерный остров',
@@ -41,7 +41,7 @@ export const FIELDS = [
 export const FIELD_KEYS = FIELDS.map((f) => f.key);
 
 // Состав реестра: здания верфи, стапели, краны, плавдоки, дымовые трубы, заводские мосты,
-// площадки и плиты, объекты, учтённые номером без контура.
+// площадки и плиты, объекты без контура.
 const MARKER_KINDS = { quay: 'Набережная, берегоукрепление (сооружение)', pier: 'Причал, пирс (сооружение)', trestle: 'Эстакада (сооружение)', pit: 'Яма трансбордерная (сооружение)', monument: 'Монумент, памятный знак', storage: 'Открытый склад (площадка)', structure: 'Сооружение' };
 export function registryItems(model, data) {
   const yardBridges = new Set((data.bridges || []).filter((b) => b.type === 'industrial' || b.yard || b.reg).map((b) => b.id));
@@ -100,10 +100,9 @@ export function registryItems(model, data) {
         totalArea: cat === 'building' ? i.totalArea : null,
         volume: cat === 'building' ? i.volume : null,
         estimated: !!i.approx,
-        // службы по данным предприятия (столовая, медпункт, КПП…) — вместе с подразделениями
+        // службы (столовая, медпункт, КПП…) — вместе с подразделениями
         occupants: [unitList(i.units, 'occupant'), ...(i.services || []).map((s) => s[0].toUpperCase() + s.slice(1))].filter(Boolean).join('; '),
         owners: unitList(i.units, 'owner'),
-        source: i.geomSrc === 'plant' || (!i.geomSrc && i.reg) ? 'данные предприятия' : i.geomSrc === 'custom' ? 'модель из Blender (custom/)' : i.geomSrc === 'map' ? 'уточнённый контур' : i.geomSrc === 'osm' ? 'OpenStreetMap' : i.geomSrc === 'ml' ? 'Microsoft ML Buildings' : '',
         lat: +lat.toFixed(6),
         lon: +lon.toFixed(6),
         center: c,
@@ -170,7 +169,7 @@ export const COLUMNS = [
   { key: 'id', label: 'Код в модели', w: 12 },
   { key: 'name', label: 'Наименование', w: 42 },
   { key: 'regNum', label: '№ объекта', w: 10 },
-  // инвентарный номер один: по данным предприятия, служба эксплуатации может уточнить
+  // инвентарный номер один: из данных модели, служба эксплуатации может уточнить
   { key: 'invNo', label: 'Инвентарный №', w: 14, field: true, fallback: (it) => it.inv },
   { key: 'lit', label: 'Литера', w: 8 },
   { key: 'purpose', label: 'Назначение', w: 24 },

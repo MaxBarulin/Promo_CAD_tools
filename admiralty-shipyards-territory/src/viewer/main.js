@@ -1,7 +1,7 @@
 // Интерактивный просмотр модели территории АО «Адмиралтейские верфи».
 
 import * as THREE from 'three';
-import { PURPOSE_SHORT, PURPOSE_COLORS } from '../data/plant.js';
+import { PURPOSE_SHORT, PURPOSE_COLORS } from '../data/site.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import CUSTOM from 'custom:files';
@@ -610,7 +610,7 @@ async function main() {
   }
 
   // подразделения в карточке: кто размещается и кто отвечает за здание
-  // services — службы по данным предприятия (столовая, медпункт, КПП…): показываются среди размещённых
+  // services — службы (столовая, медпункт, КПП…): показываются среди размещённых
   function unitsBlock(units, services) {
     const svc = (services || []).map((s) => ({ name: s[0].toUpperCase() + s.slice(1) }));
     if ((!units || !units.length) && !svc.length) return '';
