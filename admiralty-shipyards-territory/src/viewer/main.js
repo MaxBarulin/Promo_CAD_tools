@@ -571,17 +571,17 @@ async function main() {
     const rows = [];
     rows.push(['Код', o.id]);
     if (i.gp?.num) rows.push(['№ на генплане', i.gp.nums?.length > 1 ? i.gp.nums.join(', ') : i.gp.num]);
-    if (i.gp?.inv) rows.push(['Инв. номер', i.gp.inv]);
     if (i.gp?.lit) rows.push(['Литера', i.gp.lit]);
     if (i.gp?.purpose && PURPOSE_SHORT[i.gp.purpose]) rows.push(['Назначение', PURPOSE_SHORT[i.gp.purpose]]);
     if (i.zone && ZONE_LABEL[i.zone]) rows.push(['Участок', ZONE_LABEL[i.zone]]);
     if (i.dims) rows.push(['Размеры', `${i.dims[0]} × ${i.dims[1]} м`]);
     if (i.height) rows.push(['Высота', `${i.height} м`]);
-    if (i.floors) rows.push(['Этажей', i.floorsText || i.floors]);
+    // этажность один раз: здесь, с пометкой об оценке; в блоке учёта не повторяется
+    if (i.floorsText || i.floors || i.floorsEst) rows.push(['Этажей', `${i.floorsText || i.floors || i.floorsEst}${i.floorsKnown || i.floorsText ? '' : ' (оценка)'}`]);
     if (i.footprint) rows.push(['Площадь застройки', `${i.footprint.toLocaleString('ru-RU')} м²`]);
     if (i.roof && ROOF_NAMES[i.roof]) rows.push(['Кровля', ROOF_NAMES[i.roof].toLowerCase()]);
     if (i.refined) rows.push(['Уточнено', i.refined]);
-    if (i.services?.length) rows.push(['Отмечено на схеме', i.services.join(', ')]);
+    if (i.services?.length) rows.push(['В здании', i.services.join(', ')]);
     if (!o.live) {
       const c = o.proxy.poly ? centroid(o.proxy.poly) : o.proxy.line[0];
       const [lat, lon] = toLatLon(c);

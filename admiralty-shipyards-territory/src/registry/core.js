@@ -75,7 +75,7 @@ export function registryItems(model, data) {
         kind = i.surface === 'pit' ? 'Яма трансбордерная (сооружение)' : 'Площадка, плита (сооружение)';
       } else if (i.kind === 'marker') {
         cat = 'structure';
-        kind = MARKER_KINDS[i.markerKind] || 'Сооружение без контура на схеме';
+        kind = MARKER_KINDS[i.markerKind] || 'Сооружение без контура';
       } else continue;
       const poly = o.proxy.poly;
       const c = poly ? centroid(poly) : o.proxy.line[0];
@@ -170,12 +170,13 @@ export const COLUMNS = [
   { key: 'id', label: 'Код в модели', w: 12 },
   { key: 'name', label: 'Наименование', w: 42 },
   { key: 'gpNum', label: '№ на генплане', w: 10 },
-  { key: 'inv', label: 'Инв. номер (генплан)', w: 14 },
+  // инвентарный номер один: по данным предприятия, служба эксплуатации может уточнить
+  { key: 'invNo', label: 'Инвентарный №', w: 14, field: true, fallback: (it) => it.inv },
   { key: 'lit', label: 'Литера', w: 8 },
-  { key: 'purpose', label: 'Назначение по генплану', w: 24 },
-  { key: 'marks', label: 'Отмечено на схеме', w: 22 },
-  { key: 'kind', label: 'Тип', w: 26 },
+  { key: 'purpose', label: 'Назначение', w: 24 },
+  { key: 'kind', label: 'Тип в модели', w: 26 },
   { key: 'zone', label: 'Участок', w: 24 },
+  { key: 'marks', label: 'В здании', w: 22 },
   { key: 'floors', label: 'Этажность', w: 10, num: true },
   { key: 'height', label: 'Высота, м', w: 10, num: true },
   { key: 'footprint', label: 'Площадь застройки, м²', w: 14, num: true },
@@ -183,9 +184,9 @@ export const COLUMNS = [
   { key: 'volume', label: 'Строительный объём (оценка), м³', w: 18, num: true },
   { key: 'occupants', label: 'Подразделения в здании', w: 36 },
   { key: 'owners', label: 'Отвечает за здание', w: 30 },
-  ...FIELDS.map((f) => ({ key: f.key, label: f.label, w: f.type === 'date' ? 14 : f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true })),
+  ...FIELDS.filter((f) => f.key !== 'invNo').map((f) => ({ key: f.key, label: f.label, w: f.type === 'date' ? 14 : f.key === 'note' ? 30 : 18, date: f.type === 'date', num: f.type === 'number', field: true })),
   { key: 'epbStatus', label: 'Статус ЭПБ', w: 14 },
-  { key: 'estimated', label: 'Высота/объём — оценка', w: 12 },
+  { key: 'estimated', label: 'Высота оценена', w: 12 },
   { key: 'source', label: 'Источник контура', w: 22 },
   { key: 'lat', label: 'Широта', w: 11, num: true },
   { key: 'lon', label: 'Долгота', w: 11, num: true },
@@ -196,7 +197,7 @@ export function toRows(items, records, years) {
     const r = records[it.id] || {};
     const row = {};
     for (const c of COLUMNS) {
-      if (c.field) row[c.key] = r[c.key] ?? '';
+      if (c.field) row[c.key] = (r[c.key] ?? '') !== '' ? r[c.key] : c.fallback ? c.fallback(it) ?? '' : '';
       else if (c.key === 'epbStatus') row[c.key] = STATUS_NAMES[epbStatus(r, years)];
       else if (c.key === 'estimated') row[c.key] = it.estimated ? 'да' : '';
       else row[c.key] = it[c.key] ?? '';

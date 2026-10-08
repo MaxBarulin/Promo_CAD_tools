@@ -323,7 +323,11 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
       const unknown = Object.keys(recs).length - ids.length;
       let n = 0;
       for (const id of ids) {
-        await saveRecord(id, { ...(saved[id] || {}), ...recs[id] });
+        const rec = { ...recs[id] };
+        // инвентарный номер из выгрузки, совпадающий с данными предприятия, — не правка
+        if (rec.invNo && rec.invNo === (byId.get(id)?.inv || '')) delete rec.invNo;
+        if (!Object.keys(rec).length) continue;
+        await saveRecord(id, { ...(saved[id] || {}), ...rec });
         n++;
         if (n % 10 === 0) msg(`Загружено ${n} из ${ids.length}…`);
       }
@@ -355,7 +359,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
           <td class="mono">${esc(it.id)}</td>
           <td>${esc(it.name)}${it.kind !== it.name ? `<small>${esc(it.kind)}</small>` : ''}</td>
           <td class="mono">${esc(it.gpNum === '' ? '—' : it.gpNum)}${it.gpNums ? `<small>${esc(it.gpNums)}</small>` : ''}</td>
-          <td>${esc(it.purpose || '—')}${it.inv ? `<small>инв. ${esc(it.inv)}${it.lit ? `, лит. ${esc(it.lit)}` : ''}</small>` : ''}</td>
+          <td>${esc(it.purpose || '—')}${r.invNo || it.inv ? `<small>инв. ${esc(r.invNo || it.inv)}${it.lit ? `, лит. ${esc(it.lit)}` : ''}</small>` : ''}</td>
           <td>${esc(it.zone)}</td>
           <td class="n">${it.floors ?? '—'}</td>
           <td class="n">${num(it.height)}</td>
@@ -434,10 +438,10 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     const box = document.createElement('div');
     box.className = 'reg-card';
     const rows = [
-      ['Этажность', it.floors ? `${it.floorsText || it.floors}${it.floorsKnown ? '' : ' (оценка)'}` : null],
       ['Общая площадь', it.totalArea ? `${num(it.totalArea)} м² (оценка)` : null],
       ['Строительный объём', it.volume ? `${num(it.volume)} м³${it.estimated ? ' (оценка)' : ''}` : null],
-      ...FIELDS.map((f) => [f.label, f.type === 'date' ? fmtDate(r[f.key]) : r[f.key]]),
+      // инвентарный номер по умолчанию — по данным предприятия
+      ...FIELDS.map((f) => [f.label, f.type === 'date' ? fmtDate(r[f.key]) : r[f.key] ?? (f.key === 'invNo' ? it.inv || undefined : undefined)]),
     ].filter(([, v]) => v !== null);
     box.innerHTML = `<h4>Технический учёт <span class="st ${s}">${STATUS_NAMES[s]}</span></h4>
       ${demo ? '<p class="reg-demo-note">Демо: условные значения</p>' : ''}
@@ -450,7 +454,7 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
     editing = true;
     box.innerHTML = `<h4>Технический учёт — правка</h4>
       <form class="reg-form">${FIELDS.map((f) => {
-        const v = r[f.key] ?? '';
+        const v = r[f.key] ?? (f.key === 'invNo' ? byId.get(o.id)?.inv || '' : '');
         const id = `rf-${f.key}`;
         const input =
           f.type === 'select'
@@ -473,6 +477,8 @@ export function setupRegistry({ $, THREE, V3, data, model, pickMesh, scene, sele
         if (f.type === 'number' && v !== '') v = Number(v);
         rec[f.key] = v;
       }
+      // совпадает с данными предприятия — отдельно не хранится
+      if (rec.invNo === (byId.get(o.id)?.inv || '')) rec.invNo = '';
       form.querySelector('[type="submit"]').disabled = true;
       try {
         await saveRecord(o.id, rec);
