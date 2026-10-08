@@ -235,21 +235,7 @@ function yardBuildings() {
       out.push(decorate({ kind: 'shipyard', id: `Y${r.id.slice(0, 5)}${k++}`, zone: zoneOf(centroid(ring)) || 'kolomna', name: 'Пристройка к производственному комплексу', info: 'Часть общего контура OpenStreetMap между соседними корпусами. Высота оценена.', geomSrc: 'osm', poly: ring, holes: poly.slice(1), h: 10, type: 'hall', wall: 'light', roofColor: 'r_gray', approx: true }, null));
     }
   }
-  // вывеска — на стороне, обращённой наружу территории
-  for (const b of out) {
-    if (!b.sign) continue;
-    const z = YARD_ZONES.find((zz) => pointInRing(centroid(b.poly), zz.polygon));
-    const away = z ? norm(sub(centroid(b.poly), centroid(z.polygon))) : [1, 0];
-    let best = -Infinity;
-    for (let i = 0; i < b.poly.length; i++) {
-      const d = norm(sub(b.poly[(i + 1) % b.poly.length], b.poly[i]));
-      const score = d[1] * away[0] - d[0] * away[1];
-      if (score > best) {
-        best = score;
-        b.sign = { ...b.sign, edge: i };
-      }
-    }
-  }
+  placeSigns(out);
   // застройка участков, которые заводу больше не принадлежат: снесена; оставленные здания —
   // окружающая застройка
   return out.filter((b) => {
@@ -504,6 +490,31 @@ function streetLabels(list) {
   return [...best.values()].filter((x) => x.L > 120).map(({ s, L }) => ({ text: s.name, at: pointAt(s.line, L / 2).p, kind: 'street' }));
 }
 
+// Вывеска — на длинной стороне, обращённой наружу территории (короткие изломы контура не в счёт)
+function placeSigns(buildings) {
+  for (const b of buildings) {
+    if (!b.sign) continue;
+    const z = YARD_ZONES.find((zz) => pointInRing(centroid(b.poly), zz.polygon));
+    const away = z ? norm(sub(centroid(b.poly), centroid(z.polygon))) : [1, 0];
+    const n = b.poly.length;
+    const c = centroid(b.poly);
+    let best = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const e = sub(b.poly[(i + 1) % n], b.poly[i]);
+      const L = Math.hypot(e[0], e[1]);
+      if (L < 1e-6) continue;
+      const d = [e[0] / L, e[1] / L];
+      // ориентация наружу × длина ребра (вывеска не на изломе в полметра); из равных — ближе к середине здания
+      const mid = [(b.poly[i][0] + b.poly[(i + 1) % n][0]) / 2, (b.poly[i][1] + b.poly[(i + 1) % n][1]) / 2];
+      const score = (d[1] * away[0] - d[0] * away[1]) * Math.min(L, 12) - 0.05 * dist(mid, c);
+      if (score > best) {
+        best = score;
+        b.sign = { ...b.sign, edge: i };
+      }
+    }
+  }
+}
+
 // отчёт о замене контуров: отброшенные здания и соответствие кодов
 export let SITE_REPORT = null;
 
@@ -513,6 +524,7 @@ export function realTerritory() {
   const reg = applySiteData(yardBuildings(), { zoneOf });
   SITE_REPORT = { dropped: reg.dropped, idMap: reg.idMap, notes: reg.notes };
   const yb = reg.buildings;
+  placeSigns(yb);
   return {
     zones: YARD_ZONES,
     // участки, отошедшие от завода: сам участок — в пределах прежней границы верфи

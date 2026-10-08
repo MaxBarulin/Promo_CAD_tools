@@ -22,6 +22,8 @@ export const PALETTE = {
   panel: { name: 'Стена_ЖБ_панели', color: '#bcb7ac' },
   blue_gray: { name: 'Стена_профлист_серо-голубой', color: '#8197a8' },
   blue: { name: 'Стена_профлист_синий', color: '#4f7aa1' },
+  orange: { name: 'Стена_штукатурка_оранжевая', color: '#dd8a48' },
+  metal_light: { name: 'Стена_профлист_светло-серый', color: '#c5c9cc' },
 
   // --- кровли ---
   r_gray: { name: 'Кровля_металл_серая', color: '#6c7074', roughness: 0.7, metalness: 0.15 },
@@ -154,7 +156,7 @@ export const PALETTE = {
 };
 
 // Ключи материалов стен зданий
-export const WALL_KEYS = new Set(['brick', 'brick_dark', 'ochre', 'yellow', 'cream', 'pink', 'terracotta', 'green', 'blue_stucco', 'mint', 'red', 'green_dark', 'sand', 'light', 'white', 'gray', 'panel', 'blue_gray', 'blue']);
+export const WALL_KEYS = new Set(['brick', 'brick_dark', 'ochre', 'yellow', 'cream', 'pink', 'terracotta', 'orange', 'green', 'blue_stucco', 'mint', 'red', 'green_dark', 'sand', 'light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'metal_light']);
 
 // Переназначение материалов для раскраски по назначению: стены и кровли — цветом легенды,
 // остекление, двери, цоколь и прочее — без изменений. purpose — ключ назначения или undefined.

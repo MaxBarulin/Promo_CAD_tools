@@ -147,7 +147,7 @@ export const ROOF_TYPES = { flat: 'Плоская', gable: 'Двускатная
 // Покрытие кровли
 export const ROOF_COLORS = ['r_gray', 'r_light', 'r_dark', 'r_bitumen', 'r_blue', 'r_green', 'r_rust', 'r_copper'];
 // Отделка фасада, доступная в редакторе
-export const WALLS = ['light', 'white', 'gray', 'panel', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'pink', 'terracotta', 'green', 'blue_stucco', 'mint', 'green_dark', 'red'];
+export const WALLS = ['light', 'white', 'gray', 'panel', 'metal_light', 'blue_gray', 'blue', 'brick', 'brick_dark', 'cream', 'yellow', 'ochre', 'sand', 'orange', 'pink', 'terracotta', 'green', 'blue_stucco', 'mint', 'green_dark', 'red'];
 // остекление фасада: сплошное в сетку (цеха 1960-х) или ленточные окна по этажам
 export const GLAZING = { grid: 'сплошное в сетку', ribbon: 'ленточные окна', floors: 'окна по этажам' };
 

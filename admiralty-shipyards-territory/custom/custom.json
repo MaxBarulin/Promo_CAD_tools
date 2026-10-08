@@ -196,11 +196,11 @@
     },
     "Z182": {
       "type": "office",
-      "floors": 5,
+      "floors": 4,
       "height": 21,
-      "wall": "ochre",
+      "wall": "orange",
       "roof": "gable",
-      "roofColor": "r_rust",
+      "roofColor": "r_gray",
       "parts": [
         {
           "poly": [
@@ -222,7 +222,7 @@
             ]
           ],
           "height": 24,
-          "floors": 6,
+          "floors": 4,
           "roof": "gable",
           "roofH": 4.5
         },
@@ -246,7 +246,7 @@
             ]
           ],
           "height": 21,
-          "floors": 5,
+          "floors": 4,
           "roof": "gable",
           "roofH": 4,
           "colonnade": {
@@ -280,7 +280,7 @@
             ]
           ],
           "height": 24,
-          "floors": 6,
+          "floors": 4,
           "roof": "gable",
           "roofH": 4.5
         }
@@ -316,7 +316,11 @@
       "wall": "yellow"
     },
     "Z199": {
-      "wall": "blue"
+      "wall": "metal_light",
+      "height": 4.6,
+      "floors": 1,
+      "glazing": "ribbon",
+      "roofColor": "r_gray"
     },
     "Z23": {
       "floors": 2,
@@ -404,6 +408,13 @@
       "wall": "green",
       "roof": "hip",
       "roofH": 3,
+      "roofColor": "r_gray"
+    },
+    "G109": {
+      "wall": "metal_light",
+      "height": 4.6,
+      "floors": 1,
+      "glazing": "ribbon",
       "roofColor": "r_gray"
     }
   }

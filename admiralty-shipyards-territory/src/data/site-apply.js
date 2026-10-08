@@ -134,7 +134,8 @@ export function applySiteData(oldYard, { zoneOf }) {
     const rows = g.nums.flatMap((n) => TABLE.get(n) || []);
     const row = rows[0];
     const fanLetter = g.fan ? 'абвгдежзик'[g.fanIdx] : '';
-    const id = idOf.get(G) || (g.nums.length ? `G${g.nums.join('-')}${fanLetter}` : `GN${++unnamed}`);
+    // контур без номера: постоянный порядковый номер из данных (не сдвигается при удалении соседних контуров)
+    const id = idOf.get(G) || (g.nums.length ? `G${g.nums.join('-')}${fanLetter}` : `GN${g.gn ?? ++unnamed}`);
     const donor = G.hits.sort((a, b) => b.inter - a.inter).find((h) => h.inter >= 0.25 * G.A || h.inter >= 0.6 * h.O.A)?.O.b || null;
     const donorFits = donor && (G.A < 0.35 * area(donor.poly) ? donor.type && COMPAT[g.purpose].includes(donor.type) : true);
     const mr = minRect(main);
@@ -184,7 +185,8 @@ export function applySiteData(oldYard, { zoneOf }) {
       approx: !useDonorH || !!donor.approx,
       refined: migrated?.src || (donorFits ? donor.refined : undefined),
       units: donorFits ? donor.units : undefined,
-      sign: donorFits ? donor.sign : undefined,
+      // вывеска прежнего контура — только зданию проходной, а не всем контурам на его месте
+      sign: donorFits && donor.sign && /проходн/i.test(name) ? donor.sign : undefined,
       reg: { num: g.nums[0] || null, nums: g.nums, inv: row?.inv || null, lit: row?.lit || null, purpose, gid: g.gid, fan: g.fan || null },
     };
     if (/Центральн(ая|ой) проходн/i.test(name) && !b.sign) b.sign = { edge: 0, text: 'АДМИРАЛТЕЙСКИЕ ВЕРФИ' };
